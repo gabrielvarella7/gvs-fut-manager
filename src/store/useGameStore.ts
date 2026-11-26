@@ -83,6 +83,7 @@ import {
   montarCalendarioUsuario,
   proximoJogoTorneioAmador,
 } from '../career/fictionalLeague';
+import { tryGetDatabaseTaticas } from '../db/tacticsDatabase';
 import { deduplicarNoticias } from '../career/noticias';
 import {
   aplicarFocoBase,
@@ -393,15 +394,19 @@ export const useGameStore = create<GameStore>((set, get) => ({
       jogadorPerfilId: tela === 'perfil_jogador' ? get().jogadorPerfilId : null,
     });
   },
-  iniciarNovoJogo: () =>
+  iniciarNovoJogo: () => {
+    const prev = get();
     set({
       ...estadoInicial(),
-      campeonato: get().campeonato,
-      jogadoresReais: get().jogadoresReais,
-      timesReais: get().timesReais,
-      dbPronto: true,
+      campeonato: prev.campeonato,
+      jogadoresReais: prev.jogadoresReais,
+      timesReais: prev.timesReais,
+      dbTaticas: prev.dbTaticas ?? tryGetDatabaseTaticas(),
+      dbTreinos: prev.dbTreinos,
+      dbPronto: prev.dbPronto,
       tela: 'criar_tecnico',
-    }),
+    });
+  },
   salvarPerfil: (perfil) =>
     set({
       perfil,
@@ -1828,6 +1833,8 @@ export const useGameStore = create<GameStore>((set, get) => ({
         campeonato: s.campeonato,
         jogadoresReais: s.jogadoresReais,
         timesReais: s.timesReais,
+        dbTaticas: s.dbTaticas ?? tryGetDatabaseTaticas(),
+        dbTreinos: s.dbTreinos,
         dbPronto: s.dbPronto,
         tela: 'configuracoes',
       });
@@ -1835,12 +1842,16 @@ export const useGameStore = create<GameStore>((set, get) => ({
     return true;
   },
   limparAvisoSalvo: () => set({ avisoSalvo: null }),
-  resetar: () =>
+  resetar: () => {
+    const prev = get();
     set({
       ...estadoInicial(),
-      campeonato: get().campeonato,
-      jogadoresReais: get().jogadoresReais,
-      timesReais: get().timesReais,
-      dbPronto: true,
-    }),
+      campeonato: prev.campeonato,
+      jogadoresReais: prev.jogadoresReais,
+      timesReais: prev.timesReais,
+      dbTaticas: prev.dbTaticas ?? tryGetDatabaseTaticas(),
+      dbTreinos: prev.dbTreinos,
+      dbPronto: prev.dbPronto,
+    });
+  },
 }));

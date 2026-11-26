@@ -21,6 +21,7 @@ import { gerarRelatorioPreJogo } from '../../career/relatorioPreJogo';
 import { multFadigaPreparadorFisico, nivelStaff } from '../../career/staffEfeitos';
 import { formacaoIdDeEsquema, taticaCpuAutomatica } from '../../engine/tacticsEngine';
 import { improvisacaoMultTreino } from '../../engine/trainingEngine';
+import { tryGetDatabaseTaticas } from '../../db/tacticsDatabase';
 import { PreMatchReport } from '../match/PreMatchReport';
 import { MatchPreGame } from '../match/MatchPreGame';
 import type { VelocidadePlayback } from '../MatchPlayback';
@@ -39,7 +40,8 @@ export function MatchScreen() {
   const alinhamento11 = useGameStore((s) => s.alinhamento11);
   const gradeTatica11 = useGameStore((s) => s.gradeTatica11);
   const taticaPersonalizada = useGameStore((s) => s.usoTaticaPersonalizada);
-  const dbTaticas = useGameStore((s) => s.dbTaticas);
+  const dbTaticasStore = useGameStore((s) => s.dbTaticas);
+  const dbTaticas = dbTaticasStore ?? tryGetDatabaseTaticas();
   const configTatica = useGameStore((s) => s.configTatica);
   const partidaModoAuxiliar = useGameStore((s) => s.partidaModoAuxiliar);
   const limparPartidaModoAuxiliar = useGameStore((s) => s.limparPartidaModoAuxiliar);
@@ -515,7 +517,9 @@ export function MatchScreen() {
         <CmPanel className="mb-4 border-amber-700/50">
           <p className="text-sm text-amber-100">Não foi possível montar a partida.</p>
           <p className="mt-1 text-xs text-zinc-400">
-            Verifique elenco/tática e tente de novo. Se persistir, salve e recarregue a página.
+            {!dbTaticas
+              ? 'Base de táticas não carregou — recarregue a página (Ctrl+F5) e tente de novo.'
+              : 'Verifique elenco/tática. Se persistir, recarregue a página.'}
           </p>
           <div className="mt-3 flex gap-2">
             <CmBtn onClick={() => irPara(faseTorneioAmador ? 'hub_torneio' : 'escritorio')}>
