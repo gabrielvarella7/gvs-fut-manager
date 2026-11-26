@@ -13,6 +13,32 @@ export function SettingsScreen() {
   const [somGol, setSomGol] = useState(() => lerPreferencias().somGol);
   const [saves, setSaves] = useState<SaveSlotMeta[]>(() => listar());
   const [mensagem, setMensagem] = useState<string | null>(null);
+  const [syncing, setSyncing] = useState(false);
+
+  const SITE_NUVEM = 'https://gabrielvarella7.github.io/gvs-manager/';
+  const emDev = import.meta.env.DEV;
+
+  const syncNuvem = async () => {
+    if (!emDev) {
+      setMensagem(
+        'No celular não dá enviar código. No PC: duplo clique em "Sync na nuvem.bat" ou rode npm run sync.',
+      );
+      window.setTimeout(() => setMensagem(null), 8000);
+      return;
+    }
+    setSyncing(true);
+    setMensagem(null);
+    try {
+      const res = await fetch('/api/sync-nuvem', { method: 'POST' });
+      const data = (await res.json()) as { ok?: boolean; message?: string };
+      setMensagem(data.message ?? (data.ok ? 'Sync ok.' : 'Falha no sync.'));
+    } catch {
+      setMensagem('Servidor local não respondeu. Rode npm run dev e tente de novo.');
+    } finally {
+      setSyncing(false);
+      window.setTimeout(() => setMensagem(null), 12000);
+    }
+  };
 
   const recarregarLista = useCallback(() => {
     setSaves(listar());
@@ -56,6 +82,36 @@ export function SettingsScreen() {
           {mensagem}
         </p>
       )}
+
+      <CmPanel className="mb-4">
+        <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-emerald-400">Nuvem</h2>
+        <p className="mb-3 text-sm text-zinc-400">
+          Versão no celular:{' '}
+          <a
+            href={SITE_NUVEM}
+            target="_blank"
+            rel="noreferrer"
+            className="text-emerald-400 underline"
+          >
+            {SITE_NUVEM}
+          </a>
+        </p>
+        <div className="flex flex-wrap gap-2">
+          <CmBtn variant="primary" onClick={syncNuvem} disabled={syncing}>
+            {syncing ? 'Enviando…' : 'Sync — atualizar site'}
+          </CmBtn>
+          {!emDev && (
+            <span className="self-center text-xs text-zinc-500">
+              No site publicado use o .bat no PC.
+            </span>
+          )}
+        </div>
+        <p className="mt-2 text-xs text-zinc-500">
+          {emDev
+            ? 'Com o jogo aberto no localhost, Sync commita e envia para o GitHub (deploy automático).'
+            : 'Abra o projeto no PC (Iniciar GVS Manager.bat) → Configurações → Sync, ou use Sync na nuvem.bat.'}
+        </p>
+      </CmPanel>
 
       <CmPanel className="mb-4">
         <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-emerald-400">Áudio</h2>
