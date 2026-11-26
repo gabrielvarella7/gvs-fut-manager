@@ -1,0 +1,478 @@
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { getTimeFicticio } from '../../career/fictionalLeague';
+import { escalacaoDeIds } from '../../career/lineup';
+import { esquemaOuPadrao } from '../../data/esquemasTaticos';
+import type { MatchSimInput } from '../../engine/matchEngine';
+import { indiceProximaPartida } from '../../career/brasileirao';
+import { detectarClassico, montarContextoPartidaSync } from '../../engine/matchContext';
+import {
+  hashTaticaPartida,
+  mesclarPartidaAposMinuto,
+  type CheckpointTransmissao,
+} from '../../engine/matchResume';
+import type { PlaybackProgress } from '../MatchPlayback';
+import { sincronizarCarreiraDexie } from '../../db/careerPersistence';
+import { previsaoPreJogo } from '../../engine/matchStats';
+import { simularPartidaNoWorker } from '../../engine';
+import type { Jogador } from '../../types/schema';
+import { useGameStore } from '../../store/useGameStore';
+import { MatchCenter } from '../match/MatchCenter';
+import { gerarRelatorioPreJogo } from '../../career/relatorioPreJogo';
+import { multFadigaPreparadorFisico, nivelStaff } from '../../career/staffEfeitos';
+import { PreMatchReport } from '../match/PreMatchReport';
+import { MatchPreGame } from '../match/MatchPreGame';
+import type { VelocidadePlayback } from '../MatchPlayback';
+import { CmBtn, CmShell } from '../cm/CmShell';
+
+function elencoTime(jogadores: Jogador[], timeId: string): Jogador[] {
+  return jogadores.filter((j) => j.time_id === timeId);
+}
+
+export function MatchScreen() {
+  const jogos = useGameStore((s) => s.jogos);
+  const times = useGameStore((s) => s.timesFicticios);
+  const timeUsuarioId = useGameStore((s) => s.timeUsuarioId);
+  const jogoEmCursoId = useGameStore((s) => s.partidaJogoEmCurso);
+  const esquemaUsuario = useGameStore((s) => s.esquemaAtual);
+  const alinhamento11 = useGameStore((s) => s.alinhamento11);
+  const gradeTatica11 = useGameStore((s) => s.gradeTatica11);
+  const taticaPersonalizada = useGameStore((s) => s.usoTaticaPersonalizada);
+  const salvar = useGameStore((s) => s.salvarCarreira);
+  const sair = useGameStore((s) => s.sairParaMenu);
+  const campeonato = useGameStore((s) => s.campeonato);
+  const registrar = useGameStore((s) => s.registrarResultadoPartida);
+  const registrarLiga = useGameStore((s) => s.registrarResultadoBrasileirao);
+  const encerrarTransmissao = useGameStore((s) => s.encerrarTransmissao);
+  const finalizar = useGameStore((s) => s.finalizarTorneioSePronto);
+  const irPara = useGameStore((s) => s.irPara);
+  const abrirTatica = useGameStore((s) => s.abrirTaticaNaPartida);
+  const salvarCheckpoint = useGameStore((s) => s.salvarCheckpointTransmissao);
+  const atualizarTransmissao = useGameStore((s) => s.atualizarPartidaTransmissao);
+  const checkpoint = useGameStore((s) => s.transmissaoCheckpoint);
+  const pendingResume = useGameStore((s) => s.pendingResumePartida);
+  const limparPendingResume = useGameStore((s) => s.limparPendingResume);
+  const partidaAtual = useGameStore((s) => s.partidaAtual);
+  const partidaJogoId = useGameStore((s) => s.partidaJogoId);
+  const clubeRealId = useGameStore((s) => s.clubeRealId);
+  const brasileirao = useGameStore((s) => s.brasileirao);
+  const timesReais = useGameStore((s) => s.timesReais);
+  const jogadoresReais = useGameStore((s) => s.jogadoresReais);
+  const mundoClube = useGameStore((s) => s.mundoClube);
+
+  const [busy, setBusy] = useState(false);
+  const [velocidade, setVelocidade] = useState<VelocidadePlayback>(1);
+  const [pausado, setPausado] = useState(false);
+  const [minuto, setMinuto] = useState(0);
+  const progressRef = useRef<PlaybackProgress>({ idx: 0, golsM: 0, golsV: 0, minuto: 0 });
+  const [resumePlayback, setResumePlayback] = useState<PlaybackProgress | null>(null);
+  const [playbackKey, setPlaybackKey] = useState('0');
+
+  const partidaLiga = useMemo(
+    () => brasileirao?.partidas.find((p) => p.id === jogoEmCursoId) ?? null,
+    [brasileirao, jogoEmCursoId],
+  );
+  const modoLiga = !!clubeRealId && !!partidaLiga;
+  const jogo = modoLiga ? null : jogos.find((j) => j.id === jogoEmCursoId) ?? null;
+
+  const mandanteLiga = modoLiga
+    ? timesReais.find((t) => t.id === partidaLiga!.mandanteId)
+    : null;
+  const visitanteLiga = modoLiga
+    ? timesReais.find((t) => t.id === partidaLiga!.visitanteId)
+    : null;
+
+  const mandanteFic = getTimeFicticio(times, jogo?.mandanteId ?? '');
+  const visitanteFic = getTimeFicticio(times, jogo?.visitanteId ?? '');
+
+  const mandanteNome = modoLiga ? mandanteLiga?.nome : mandanteFic?.nome;
+  const visitanteNome = modoLiga ? visitanteLiga?.nome : visitanteFic?.nome;
+  const estadio = modoLiga ? mandanteLiga?.estadio : 'campo municipal';
+
+  const simInput: MatchSimInput | null = useMemo(() => {
+    if (modoLiga && partidaLiga && mandanteLiga && visitanteLiga && clubeRealId) {
+      const elencoM = elencoTime(jogadoresReais, mandanteLiga.id);
+      const elencoV = elencoTime(jogadoresReais, visitanteLiga.id);
+      const esqM =
+        mandanteLiga.id === clubeRealId
+          ? esquemaUsuario
+          : esquemaOuPadrao(mandanteLiga.esquema_tatico_padrao);
+      const esqV =
+        visitanteLiga.id === clubeRealId
+          ? esquemaUsuario
+          : esquemaOuPadrao(visitanteLiga.esquema_tatico_padrao);
+      const gradePartida =
+        taticaPersonalizada && gradeTatica11?.length === 11 ? gradeTatica11 : null;
+      const elencoUser = mandanteLiga.id === clubeRealId ? elencoM : elencoV;
+      const escalacaoUser =
+        alinhamento11?.length === 11
+          ? escalacaoDeIds(elencoUser, esquemaUsuario, alinhamento11, gradePartida)
+          : undefined;
+      const neutro =
+        partidaLiga.campoNeutro ??
+        detectarClassico(mandanteLiga.id, visitanteLiga.id, timesReais);
+      const contexto = brasileirao
+        ? montarContextoPartidaSync({
+            mandanteId: mandanteLiga.id,
+            visitanteId: visitanteLiga.id,
+            times: timesReais,
+            estado: brasileirao,
+            isClassico: neutro,
+          })
+        : undefined;
+      const fadigaUser =
+        clubeRealId && mundoClube ?
+          multFadigaPreparadorFisico(nivelStaff(mundoClube, 'PREPARADOR_FISICO'))
+        : undefined;
+      return {
+        mandante: {
+          timeId: mandanteLiga.id,
+          nomeCurto: mandanteLiga.nome,
+          esquema: esqM,
+          elenco: elencoM,
+          mandoDeCampo: !neutro,
+          forcaInstitucional: mandanteLiga.prestigio ?? mandanteLiga.forca_geral,
+          ...(mandanteLiga.id === clubeRealId && escalacaoUser ? { escalacao: escalacaoUser } : {}),
+          ...(mandanteLiga.id === clubeRealId && fadigaUser ? { fadigaPorMinutoMult: fadigaUser } : {}),
+        },
+        visitante: {
+          timeId: visitanteLiga.id,
+          nomeCurto: visitanteLiga.nome,
+          esquema: esqV,
+          elenco: elencoV,
+          forcaInstitucional: visitanteLiga.prestigio ?? visitanteLiga.forca_geral,
+          ...(visitanteLiga.id === clubeRealId && escalacaoUser ? { escalacao: escalacaoUser } : {}),
+          ...(visitanteLiga.id === clubeRealId && fadigaUser ? { fadigaPorMinutoMult: fadigaUser } : {}),
+        },
+        config: {
+          bonusMandoCampo: neutro ? 1 : (campeonato?.bonus_mando_campo ?? 1.05),
+        },
+        estadio: neutro ? 'Campo neutro' : mandanteLiga.estadio,
+        contexto,
+        indicePartidaTemporada: brasileirao ? indiceProximaPartida(brasileirao) : undefined,
+      };
+    }
+    if (jogo && mandanteFic && visitanteFic && timeUsuarioId) {
+      const gradePartida =
+        taticaPersonalizada && gradeTatica11?.length === 11 ? gradeTatica11 : null;
+      const elencoUser =
+        mandanteFic.id === timeUsuarioId ? mandanteFic.jogadores : visitanteFic.jogadores;
+      const escalacaoUser =
+        alinhamento11?.length === 11
+          ? escalacaoDeIds(elencoUser, esquemaUsuario, alinhamento11, gradePartida)
+          : undefined;
+      return {
+        mandante: {
+          timeId: mandanteFic.id,
+          nomeCurto: mandanteFic.nome,
+          esquema: mandanteFic.id === timeUsuarioId ? esquemaUsuario : (mandanteFic.esquema ?? '4-4-2'),
+          elenco: mandanteFic.jogadores,
+          mandoDeCampo: true,
+          ...(mandanteFic.id === timeUsuarioId && escalacaoUser ? { escalacao: escalacaoUser } : {}),
+        },
+        visitante: {
+          timeId: visitanteFic.id,
+          nomeCurto: visitanteFic.nome,
+          esquema:
+            visitanteFic.id === timeUsuarioId ? esquemaUsuario : (visitanteFic.esquema ?? '4-4-2'),
+          elenco: visitanteFic.jogadores,
+          ...(visitanteFic.id === timeUsuarioId && escalacaoUser ? { escalacao: escalacaoUser } : {}),
+        },
+        config: { bonusMandoCampo: campeonato?.bonus_mando_campo ?? 1.05 },
+        estadio: 'campo municipal',
+      };
+    }
+    return null;
+  }, [
+    modoLiga,
+    partidaLiga,
+    mandanteLiga,
+    visitanteLiga,
+    clubeRealId,
+    jogadoresReais,
+    brasileirao,
+    timesReais,
+    esquemaUsuario,
+    alinhamento11,
+    gradeTatica11,
+    mundoClube,
+    taticaPersonalizada,
+    campeonato,
+    jogo,
+    mandanteFic,
+    visitanteFic,
+    timeUsuarioId,
+  ]);
+
+  const preJogo = useMemo(
+    () => (simInput ? previsaoPreJogo(simInput) : null),
+    [simInput],
+  );
+
+  const gradePartida =
+    taticaPersonalizada && gradeTatica11?.length === 11 ? gradeTatica11 : null;
+
+  const relatorioLiga = useMemo(() => {
+    if (!modoLiga || !partidaLiga || !brasileirao || !clubeRealId || !campeonato) return null;
+    return gerarRelatorioPreJogo({
+      partida: partidaLiga,
+      estado: brasileirao,
+      times: timesReais,
+      jogadores: jogadoresReais,
+      campeonato,
+      usuarioTimeId: clubeRealId,
+      esquemaUsuario: esquemaUsuario,
+      alinhamento11,
+      gradeTatica11: gradePartida,
+    });
+  }, [
+    modoLiga,
+    partidaLiga,
+    brasileirao,
+    clubeRealId,
+    campeonato,
+    timesReais,
+    jogadoresReais,
+    esquemaUsuario,
+    alinhamento11,
+    gradePartida,
+  ]);
+
+  const idPartida = modoLiga ? partidaLiga?.id : jogo?.id;
+  const emTransmissao = !!partidaAtual && partidaJogoId === idPartida;
+
+  const iniciarPartida = useCallback(async () => {
+    if (!simInput || idPartida == null) return;
+    if (emTransmissao) return;
+    setBusy(true);
+    try {
+      if (modoLiga && brasileirao && clubeRealId) {
+        await sincronizarCarreiraDexie({ brasileirao, clubeRealId });
+      }
+      const seed = (Date.now() ^ Math.floor(Math.random() * 1e9)) >>> 0;
+      const result = await simularPartidaNoWorker({ ...simInput, seed });
+      salvarCheckpoint(null);
+      setResumePlayback(null);
+      setPlaybackKey(String(seed));
+      if (modoLiga && partidaLiga) {
+        registrarLiga(partidaLiga.id, result);
+      } else if (jogo) {
+        registrar(jogo.id, result);
+      }
+      setPausado(false);
+      setMinuto(0);
+    } finally {
+      setBusy(false);
+    }
+  }, [
+    simInput,
+    idPartida,
+    emTransmissao,
+    modoLiga,
+    partidaLiga,
+    jogo,
+    registrar,
+    registrarLiga,
+  ]);
+
+  useEffect(() => {
+    if (checkpoint?.partidaJogoId === idPartida) return;
+    setPausado(false);
+    setMinuto(0);
+    setResumePlayback(null);
+  }, [partidaAtual, partidaJogoId, checkpoint?.partidaJogoId, idPartida]);
+
+  const hashTaticaAtual = useMemo(
+    () =>
+      hashTaticaPartida({
+        esquema: esquemaUsuario,
+        alinhamento11,
+        personalizado: taticaPersonalizada,
+        gradeTatica11: gradeTatica11 ?? null,
+      }),
+    [esquemaUsuario, alinhamento11, taticaPersonalizada, gradeTatica11],
+  );
+
+  useEffect(() => {
+    if (!pendingResume || !emTransmissao || !partidaAtual || !simInput || idPartida == null) {
+      return;
+    }
+    const cp = checkpoint;
+    if (!cp || cp.partidaJogoId !== idPartida) {
+      if (cp) {
+        setResumePlayback({
+          idx: cp.idxLancamento,
+          golsM: cp.golsM,
+          golsV: cp.golsV,
+          minuto: cp.minuto,
+        });
+        setMinuto(cp.minuto);
+        setPausado(true);
+      }
+      limparPendingResume();
+      return;
+    }
+
+    const aplicar = async () => {
+      let nextResult = partidaAtual;
+      if (hashTaticaAtual !== cp.hashTatica) {
+        const seed = partidaAtual.simSeed ?? (Date.now() >>> 0);
+        const nova = await simularPartidaNoWorker({ ...simInput, seed });
+        nextResult = mesclarPartidaAposMinuto(cp.minuto, partidaAtual, { ...nova, simSeed: seed });
+        atualizarTransmissao(nextResult);
+        setPlaybackKey(`${seed}-${hashTaticaAtual.slice(0, 8)}`);
+      }
+      setResumePlayback({
+        idx: cp.idxLancamento,
+        golsM: cp.golsM,
+        golsV: cp.golsV,
+        minuto: cp.minuto,
+      });
+      setMinuto(cp.minuto);
+      setPausado(false);
+      limparPendingResume();
+    };
+    void aplicar();
+  }, [
+    pendingResume,
+    emTransmissao,
+    partidaAtual,
+    simInput,
+    idPartida,
+    checkpoint,
+    hashTaticaAtual,
+    atualizarTransmissao,
+    limparPendingResume,
+  ]);
+
+  const abrirTaticaAoVivo = useCallback(() => {
+    if (emTransmissao && idPartida != null) {
+      const p = progressRef.current;
+      const cp: CheckpointTransmissao = {
+        partidaJogoId: idPartida,
+        minuto: p.minuto,
+        idxLancamento: p.idx,
+        golsM: p.golsM,
+        golsV: p.golsV,
+        hashTatica: hashTaticaAtual,
+      };
+      salvarCheckpoint(cp);
+      setPausado(true);
+    }
+    abrirTatica();
+  }, [emTransmissao, idPartida, hashTaticaAtual, salvarCheckpoint, abrirTatica]);
+
+  const voltarHub = () => {
+    encerrarTransmissao();
+    if (modoLiga) {
+      irPara('escritorio');
+      return;
+    }
+    finalizar();
+    irPara('hub_torneio');
+  };
+
+  const tituloRodada = modoLiga
+    ? `Rodada ${partidaLiga!.rodada}`
+    : jogo
+      ? `Rodada ${jogo.rodada}`
+      : 'Partida';
+
+  if (!jogoEmCursoId || (!modoLiga && !jogo) || (modoLiga && !partidaLiga)) {
+    return (
+      <CmShell titulo="Sem partida">
+        <CmBtn onClick={() => irPara(modoLiga ? 'escritorio' : 'hub_torneio')}>Voltar</CmBtn>
+      </CmShell>
+    );
+  }
+
+  return (
+    <CmShell
+      titulo={tituloRodada}
+      subtitulo={`${mandanteNome ?? ''} x ${visitanteNome ?? ''}`}
+      rodape={
+        <div className="flex flex-wrap gap-2">
+          <CmBtn variant="ghost" onClick={voltarHub} disabled={busy && !emTransmissao}>
+            Voltar
+          </CmBtn>
+          <CmBtn variant="ghost" onClick={salvar}>
+            Salvar
+          </CmBtn>
+          <CmBtn variant="danger" onClick={sair}>
+            Sair
+          </CmBtn>
+        </div>
+      }
+    >
+      {!emTransmissao && preJogo && simInput && (
+        <>
+          {relatorioLiga ? (
+            <PreMatchReport
+              relatorio={relatorioLiga}
+              acoes={
+                <>
+                  <CmBtn onClick={() => void iniciarPartida()} disabled={busy}>
+                    {busy ? 'Preparando…' : 'Iniciar partida'}
+                  </CmBtn>
+                  <CmBtn variant="ghost" onClick={() => abrirTatica()}>
+                    Táticas (pré-jogo)
+                  </CmBtn>
+                  <CmBtn variant="ghost" onClick={() => irPara('relatorio_pre_jogo')}>
+                    Abrir relatório em tela cheia
+                  </CmBtn>
+                </>
+              }
+            />
+          ) : (
+            <>
+              <MatchPreGame
+                mandanteNome={mandanteNome ?? ''}
+                visitanteNome={visitanteNome ?? ''}
+                estadio={estadio}
+                preJogo={{
+                  probabilidades: preJogo.probabilidades,
+                  forcaMandante: preJogo.forcaMandante,
+                  forcaVisitante: preJogo.forcaVisitante,
+                  mandoBonus: preJogo.mandoBonus,
+                }}
+              />
+              <div className="mt-4 flex flex-wrap gap-2">
+                <CmBtn onClick={() => void iniciarPartida()} disabled={busy}>
+                  {busy ? 'Preparando…' : 'Iniciar partida'}
+                </CmBtn>
+                <CmBtn variant="ghost" onClick={abrirTatica}>
+                  Táticas (pré-jogo)
+                </CmBtn>
+              </div>
+            </>
+          )}
+        </>
+      )}
+
+      {emTransmissao && partidaAtual && (
+        <>
+          <MatchCenter
+            result={partidaAtual}
+            mandanteNome={mandanteNome ?? ''}
+            visitanteNome={visitanteNome ?? ''}
+            estadio={estadio}
+            velocidade={velocidade}
+            onVelocidade={setVelocidade}
+            pausado={pausado}
+            onPausado={setPausado}
+            onMinuto={setMinuto}
+            aoVivo={minuto < 90}
+            onTaticas={abrirTaticaAoVivo}
+            onPlaybackProgress={(p) => {
+              progressRef.current = p;
+            }}
+            resumePlayback={resumePlayback}
+            playbackKey={playbackKey}
+          />
+          <div className="mt-4">
+            <CmBtn onClick={voltarHub}>Continuar</CmBtn>
+          </div>
+        </>
+      )}
+    </CmShell>
+  );
+}
