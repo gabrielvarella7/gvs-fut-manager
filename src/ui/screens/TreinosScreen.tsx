@@ -1,5 +1,9 @@
 import { useMemo, useState } from 'react';
+import { proximaPartidaUsuario } from '../../career/brasileirao';
+import { sugerirSessoesProximoAdversario } from '../../career/treinoDicas';
 import { nivelStaff } from '../../career/staffEfeitos';
+import { esquemaOuPadrao } from '../../data/esquemasTaticos';
+import { calcularMultiplicadorExecucao } from '../../engine/trainingEngine';
 import { formacaoIdDeEsquema } from '../../engine/tacticsEngine';
 import type {
   PlanoIndividualId,
@@ -14,6 +18,7 @@ export function TreinosScreen() {
   const jogadores = useGameStore((s) => s.jogadoresReais);
   const mundo = useGameStore((s) => s.mundoClube);
   const brasileirao = useGameStore((s) => s.brasileirao);
+  const timesReais = useGameStore((s) => s.timesReais);
   const esquema = useGameStore((s) => s.esquemaAtual);
   const dbTreinos = useGameStore((s) => s.dbTreinos);
   const aplicar = useGameStore((s) => s.aplicarTreinoSemana);
@@ -30,6 +35,23 @@ export function TreinosScreen() {
   const formacaoId = formacaoIdDeEsquema(esquema);
   const fam = prog?.familiaridade_formacoes[formacaoId] ?? 55;
   const entros = prog?.entrosamento_elenco ?? 60;
+  const execPrevisto = calcularMultiplicadorExecucao(fam, entros);
+
+  const dicaAdv = useMemo(() => {
+    if (!brasileirao || !clubeRealId) return null;
+    const prox = proximaPartidaUsuario(brasileirao, clubeRealId);
+    if (!prox) return null;
+    const advId = prox.mandanteId === clubeRealId ? prox.visitanteId : prox.mandanteId;
+    const adv = timesReais.find((t) => t.id === advId);
+    const fora = prox.visitanteId === clubeRealId;
+    return {
+      ...sugerirSessoesProximoAdversario(
+        esquemaOuPadrao(adv?.esquema_tatico_padrao),
+        fora,
+      ),
+      adversario: adv?.nome ?? advId,
+    };
+  }, [brasileirao, clubeRealId, timesReais]);
 
   const elenco = useMemo(
     () =>
@@ -58,7 +80,7 @@ export function TreinosScreen() {
   return (
     <CmCareerShell
       titulo="Treinos"
-      subtitulo={`Rodada ${rodada} · Prep. físico ${prep}/20 · Familiaridade ${formacaoId}: ${Math.round(fam)}% · Entrosamento ${entros}%`}
+      subtitulo={`Rodada ${rodada} · Prep. ${prep}/20 · ${formacaoId}: fam ${Math.round(fam)}% · entros ${entros}% · execução ×${execPrevisto}`}
     >
       {feedback && (
         <p className="mb-3 rounded border border-emerald-800 bg-emerald-950/40 px-3 py-2 text-sm text-emerald-100">
@@ -79,6 +101,59 @@ export function TreinosScreen() {
             </p>
           </CmPanel>
         )}
+
+      {dicaAdv && (
+        <CmPanel className="mb-4 border-sky-900/50 bg-sky-950/20">
+          <p className="text-xs font-semibold uppercase text-sky-300">
+            Preparação vs {dicaAdv.adversario}
+          </p>
+          <p className="mt-1 text-sm text-zinc-300">{dicaAdv.motivo}</p>
+          <div className="mt-2 flex flex-wrap gap-2">
+            <CmBtn
+              variant="ghost"
+              onClick={() =>
+                atualizarProgramacao({
+                  sessao_principal_id: dicaAdv.sessaoPrincipalId,
+                  sessao_secundaria_id: dicaAdv.sessaoSecundariaId,
+                })
+              }
+            >
+              Aplicar sugestão de sessões
+            </CmBtn>
+          </div>
+        </CmPanel>
+      )}
+
+      <CmPanel className="mb-4 overflow-x-auto">
+        <h2 className="mb-2 text-sm font-semibold text-emerald-400">Regimes — impacto resumido</h2>
+        <table className="w-full min-w-[520px] text-left text-xs text-zinc-400">
+          <thead>
+            <tr className="border-b border-zinc-700 text-zinc-500">
+              <th className="py-1 pr-2">Regime</th>
+              <th className="py-1 pr-2">XP / Tática</th>
+              <th className="py-1 pr-2">Energia</th>
+              <th className="py-1">Lesão</th>
+            </tr>
+          </thead>
+          <tbody>
+            {dbTreinos.regimes_intensidade.map((r) => (
+              <tr key={r.id} className="border-b border-zinc-800">
+                <td className="py-1.5 pr-2 text-zinc-200">{r.nome.split('(')[0]?.trim()}</td>
+                <td className="py-1.5 pr-2">
+                  {r.multiplicadores.ganho_xp_atributos.toFixed(2)}x /{' '}
+                  {r.multiplicadores.ganho_familiaridade_tatica.toFixed(2)}x
+                </td>
+                <td className="py-1.5 pr-2">
+                  {r.multiplicadores.recuperacao_energia_bonus >= 0 ? '+' : ''}
+                  {r.multiplicadores.recuperacao_energia_bonus} · custo{' '}
+                  {r.multiplicadores.custo_energia_treino}
+                </td>
+                <td className="py-1.5">{r.multiplicadores.risco_lesao.toFixed(2)}x</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </CmPanel>
 
       {jaTreinou && (
         <CmPanel className="mb-4 border-amber-800/60">

@@ -108,4 +108,6 @@ export interface EstadoMundoClube {
   bonusTreinoProximoJogo?: Record<string, number>;
   multiplicadorExecucaoTaticaTreino?: number;
   treinoBonusRodada?: number;
+  /** Mês civil do último treino processado (regressão de veteranos). */
+  mesUltimoTreino?: number;
 }

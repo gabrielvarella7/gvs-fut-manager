@@ -118,6 +118,14 @@ function sortearLesao(
 }
 
 /** Multiplicador de improvisação no motor (−20% padrão · −6% com polivalência concluída). */
+/** Familiaridade 45% ≈ −12% execução; 100% + entrosamento alto ≈ +5%. */
+export function calcularMultiplicadorExecucao(familiaridade: number, entrosamento: number): number {
+  const fam = Math.max(45, Math.min(100, familiaridade));
+  const base = 0.88 + ((fam - 45) / 55) * 0.17;
+  const ent = (entrosamento / 100) * 0.05;
+  return +(Math.min(1.05, Math.max(0.88, base + ent))).toFixed(3);
+}
+
 export function improvisacaoMultTreino(estado: EstadoTreinoJogador | undefined): number {
   if (estado && estado.progresso_polivalencia >= 100) return 0.94;
   return 0.8;
@@ -155,6 +163,12 @@ export function aplicarBonusTreinoModificadores(
     }
     if (chave === 'frescor_fisico' && typeof mult === 'number') {
       next.desgaste_fisico = +(next.desgaste_fisico / mult).toFixed(4);
+    }
+    if (chave === 'gol_bola_parada' && typeof mult === 'number') {
+      next.jogo_aereo_ofensivo = +(next.jogo_aereo_ofensivo * Math.sqrt(mult)).toFixed(4);
+    }
+    if (chave === 'defesa_bola_parada' && typeof mult === 'number') {
+      next.jogo_aereo_defensivo = +(next.jogo_aereo_defensivo * Math.sqrt(mult)).toFixed(4);
     }
   }
   const exec = Math.max(0.86, Math.min(1.08, multExecucao));
@@ -465,11 +479,10 @@ export function processarSemanaTreinos(params: {
     bonusProximoJogo[chave] = +((bonusProximoJogo[chave] ?? 1) + ganhoSec).toFixed(3);
   }
 
-  const multiplicadorExecucaoTatica = +(
-    0.86 +
-    (novaFamiliaridade / 100) * 0.13 +
-    (novoEntrosamento / 100) * 0.06
-  ).toFixed(3);
+  const multiplicadorExecucaoTatica = calcularMultiplicadorExecucao(
+    novaFamiliaridade,
+    novoEntrosamento,
+  );
 
   const partes: string[] = [
     `${regime.nome}: ${sessaoPrincipal.nome} + ${sessaoSecundaria.nome}.`,

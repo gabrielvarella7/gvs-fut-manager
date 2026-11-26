@@ -1728,6 +1728,9 @@ export const useGameStore = create<GameStore>((set, get) => ({
       s.clubeRealId,
       s.mundoClube.estadosTreino,
     );
+    const mesAtual = Number.parseInt(s.brasileirao.dataAtualISO.slice(5, 7), 10);
+    const viradaMes =
+      s.mundoClube.mesUltimoTreino != null && s.mundoClube.mesUltimoTreino !== mesAtual;
     const resultado = processarSemanaTreinos({
       dbTreinos: s.dbTreinos,
       jogadores: s.jogadoresReais,
@@ -1736,7 +1739,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
       formacaoAtivaId: formacaoId,
       corpoTecnico: corpoTecnicoDeMundo(s.mundoClube),
       clubeId: s.clubeRealId,
-      isViradaDeMes: false,
+      isViradaDeMes: viradaMes,
     });
     const noticia: NoticiaCarreira = {
       id: `treino_r${rodada}_${Date.now()}`,
@@ -1763,6 +1766,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
         bonusTreinoProximoJogo: resultado.bonusProximoJogo,
         multiplicadorExecucaoTaticaTreino: resultado.multiplicadorExecucaoTatica,
         treinoBonusRodada: rodada,
+        mesUltimoTreino: mesAtual,
         ultimoTreino: { rodadaAplicada: rodada, microciclo: 'tatico', destaques: [] },
       },
       noticias: deduplicarNoticias([noticia, ...s.noticias]),
