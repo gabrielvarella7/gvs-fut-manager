@@ -2,6 +2,8 @@ import { escalacaoDeIds, idsEscalacaoPadrao } from './lineup';
 import { posicaoDoTime, type EstadoTemporada, type PartidaCampeonato } from './brasileirao';
 import { esquemaOuPadrao } from '../data/esquemasTaticos';
 import type { MatchSimInput } from '../engine/matchEngine';
+import type { ConfiguracaoTaticaClube, DatabaseTaticas } from '../types/tactics';
+import { formacaoIdDeEsquema, taticaCpuAutomatica } from '../engine/tacticsEngine';
 import { montarEscalacao } from '../engine/matchEngine';
 import {
   calcularFatorMoral,
@@ -220,6 +222,8 @@ export function montarInputRelatorio(
   alinhamento11: number[] | null,
   gradeTatica11: { col: number; row: number; gol?: boolean }[] | null,
   bonusMando: number,
+  dbTaticas: DatabaseTaticas,
+  configUsuario?: ConfiguracaoTaticaClube,
 ): MatchSimInput {
   const elM = elenco(mandante.id, jogadores);
   const elV = elenco(visitante.id, jogadores);
@@ -231,6 +235,14 @@ export function montarInputRelatorio(
     clubeUserId === visitante.id && alinhamento11?.length === 11
       ? escalacaoDeIds(elV, esquemaVisitante, alinhamento11, gradeTatica11)
       : undefined;
+  const taticaM =
+    clubeUserId === mandante.id && configUsuario
+      ? { ...configUsuario, formacao_id: formacaoIdDeEsquema(esquemaMandante) }
+      : taticaCpuAutomatica(esquemaMandante, mandante.id);
+  const taticaV =
+    clubeUserId === visitante.id && configUsuario
+      ? { ...configUsuario, formacao_id: formacaoIdDeEsquema(esquemaVisitante) }
+      : taticaCpuAutomatica(esquemaVisitante, visitante.id);
   return {
     mandante: {
       timeId: mandante.id,
@@ -238,6 +250,7 @@ export function montarInputRelatorio(
       esquema: esquemaMandante,
       elenco: elM,
       mandoDeCampo: true,
+      tatica: taticaM,
       ...(escM ? { escalacao: escM } : {}),
     },
     visitante: {
@@ -245,8 +258,10 @@ export function montarInputRelatorio(
       nomeCurto: visitante.nome,
       esquema: esquemaVisitante,
       elenco: elV,
+      tatica: taticaV,
       ...(escV ? { escalacao: escV } : {}),
     },
+    dbTaticas,
     config: { bonusMandoCampo: bonusMando },
     estadio: mandante.estadio,
   };
@@ -262,6 +277,8 @@ export function gerarRelatorioPreJogo(opts: {
   esquemaUsuario: EsquemaTatico;
   alinhamento11: number[] | null;
   gradeTatica11: { col: number; row: number; gol?: boolean }[] | null;
+  dbTaticas: DatabaseTaticas;
+  configTaticaUsuario?: ConfiguracaoTaticaClube;
 }): RelatorioPreJogo | null {
   const mandante = opts.times.find((t) => t.id === opts.partida.mandanteId);
   const visitante = opts.times.find((t) => t.id === opts.partida.visitanteId);
@@ -298,6 +315,8 @@ export function gerarRelatorioPreJogo(opts: {
       opts.alinhamento11,
       opts.gradeTatica11,
       opts.campeonato.bonus_mando_campo ?? 1.05,
+      opts.dbTaticas,
+      opts.configTaticaUsuario,
     ),
     contexto,
   };

@@ -6,6 +6,7 @@ import { CmBtn, CmShell } from './CmShell';
 const NAV_PRO: { tela: TelaJogo; label: string }[] = [
   { tela: 'escritorio', label: 'Escritório' },
   { tela: 'elenco', label: 'Elenco' },
+  { tela: 'treinos', label: 'Treinos' },
   { tela: 'noticias', label: 'Notícias' },
   { tela: 'transferencias', label: 'Transferências' },
   { tela: 'financas', label: 'Finanças' },

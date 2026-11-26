@@ -31,6 +31,14 @@ import {
   type ConfrontoTatico,
 } from './matchTaticaConfronto';
 import { multiplicadorDesempenhoPosicao } from './posicaoCompatibilidade';
+import type { DatabaseTaticas } from '../types/tactics';
+import type { ConfiguracaoTaticaClube } from '../types/tactics';
+import {
+  configuracaoPadrao,
+  resolverImpactoTaticoConfronto,
+  taticaCpuAutomatica,
+  type ResultadoAvaliacaoTatica,
+} from './tacticsEngine';
 
 export const MOTOR_DEFAULTS = {
   improvisacaoMult: 0.8,
@@ -65,6 +73,8 @@ export interface MatchTeamInput {
   forcaInstitucional?: number;
   /** Multiplicador de fadiga por minuto (preparador físico). */
   fadigaPorMinutoMult?: number;
+  /** Estilo + instruções (formação derivada do esquema se omitida). */
+  tatica?: ConfiguracaoTaticaClube;
 }
 
 export interface MatchSimConfig {
@@ -95,6 +105,7 @@ export interface MatchSimInput {
   mandante: MatchTeamInput;
   visitante: MatchTeamInput;
   config: MatchSimConfig;
+  dbTaticas: DatabaseTaticas;
   seed?: number;
   /** Nome do estádio para legendas ({ESTADIO}) */
   estadio?: string;
@@ -118,6 +129,7 @@ export interface MatchSimResult {
   lancamentos: Lancamento[];
   energiaFinal: { id: number; energia: number }[];
   forcaInicial: { mandante: ForcaSetores; visitante: ForcaSetores };
+  impactoTatico?: { mandante: ResultadoAvaliacaoTatica; visitante: ResultadoAvaliacaoTatica };
   probabilidades?: ProbabilidadesResultado;
   duracaoMs?: number;
   estatisticas: EstatisticasPartida;
@@ -431,6 +443,33 @@ export function simularPartida(input: MatchSimInput): MatchSimResult {
     rnd,
   );
 
+  const taticaM =
+    input.mandante.tatica ?? configuracaoPadrao(input.mandante.esquema);
+  const taticaV =
+    input.visitante.tatica ??
+    taticaCpuAutomatica(input.visitante.esquema, input.visitante.timeId);
+
+  const impactoM = resolverImpactoTaticoConfronto({
+    dbTaticas: input.dbTaticas,
+    taticaPropria: taticaM,
+    taticaAdversaria: taticaV,
+    titularesProprios: mandanteEsc.map((e) => e.jogador),
+    posicoesEscaladas: mandanteEsc.map((e) => e.posicaoEscalada),
+    esquemaProprio: input.mandante.esquema,
+    esquemaAdversario: input.visitante.esquema,
+  });
+  const impactoV = resolverImpactoTaticoConfronto({
+    dbTaticas: input.dbTaticas,
+    taticaPropria: taticaV,
+    taticaAdversaria: taticaM,
+    titularesProprios: visitanteEsc.map((e) => e.jogador),
+    posicoesEscaladas: visitanteEsc.map((e) => e.posicaoEscalada),
+    esquemaProprio: input.visitante.esquema,
+    esquemaAdversario: input.mandante.esquema,
+  });
+  const modsM = impactoM.modificadoresFinais;
+  const modsV = impactoV.modificadoresFinais;
+
   const diffJogo = sortearDiffComVariancia(faixaPrep.cruzamento.diff, rnd);
   let golsMandante: number;
   let golsVisitante: number;
@@ -445,6 +484,14 @@ export function simularPartida(input: MatchSimInput): MatchSimResult {
     lambdaM *= 0.94 + rnd() * 0.12;
     lambdaV *= 0.94 + rnd() * 0.12;
     ({ lambdaM, lambdaV } = aplicarConfrontoTaticoNosLambdas(lambdaM, lambdaV, confrontoTatico));
+    const multGolM =
+      (modsM.criacao_jogadas * modsM.eficiencia_finalizacao) /
+      Math.max(0.75, modsV.solidez_defensiva);
+    const multGolV =
+      (modsV.criacao_jogadas * modsV.eficiencia_finalizacao) /
+      Math.max(0.75, modsM.solidez_defensiva);
+    lambdaM *= Math.max(0.72, Math.min(1.55, multGolM * 0.55 + 0.45));
+    lambdaV *= Math.max(0.72, Math.min(1.55, multGolV * 0.55 + 0.45));
     if (isClassico) {
       const media = (lambdaM + lambdaV) / 2;
       lambdaM = lambdaM * 0.85 + media * 0.15;
@@ -523,15 +570,39 @@ export function simularPartida(input: MatchSimInput): MatchSimResult {
   for (const { jogador } of mandanteEsc) {
     fadigaPorJogador.set(
       jogador.id,
-      cfg.fadigaPorMinuto * (input.mandante.fadigaPorMinutoMult ?? 1),
+      cfg.fadigaPorMinuto *
+        (input.mandante.fadigaPorMinutoMult ?? 1) *
+        modsM.desgaste_fisico,
     );
   }
   for (const { jogador } of visitanteEsc) {
     fadigaPorJogador.set(
       jogador.id,
-      cfg.fadigaPorMinuto * (input.visitante.fadigaPorMinutoMult ?? 1),
+      cfg.fadigaPorMinuto *
+        (input.visitante.fadigaPorMinutoMult ?? 1) *
+        modsV.desgaste_fisico,
     );
   }
+
+  const ratioPosseM = modsM.posse_bola / Math.max(0.7, modsV.posse_bola);
+  const ratioPosseV = modsV.posse_bola / Math.max(0.7, modsM.posse_bola);
+
+  const probChanceMandante = (
+    modsAtaq: typeof modsM,
+    modsDef: typeof modsV,
+    rndFn: () => number,
+  ) => {
+    const multFin =
+      (modsAtaq.criacao_jogadas * modsAtaq.eficiencia_finalizacao) /
+      Math.max(0.8, modsDef.solidez_defensiva);
+    let probDefesa = Math.min(0.78, Math.max(0.14, 0.38 / multFin));
+    const transicao = rndFn() < 0.18;
+    const xgTransicao = transicao
+      ? modsAtaq.perigo_contra_ataque * modsDef.vulnerabilidade_contra_ataque
+      : 1;
+    probDefesa /= Math.max(1, xgTransicao * 0.82);
+    return { defendido: rndFn() < probDefesa, transicao, xgTransicao };
+  };
 
   for (let minuto = 1; minuto <= 90; minuto++) {
     for (const [id, e] of energia) {
@@ -560,12 +631,14 @@ export function simularPartida(input: MatchSimInput): MatchSimResult {
       intensidadeAtaque(forcaM, forcaV, confrontoTatico.multPressaoAtaque) *
       fadigaRatio *
       urgM.ataque *
-      (isClassico ? 0.92 : 1);
+      (isClassico ? 0.92 : 1) *
+      Math.max(0.55, Math.min(1.65, ratioPosseM));
     const pressaoV =
       intensidadeAtaque(forcaV, forcaM, confrontoTatico.multPressaoAtaque) *
       fadigaRatio *
       urgV.ataque *
-      (isClassico ? 0.92 : 1);
+      (isClassico ? 0.92 : 1) *
+      Math.max(0.55, Math.min(1.65, ratioPosseV));
     posseM += pressaoM + 0.02;
     posseV += pressaoV + 0.02;
     momento.push({
@@ -578,7 +651,7 @@ export function simularPartida(input: MatchSimInput): MatchSimResult {
     if (rnd() < pressaoM) {
       const autor = escolherArtilheiro(mandanteEsc, rnd);
       const assistNome = pickAssistente(mandanteEsc, autor.id, rnd);
-      const defendido = rnd() < 0.38;
+      const { defendido } = probChanceMandante(modsM, modsV, rnd);
       const goleiro = nomeGoleiro(visitanteEsc);
       const vars = varsAtaque(
         varsBase(input, minutosGolM, minutosGolV, minuto),
@@ -606,7 +679,7 @@ export function simularPartida(input: MatchSimInput): MatchSimResult {
     } else if (rnd() < pressaoV) {
       const autor = escolherArtilheiro(visitanteEsc, rnd);
       const assistNome = pickAssistente(visitanteEsc, autor.id, rnd);
-      const defendido = rnd() < 0.38;
+      const { defendido } = probChanceMandante(modsV, modsM, rnd);
       const goleiro = nomeGoleiro(mandanteEsc);
       const vars = varsAtaque(
         varsBase(input, minutosGolM, minutosGolV, minuto),
@@ -633,7 +706,9 @@ export function simularPartida(input: MatchSimInput): MatchSimResult {
       minutosOcupados.add(minuto);
     } else if (
       minuto >= 12 &&
-      rnd() < probabilidadeCartaoAmarelo(mandanteEsc, visitanteEsc)
+      rnd() <
+        probabilidadeCartaoAmarelo(mandanteEsc, visitanteEsc) *
+          ((modsM.incidencia_faltas + modsV.incidencia_faltas) / 2)
     ) {
       const casa = rnd() < pressaoM / (pressaoM + pressaoV + 0.001);
       const esc = casa ? mandanteEsc : visitanteEsc;
@@ -779,6 +854,7 @@ export function simularPartida(input: MatchSimInput): MatchSimResult {
     estatisticas,
     preJogo,
     simSeed: input.seed,
+    impactoTatico: { mandante: impactoM, visitante: impactoV },
   };
 }
 

@@ -4,6 +4,7 @@ import type { EsquemaTatico, FinancasClube, Jogador, Time } from '../types/schem
 import type { EstadoComercial } from '../types/commercial';
 import type { EstadoMundoClube } from '../types/mundoClube';
 import type { EstadoTemporada } from './brasileirao';
+import type { ConfiguracaoTaticaClube } from '../types/tactics';
 
 /** @deprecated somente migração de saves antigos */
 export type TipoReceita =
@@ -73,6 +74,7 @@ export type TelaJogo =
   | 'transferencias'
   | 'financas'
   | 'staff'
+  | 'treinos'
   | 'base'
   | 'calendario'
   | 'classificacao'
@@ -146,6 +148,8 @@ export interface EstadoCarreira {
   usoTaticaPersonalizada: boolean;
   /** Células 6×6 dos 11 slots (modo personalizado) */
   gradeTatica11: { col: number; row: number; gol?: boolean }[] | null;
+  /** Estilo de jogo + instruções coletivas */
+  configTatica: ConfiguracaoTaticaClube;
   jogos: JogoTorneio[];
   desempenho: DesempenhoTorneio;
   propostas: PropostaClube[];

@@ -1,4 +1,5 @@
 import type { Lancamento, MatchSimResult } from './matchEngine';
+import type { ConfiguracaoTaticaClube } from '../types/tactics';
 
 export interface CheckpointTransmissao {
   partidaJogoId: number;
@@ -14,6 +15,7 @@ export function hashTaticaPartida(opts: {
   alinhamento11: number[] | null;
   personalizado: boolean;
   gradeTatica11: { col: number; row: number; gol?: boolean }[] | null;
+  configTatica?: ConfiguracaoTaticaClube;
 }): string {
   return JSON.stringify(opts);
 }

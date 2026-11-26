@@ -82,7 +82,9 @@ import {
   tickMundoPorDia,
   tickMundoPosRodada,
 } from '../career/mundoParalelo';
-import type { FocoCategoriaBase, NivelInvestimentoBase } from '../types/mundoClube';
+import type { FocoCategoriaBase, MicrocicloTreino, NivelInvestimentoBase } from '../types/mundoClube';
+import { aplicarMicrocicloTreino } from '../career/treinos';
+import { nivelStaff } from '../career/staffEfeitos';
 import {
   carregarSlot,
   excluirSlot,
@@ -91,6 +93,8 @@ import {
   type SaveSlotMeta,
 } from '../career/saveSlots';
 import type { MatchSimResult } from '../engine/matchEngine';
+import type { ConfiguracaoTaticaClube, DatabaseTaticas } from '../types/tactics';
+import { configuracaoPadrao, formacaoIdDeEsquema } from '../engine/tacticsEngine';
 import {
   aplicarFadigaPosPartida,
   persistirJogadoresDexie,
@@ -112,6 +116,7 @@ const desempenhoZerado = () => ({
 interface GameStore extends EstadoCarreira {
   campeonato: CampeonatoConfig | null;
   jogadoresReais: Jogador[];
+  dbTaticas: DatabaseTaticas | null;
   dbPronto: boolean;
   partidaJogoId: number | null;
   avisoSalvo: string | null;
@@ -121,6 +126,7 @@ interface GameStore extends EstadoCarreira {
     campeonato: CampeonatoConfig;
     times: Time[];
     jogadores: Jogador[];
+    taticas: DatabaseTaticas;
   }) => void;
   irPara: (tela: TelaJogo) => void;
   iniciarNovoJogo: () => void;
@@ -132,6 +138,7 @@ interface GameStore extends EstadoCarreira {
     alinhamento11: number[];
     gradeTatica11: { col: number; row: number; gol?: boolean }[] | null;
     personalizado: boolean;
+    configTatica?: ConfiguracaoTaticaClube;
   }) => void;
   esquemaDoUsuario: () => EsquemaTatico;
   salvarEscolhaProposta: (timeId: string) => void;
@@ -178,6 +185,8 @@ interface GameStore extends EstadoCarreira {
   recusarPropostaPatrocinioComercial: (propostaId: string) => void;
   definirInvestimentoBase: (nivel: NivelInvestimentoBase) => void;
   definirFocoBase: (foco: FocoCategoriaBase) => void;
+  /** Aplica microciclo da rodada; retorna mensagem de erro ou null se ok. */
+  aplicarTreinoSemana: (microciclo: MicrocicloTreino, destaques: number[]) => string | null;
 }
 
 const estadoInicial = (): EstadoCarreira & {
@@ -197,6 +206,7 @@ const estadoInicial = (): EstadoCarreira & {
   avisoSalvo: null,
   jogadorPerfilId: null,
   saveSlotId: null,
+  dbTaticas: null,
   perfil: null,
   timesFicticios: [],
   timeUsuarioId: null,
@@ -204,6 +214,7 @@ const estadoInicial = (): EstadoCarreira & {
   alinhamento11: null,
   usoTaticaPersonalizada: false,
   gradeTatica11: null,
+  configTatica: configuracaoPadrao('4-4-2'),
   jogos: [],
   desempenho: desempenhoZerado(),
   propostas: [],
@@ -226,11 +237,12 @@ const estadoInicial = (): EstadoCarreira & {
 
 export const useGameStore = create<GameStore>((set, get) => ({
   ...estadoInicial(),
-  setDatabase: ({ campeonato, times, jogadores }) =>
+  setDatabase: ({ campeonato, times, jogadores, taticas }) =>
     set({
       campeonato,
       timesReais: times,
       jogadoresReais: enriquecerElenco(jogadores),
+      dbTaticas: taticas,
       dbPronto: true,
     }),
   irPara: (tela) => {
@@ -242,6 +254,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
         tela === 'financas' ||
         tela === 'staff' ||
         tela === 'base' ||
+        tela === 'treinos' ||
         tela === 'calendario' ||
         tela === 'classificacao' ||
         tela === 'relatorio_pre_jogo') &&
@@ -345,13 +358,22 @@ export const useGameStore = create<GameStore>((set, get) => ({
       tela: 'hub_torneio',
     });
   },
-  commitEscolhaTatica: ({ esquema, alinhamento11, gradeTatica11, personalizado }) =>
-    set({
-      esquemaAtual: esquema,
-      alinhamento11,
-      gradeTatica11: personalizado ? gradeTatica11 : null,
-      usoTaticaPersonalizada: personalizado,
-      avisoSalvo: 'Tática salva para os próximos jogos',
+  commitEscolhaTatica: ({ esquema, alinhamento11, gradeTatica11, personalizado, configTatica }) =>
+    set((s) => {
+      const cfg =
+        configTatica ??
+        ({
+          ...s.configTatica,
+          formacao_id: formacaoIdDeEsquema(esquema),
+        } as ConfiguracaoTaticaClube);
+      return {
+        esquemaAtual: esquema,
+        alinhamento11,
+        gradeTatica11: personalizado ? gradeTatica11 : null,
+        usoTaticaPersonalizada: personalizado,
+        configTatica: cfg,
+        avisoSalvo: 'Tática salva para os próximos jogos',
+      };
     }),
   esquemaDoUsuario: () => {
     const s = get();
@@ -786,6 +808,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
       alinhamento11: s.alinhamento11,
       usoTaticaPersonalizada: s.usoTaticaPersonalizada,
       gradeTatica11: s.gradeTatica11,
+      configTatica: s.configTatica,
       jogos: s.jogos,
       desempenho: s.desempenho,
       propostas: s.propostas,
@@ -888,6 +911,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
       alinhamento11: data.alinhamento11 ?? null,
       usoTaticaPersonalizada: data.usoTaticaPersonalizada ?? false,
       gradeTatica11: data.gradeTatica11 ?? null,
+      configTatica: data.configTatica ?? configuracaoPadrao(data.esquemaAtual ?? '4-4-2'),
       timesFicticios: data.timesFicticios ?? [],
       jogos: data.jogos ?? [],
       desempenho: data.desempenho ?? desempenhoZerado(),
@@ -1356,6 +1380,44 @@ export const useGameStore = create<GameStore>((set, get) => ({
     const s = get();
     if (!s.mundoClube) return;
     set({ mundoClube: aplicarFocoBase(s.mundoClube, foco) });
+  },
+  aplicarTreinoSemana: (microciclo, destaques) => {
+    const s = get();
+    if (!s.clubeRealId || !s.mundoClube || !s.brasileirao) {
+      return 'Disponível apenas na carreira profissional.';
+    }
+    const rodada = s.brasileirao.rodadaAtual;
+    if (s.mundoClube.ultimoTreino?.rodadaAplicada === rodada) {
+      return 'Você já treinou nesta rodada.';
+    }
+    const prep = nivelStaff(s.mundoClube, 'PREPARADOR_FISICO');
+    const { jogadores, relatorio } = aplicarMicrocicloTreino({
+      jogadores: s.jogadoresReais,
+      clubeId: s.clubeRealId,
+      microciclo,
+      destaques: destaques.slice(0, 3),
+      nivelPreparador: prep,
+    });
+    const noticia: NoticiaCarreira = {
+      id: `treino_r${rodada}_${microciclo}`,
+      data: new Date().toISOString(),
+      titulo: 'Microciclo no CT',
+      texto: relatorio,
+    };
+    set({
+      jogadoresReais: jogadores,
+      mundoClube: {
+        ...s.mundoClube,
+        ultimoTreino: {
+          rodadaAplicada: rodada,
+          microciclo,
+          destaques: destaques.slice(0, 3),
+        },
+      },
+      noticias: deduplicarNoticias([noticia, ...s.noticias]),
+    });
+    void persistirJogadoresDexie(jogadores).catch(console.error);
+    return null;
   },
   recusarPropostaPatrocinioComercial: (propostaId) => {
     const s = get();

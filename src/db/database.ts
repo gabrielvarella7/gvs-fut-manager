@@ -12,6 +12,8 @@ import type {
 } from '../types/schema';
 import type { EstadoComercial } from '../types/commercial';
 import { publicPath } from '../publicPath';
+import { carregarDatabaseTaticas, setDatabaseTaticas } from './tacticsDatabase';
+import type { DatabaseTaticas } from '../types/tactics';
 
 /** Linha IndexedDB — chave primária = time_id. */
 export type ComercialDexieRow = EstadoComercial;
@@ -75,11 +77,13 @@ export async function carregarDatabaseInicial(): Promise<{
   campeonato: CampeonatoConfig;
   times: Time[];
   jogadores: Jogador[];
+  taticas: DatabaseTaticas;
 }> {
-  const [campRes, timesRes, jogRes] = await Promise.all([
+  const [campRes, timesRes, jogRes, taticas] = await Promise.all([
     fetch(publicPath('database/campeonato.json')),
     fetch(publicPath('database/times.json')),
     fetch(publicPath('database/jogadores.json')),
+    carregarDatabaseTaticas(),
   ]);
 
   if (!campRes.ok || !timesRes.ok || !jogRes.ok) {
@@ -91,6 +95,8 @@ export async function carregarDatabaseInicial(): Promise<{
     timesRes.json(),
     jogRes.json(),
   ])) as [CampeonatoConfig, Time[], Jogador[]];
+
+  setDatabaseTaticas(taticas);
 
   const jogadores = enriquecerElenco(normalizarJogadores(jogadoresRaw, times));
 
@@ -104,7 +110,7 @@ export async function carregarDatabaseInicial(): Promise<{
     await db.jogadores.bulkPut(jogadores);
   });
 
-  return { campeonato, times, jogadores };
+  return { campeonato, times, jogadores, taticas };
 }
 
 export async function exportarSaveGame(): Promise<SaveGamePayload> {

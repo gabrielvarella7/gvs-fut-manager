@@ -19,6 +19,7 @@ import { useGameStore } from '../../store/useGameStore';
 import { MatchCenter } from '../match/MatchCenter';
 import { gerarRelatorioPreJogo } from '../../career/relatorioPreJogo';
 import { multFadigaPreparadorFisico, nivelStaff } from '../../career/staffEfeitos';
+import { formacaoIdDeEsquema, taticaCpuAutomatica } from '../../engine/tacticsEngine';
 import { PreMatchReport } from '../match/PreMatchReport';
 import { MatchPreGame } from '../match/MatchPreGame';
 import type { VelocidadePlayback } from '../MatchPlayback';
@@ -37,6 +38,8 @@ export function MatchScreen() {
   const alinhamento11 = useGameStore((s) => s.alinhamento11);
   const gradeTatica11 = useGameStore((s) => s.gradeTatica11);
   const taticaPersonalizada = useGameStore((s) => s.usoTaticaPersonalizada);
+  const dbTaticas = useGameStore((s) => s.dbTaticas);
+  const configTatica = useGameStore((s) => s.configTatica);
   const salvar = useGameStore((s) => s.salvarCarreira);
   const sair = useGameStore((s) => s.sairParaMenu);
   const campeonato = useGameStore((s) => s.campeonato);
@@ -88,7 +91,16 @@ export function MatchScreen() {
   const visitanteNome = modoLiga ? visitanteLiga?.nome : visitanteFic?.nome;
   const estadio = modoLiga ? mandanteLiga?.estadio : 'campo municipal';
 
+  const taticaUsuario = useMemo(
+    () => ({
+      ...configTatica,
+      formacao_id: formacaoIdDeEsquema(esquemaUsuario),
+    }),
+    [configTatica, esquemaUsuario],
+  );
+
   const simInput: MatchSimInput | null = useMemo(() => {
+    if (!dbTaticas) return null;
     if (modoLiga && partidaLiga && mandanteLiga && visitanteLiga && clubeRealId) {
       const elencoM = elencoTime(jogadoresReais, mandanteLiga.id);
       const elencoV = elencoTime(jogadoresReais, visitanteLiga.id);
@@ -133,6 +145,10 @@ export function MatchScreen() {
           forcaInstitucional: mandanteLiga.prestigio ?? mandanteLiga.forca_geral,
           ...(mandanteLiga.id === clubeRealId && escalacaoUser ? { escalacao: escalacaoUser } : {}),
           ...(mandanteLiga.id === clubeRealId && fadigaUser ? { fadigaPorMinutoMult: fadigaUser } : {}),
+          tatica:
+            mandanteLiga.id === clubeRealId
+              ? taticaUsuario
+              : taticaCpuAutomatica(esqM, mandanteLiga.id),
         },
         visitante: {
           timeId: visitanteLiga.id,
@@ -142,7 +158,12 @@ export function MatchScreen() {
           forcaInstitucional: visitanteLiga.prestigio ?? visitanteLiga.forca_geral,
           ...(visitanteLiga.id === clubeRealId && escalacaoUser ? { escalacao: escalacaoUser } : {}),
           ...(visitanteLiga.id === clubeRealId && fadigaUser ? { fadigaPorMinutoMult: fadigaUser } : {}),
+          tatica:
+            visitanteLiga.id === clubeRealId
+              ? taticaUsuario
+              : taticaCpuAutomatica(esqV, visitanteLiga.id),
         },
+        dbTaticas,
         config: {
           bonusMandoCampo: neutro ? 1 : (campeonato?.bonus_mando_campo ?? 1.05),
         },
@@ -160,23 +181,35 @@ export function MatchScreen() {
         alinhamento11?.length === 11
           ? escalacaoDeIds(elencoUser, esquemaUsuario, alinhamento11, gradePartida)
           : undefined;
+      const esqMf =
+        mandanteFic.id === timeUsuarioId ? esquemaUsuario : (mandanteFic.esquema ?? '4-4-2');
+      const esqVf =
+        visitanteFic.id === timeUsuarioId ? esquemaUsuario : (visitanteFic.esquema ?? '4-4-2');
       return {
         mandante: {
           timeId: mandanteFic.id,
           nomeCurto: mandanteFic.nome,
-          esquema: mandanteFic.id === timeUsuarioId ? esquemaUsuario : (mandanteFic.esquema ?? '4-4-2'),
+          esquema: esqMf,
           elenco: mandanteFic.jogadores,
           mandoDeCampo: true,
+          tatica:
+            mandanteFic.id === timeUsuarioId
+              ? taticaUsuario
+              : taticaCpuAutomatica(esqMf, mandanteFic.id),
           ...(mandanteFic.id === timeUsuarioId && escalacaoUser ? { escalacao: escalacaoUser } : {}),
         },
         visitante: {
           timeId: visitanteFic.id,
           nomeCurto: visitanteFic.nome,
-          esquema:
-            visitanteFic.id === timeUsuarioId ? esquemaUsuario : (visitanteFic.esquema ?? '4-4-2'),
+          esquema: esqVf,
           elenco: visitanteFic.jogadores,
+          tatica:
+            visitanteFic.id === timeUsuarioId
+              ? taticaUsuario
+              : taticaCpuAutomatica(esqVf, visitanteFic.id),
           ...(visitanteFic.id === timeUsuarioId && escalacaoUser ? { escalacao: escalacaoUser } : {}),
         },
+        dbTaticas,
         config: { bonusMandoCampo: campeonato?.bonus_mando_campo ?? 1.05 },
         estadio: 'campo municipal',
       };
@@ -201,6 +234,8 @@ export function MatchScreen() {
     mandanteFic,
     visitanteFic,
     timeUsuarioId,
+    dbTaticas,
+    taticaUsuario,
   ]);
 
   const preJogo = useMemo(
@@ -212,7 +247,8 @@ export function MatchScreen() {
     taticaPersonalizada && gradeTatica11?.length === 11 ? gradeTatica11 : null;
 
   const relatorioLiga = useMemo(() => {
-    if (!modoLiga || !partidaLiga || !brasileirao || !clubeRealId || !campeonato) return null;
+    if (!modoLiga || !partidaLiga || !brasileirao || !clubeRealId || !campeonato || !dbTaticas)
+      return null;
     return gerarRelatorioPreJogo({
       partida: partidaLiga,
       estado: brasileirao,
@@ -223,6 +259,8 @@ export function MatchScreen() {
       esquemaUsuario: esquemaUsuario,
       alinhamento11,
       gradeTatica11: gradePartida,
+      dbTaticas: dbTaticas!,
+      configTaticaUsuario: taticaUsuario,
     });
   }, [
     modoLiga,
@@ -235,6 +273,8 @@ export function MatchScreen() {
     esquemaUsuario,
     alinhamento11,
     gradePartida,
+    dbTaticas,
+    taticaUsuario,
   ]);
 
   const idPartida = modoLiga ? partidaLiga?.id : jogo?.id;
@@ -288,8 +328,9 @@ export function MatchScreen() {
         alinhamento11,
         personalizado: taticaPersonalizada,
         gradeTatica11: gradeTatica11 ?? null,
+        configTatica: taticaUsuario,
       }),
-    [esquemaUsuario, alinhamento11, taticaPersonalizada, gradeTatica11],
+    [esquemaUsuario, alinhamento11, taticaPersonalizada, gradeTatica11, taticaUsuario],
   );
 
   useEffect(() => {

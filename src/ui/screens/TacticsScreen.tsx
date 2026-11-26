@@ -10,8 +10,14 @@ import {
   moverSlotNaGrade,
   type CelulaGrade,
 } from '../../data/gradeCampinho';
-import { LISTA_ESQUEMAS, RESUMO_ESQUEMAS } from '../../data/esquemasTaticos';
+import { LISTA_ESQUEMAS, RESUMO_ESQUEMAS, SLOTS_POR_ESQUEMA } from '../../data/esquemasTaticos';
+import { formacaoIdDeEsquema, previewAlertasTatica } from '../../engine/tacticsEngine';
 import { useGameStore } from '../../store/useGameStore';
+import type {
+  ConfiguracaoTaticaClube,
+  EstiloJogoId,
+  InstrucoesColetivas,
+} from '../../types/tactics';
 import { CmCareerShell } from '../cm/CmCareerShell';
 import { CmBtn } from '../cm/CmShell';
 import { TacticPitch } from '../tactics/TacticPitch';
@@ -19,7 +25,7 @@ import { TacticSquadPanel } from '../tactics/TacticSquadPanel';
 import type { EsquemaTatico, Jogador } from '../../types/schema';
 
 export type SelecaoTatica = EsquemaTatico | 'PERSONALIZADO';
-type AbaTatica = 'esquemas' | 'jogadores';
+type AbaTatica = 'esquemas' | 'jogadores' | 'filosofia';
 
 export function TacticsScreen() {
   const esquemaAtual = useGameStore((s) => s.esquemaAtual);
@@ -34,6 +40,9 @@ export function TacticsScreen() {
   const timeUsuarioId = useGameStore((s) => s.timeUsuarioId);
   const timesFicticios = useGameStore((s) => s.timesFicticios);
   const jogadoresReais = useGameStore((s) => s.jogadoresReais);
+  const dbTaticas = useGameStore((s) => s.dbTaticas);
+  const configSalva = useGameStore((s) => s.configTatica);
+  const [configLocal, setConfigLocal] = useState<ConfiguracaoTaticaClube>(configSalva);
 
   const [selecao, setSelecao] = useState<SelecaoTatica>(
     personalizadoSalvo ? 'PERSONALIZADO' : esquemaAtual,
@@ -47,7 +56,19 @@ export function TacticsScreen() {
   const [arrastandoJogadorId, setArrastandoJogadorId] = useState<number | null>(null);
   const [slotAguardandoReserva, setSlotAguardandoReserva] = useState<number | null>(null);
 
+  useEffect(() => {
+    setConfigLocal(configSalva);
+  }, [configSalva]);
+
   const esquemaGrafico = selecao === 'PERSONALIZADO' ? esquemaBase : selecao;
+
+  const configParaEsquema = useCallback(
+    (esq: EsquemaTatico, cfg: ConfiguracaoTaticaClube) => ({
+      ...cfg,
+      formacao_id: formacaoIdDeEsquema(esq),
+    }),
+    [],
+  );
 
   const elenco: Jogador[] = useMemo(() => {
     if (clubeRealId) {
@@ -124,15 +145,42 @@ export function TacticsScreen() {
       base: EsquemaTatico,
       personalizado: boolean,
     ) => {
+      const esq = personalizado ? base : (sel as EsquemaTatico);
       commitEscolha({
-        esquema: personalizado ? base : (sel as EsquemaTatico),
+        esquema: esq,
         alinhamento11: ids,
         gradeTatica11: personalizado ? grade : null,
         personalizado,
+        configTatica: configParaEsquema(esq, configLocal),
       });
     },
-    [commitEscolha],
+    [commitEscolha, configLocal, configParaEsquema],
   );
+
+  const titulares = useMemo(() => {
+    if (slotIds.length !== 11) return [];
+    return slotIds
+      .map((id) => elenco.find((j) => j.id === id))
+      .filter((j): j is Jogador => j != null);
+  }, [slotIds, elenco]);
+
+  const alertasAdequacao = useMemo(() => {
+    if (!dbTaticas || titulares.length < 11) {
+      return ['Escale 11 titulares para avaliar a adequação tática.'];
+    }
+    const cfg = configParaEsquema(esquemaGrafico, configLocal);
+  return previewAlertasTatica(dbTaticas, cfg, titulares, SLOTS_POR_ESQUEMA[esquemaGrafico]);
+  }, [dbTaticas, titulares, configLocal, esquemaGrafico, configParaEsquema]);
+
+  const patchInstrucao = <K extends keyof InstrucoesColetivas>(
+    chave: K,
+    valor: InstrucoesColetivas[K],
+  ) => {
+    setConfigLocal((c) => ({
+      ...c,
+      instrucoes: { ...c.instrucoes, [chave]: valor },
+    }));
+  };
 
   const aplicarMelhorOverall = () => {
     const esq = esquemaGrafico;
@@ -233,15 +281,21 @@ export function TacticsScreen() {
       ? gradeSalva
       : gradePadrao(esquemaBase);
   const gradePendente = !gradesIguais(grade11, gradeReferenciaSalva);
-  const escolhaPendente = esquemaPendente || lineupPendente || modoPendente || gradePendente;
+  const configPendente =
+    JSON.stringify(configParaEsquema(esquemaGrafico, configLocal)) !==
+    JSON.stringify(configParaEsquema(esquemaAtual, configSalva));
+  const escolhaPendente =
+    esquemaPendente || lineupPendente || modoPendente || gradePendente || configPendente;
 
   const salvarEscolha = () => {
     const personalizado = selecao === 'PERSONALIZADO';
+    const esq = personalizado ? esquemaBase : (selecao as EsquemaTatico);
     commitEscolha({
-      esquema: personalizado ? esquemaBase : selecao,
+      esquema: esq,
       alinhamento11: slotIds,
       gradeTatica11: personalizado ? grade11 : null,
       personalizado,
+      configTatica: configParaEsquema(esq, configLocal),
     });
     if (partidaRetorno) voltarPartida();
   };
@@ -279,6 +333,7 @@ export function TacticsScreen() {
           [
             { id: 'jogadores' as const, label: 'Jogadores' },
             { id: 'esquemas' as const, label: 'Esquemas' },
+            { id: 'filosofia' as const, label: 'Estilo & instruções' },
           ] as const
         ).map((t) => (
           <button
@@ -296,6 +351,133 @@ export function TacticsScreen() {
         ))}
       </nav>
 
+      <div className="mb-4 rounded-lg border border-amber-900/50 bg-amber-950/20 p-3">
+        <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-amber-200/90">
+          Adequação do elenco à tática
+        </p>
+        <ul className="space-y-1 text-sm text-zinc-300">
+          {alertasAdequacao.map((a) => (
+            <li key={a} className="flex gap-2">
+              <span className="text-amber-500" aria-hidden>
+                •
+              </span>
+              <span>{a}</span>
+            </li>
+          ))}
+        </ul>
+      </div>
+
+      {aba === 'filosofia' && dbTaticas && (
+        <div className="mb-4 grid gap-4 md:grid-cols-2">
+          <fieldset className="rounded border border-zinc-700 p-3">
+            <legend className="px-1 text-sm font-medium text-zinc-200">Estilo de jogo</legend>
+            <div className="mt-2 flex flex-col gap-1">
+              {dbTaticas.estilos_jogo.map((e) => (
+                <label
+                  key={e.id}
+                  className={`cursor-pointer rounded border px-2 py-1.5 text-sm ${
+                    configLocal.estilo_jogo_id === e.id
+                      ? 'border-emerald-500 bg-emerald-950/80 text-emerald-100'
+                      : 'border-zinc-700 text-zinc-400 hover:border-zinc-500'
+                  }`}
+                >
+                  <input
+                    type="radio"
+                    name="estilo"
+                    className="sr-only"
+                    checked={configLocal.estilo_jogo_id === e.id}
+                    onChange={() =>
+                      setConfigLocal((c) => ({ ...c, estilo_jogo_id: e.id as EstiloJogoId }))
+                    }
+                  />
+                  <span className="font-medium">{e.nome}</span>
+                  <span className="mt-0.5 block text-[11px] opacity-80">{e.descricao}</span>
+                </label>
+              ))}
+            </div>
+          </fieldset>
+          <fieldset className="rounded border border-zinc-700 p-3 text-sm text-zinc-300">
+            <legend className="px-1 font-medium text-zinc-200">Instruções coletivas</legend>
+            <label className="mt-2 block">
+              Altura da linha
+              <select
+                className="mt-1 w-full rounded border border-zinc-600 bg-zinc-900 px-2 py-1"
+                value={configLocal.instrucoes.altura_linha}
+                onChange={(ev) => patchInstrucao('altura_linha', ev.target.value as InstrucoesColetivas['altura_linha'])}
+              >
+                <option value="BAIXA">Baixa</option>
+                <option value="MEDIA">Média</option>
+                <option value="ALTA">Alta</option>
+                <option value="MUITO_ALTA">Muito alta</option>
+              </select>
+            </label>
+            <label className="mt-2 block">
+              Marcação
+              <select
+                className="mt-1 w-full rounded border border-zinc-600 bg-zinc-900 px-2 py-1"
+                value={configLocal.instrucoes.intensidade_marcacao}
+                onChange={(ev) =>
+                  patchInstrucao(
+                    'intensidade_marcacao',
+                    ev.target.value as InstrucoesColetivas['intensidade_marcacao'],
+                  )
+                }
+              >
+                <option value="CONTER">Conter</option>
+                <option value="EQUILIBRADA">Equilibrada</option>
+                <option value="PRESSAO_ALTA">Pressão alta</option>
+                <option value="SUFOCANTE">Sufocante</option>
+              </select>
+            </label>
+            <label className="mt-2 block">
+              Ritmo
+              <select
+                className="mt-1 w-full rounded border border-zinc-600 bg-zinc-900 px-2 py-1"
+                value={configLocal.instrucoes.ritmo_jogo}
+                onChange={(ev) =>
+                  patchInstrucao('ritmo_jogo', ev.target.value as InstrucoesColetivas['ritmo_jogo'])
+                }
+              >
+                <option value="LENTO_CADENCIADO">Lento</option>
+                <option value="NORMAL">Normal</option>
+                <option value="ACELERADO">Acelerado</option>
+              </select>
+            </label>
+            <label className="mt-2 block">
+              Largura no ataque
+              <select
+                className="mt-1 w-full rounded border border-zinc-600 bg-zinc-900 px-2 py-1"
+                value={configLocal.instrucoes.largura_ataque}
+                onChange={(ev) =>
+                  patchInstrucao(
+                    'largura_ataque',
+                    ev.target.value as InstrucoesColetivas['largura_ataque'],
+                  )
+                }
+              >
+                <option value="FUNIL_CENTRAL">Funil central</option>
+                <option value="EQUILIBRADA">Equilibrada</option>
+                <option value="BEM_ABERTO">Bem aberto</option>
+              </select>
+            </label>
+            <label className="mt-2 block">
+              Foco nos passes
+              <select
+                className="mt-1 w-full rounded border border-zinc-600 bg-zinc-900 px-2 py-1"
+                value={configLocal.instrucoes.foco_passes}
+                onChange={(ev) =>
+                  patchInstrucao('foco_passes', ev.target.value as InstrucoesColetivas['foco_passes'])
+                }
+              >
+                <option value="MISTO">Misto</option>
+                <option value="CURTOS_NO_PE">Curtos no pé</option>
+                <option value="BOLAS_LONGAS">Bolas longas</option>
+              </select>
+            </label>
+          </fieldset>
+        </div>
+      )}
+
       {aba === 'jogadores' && elenco.length >= 11 && (
         <div className="mb-3 flex flex-wrap gap-2">
           <CmBtn variant="ghost" type="button" onClick={aplicarMelhorOverall}>
@@ -309,7 +491,11 @@ export function TacticsScreen() {
 
       <div className="flex flex-col gap-4 lg:flex-row lg:items-stretch">
         <aside className="w-full shrink-0 lg:w-56 xl:w-60">
-          {aba === 'esquemas' ? (
+          {aba === 'filosofia' ? (
+            <p className="text-sm text-zinc-500">
+              Use a aba ao lado do campo para trocar esquema e escalar — os alertas acima refletem a adequação em tempo real.
+            </p>
+          ) : aba === 'esquemas' ? (
           <ul className="flex max-h-[min(72vh,520px)] flex-row gap-1 overflow-x-auto pb-1 lg:flex-col lg:overflow-y-auto lg:overflow-x-hidden lg:pr-1">
             {LISTA_ESQUEMAS.map((e) => (
               <li key={e}>

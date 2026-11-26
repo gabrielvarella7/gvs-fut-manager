@@ -112,6 +112,7 @@ export function OfficeHubScreen() {
       <CmMenuList
         items={[
           { label: 'Elenco', hint: 'Plantel completo', onClick: () => irPara('elenco') },
+          { label: 'Treinos', hint: 'Microciclos', onClick: () => irPara('treinos') },
           { label: 'Notícias', hint: String(noticias.length), onClick: () => irPara('noticias') },
           { label: 'Classificação', hint: posicao != null ? `${posicao}º` : '—', onClick: () => irPara('classificacao') },
           { label: 'Calendário', hint: '38 jogos', onClick: () => irPara('calendario') },

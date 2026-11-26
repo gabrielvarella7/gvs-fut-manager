@@ -1,4 +1,6 @@
 import type { MatchSimInput, MatchSimResult } from '../engine/matchEngine';
+import { getDatabaseTaticas } from '../db/tacticsDatabase';
+import { taticaCpuAutomatica } from '../engine/tacticsEngine';
 import { simularPartida } from '../engine/matchEngine';
 import { esquemaOuPadrao } from '../data/esquemasTaticos';
 import { detectarClassico, montarContextoPartidaSync } from '../engine/matchContext';
@@ -479,22 +481,27 @@ export function montarInputPartidaCpu(
           estado,
         })
       : undefined;
+  const esqM = esquemaOuPadrao(mandanteTime.esquema_tatico_padrao);
+  const esqV = esquemaOuPadrao(visitanteTime.esquema_tatico_padrao);
   const input: MatchSimInput = {
     mandante: {
       timeId: mandanteId,
       nomeCurto: mandanteTime.nome,
-      esquema: esquemaOuPadrao(mandanteTime.esquema_tatico_padrao),
+      esquema: esqM,
       elenco: elencoDoTime(jogadores, mandanteId),
       mandoDeCampo: true,
       forcaInstitucional: mandanteTime.prestigio ?? mandanteTime.forca_geral,
+      tatica: taticaCpuAutomatica(esqM, mandanteId),
     },
     visitante: {
       timeId: visitanteId,
       nomeCurto: visitanteTime.nome,
-      esquema: esquemaOuPadrao(visitanteTime.esquema_tatico_padrao),
+      esquema: esqV,
       elenco: elencoDoTime(jogadores, visitanteId),
       forcaInstitucional: visitanteTime.prestigio ?? visitanteTime.forca_geral,
+      tatica: taticaCpuAutomatica(esqV, visitanteId),
     },
+    dbTaticas: getDatabaseTaticas(),
     config: { bonusMandoCampo: bonusMando },
     estadio: mandanteTime.estadio,
     seed: s,

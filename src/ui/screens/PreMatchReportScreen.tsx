@@ -16,6 +16,8 @@ export function PreMatchReportScreen() {
   const alinhamento11 = useGameStore((s) => s.alinhamento11);
   const gradeTatica11 = useGameStore((s) => s.gradeTatica11);
   const taticaPersonalizada = useGameStore((s) => s.usoTaticaPersonalizada);
+  const dbTaticas = useGameStore((s) => s.dbTaticas);
+  const configTatica = useGameStore((s) => s.configTatica);
   const gradePartida =
     taticaPersonalizada && gradeTatica11?.length === 11 ? gradeTatica11 : null;
   const irPara = useGameStore((s) => s.irPara);
@@ -25,7 +27,7 @@ export function PreMatchReportScreen() {
   const diaJogo = brasileirao && clubeRealId && ehDiaDeJogo(brasileirao, clubeRealId);
 
   const relatorio = useMemo(() => {
-    if (!prox || !brasileirao || !campeonato || !clubeRealId) return null;
+    if (!prox || !brasileirao || !campeonato || !clubeRealId || !dbTaticas) return null;
     return gerarRelatorioPreJogo({
       partida: prox,
       estado: brasileirao,
@@ -36,6 +38,8 @@ export function PreMatchReportScreen() {
       esquemaUsuario: esquemaAtual,
       alinhamento11,
       gradeTatica11: gradePartida,
+      dbTaticas,
+      configTaticaUsuario: configTatica,
     });
   }, [
     prox,
@@ -47,6 +51,8 @@ export function PreMatchReportScreen() {
     esquemaAtual,
     alinhamento11,
     gradePartida,
+    dbTaticas,
+    configTatica,
   ]);
 
   const titulo = relatorio

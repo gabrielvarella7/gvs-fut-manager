@@ -116,6 +116,7 @@ export function criarEstadoMundoClube(time: Time): EstadoMundoClube {
     rumoresOfertas: [],
     climaTorcedor: { indice: 58, sequenciaRuim: 0, sequenciaBoa: 0 },
     rodadaUltimoTick: 0,
+    ultimoTreino: null,
   };
 }
 

@@ -66,10 +66,20 @@ export interface ClimaTorcedor {
   sequenciaBoa: number;
 }
 
+export type MicrocicloTreino = 'tatico' | 'fisico' | 'mental' | 'regeneracao';
+
+export interface TreinoSemana {
+  rodadaAplicada: number;
+  microciclo: MicrocicloTreino;
+  destaques: number[];
+}
+
 export interface EstadoMundoClube {
   time_id: string;
   staff: ProfissionalStaff[];
   base: CategoriaBase;
+  /** Uma sessão por rodada entre jogos. */
+  ultimoTreino?: TreinoSemana | null;
   pedidosRenovacao: PedidoRenovacaoContrato[];
   rumoresOfertas: RumorOfertaMercado[];
   climaTorcedor: ClimaTorcedor;

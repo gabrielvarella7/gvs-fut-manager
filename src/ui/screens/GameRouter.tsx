@@ -21,6 +21,7 @@ import { PreMatchReportScreen } from './PreMatchReportScreen';
 import { SettingsScreen } from './SettingsScreen';
 import { StaffScreen } from './StaffScreen';
 import { BaseScreen } from './BaseScreen';
+import { TreinosScreen } from './TreinosScreen';
 
 export function GameRouter() {
   const setDatabase = useGameStore((s) => s.setDatabase);
@@ -82,6 +83,8 @@ export function GameRouter() {
       return <StaffScreen />;
     case 'base':
       return <BaseScreen />;
+    case 'treinos':
+      return <TreinosScreen />;
     case 'calendario':
       return <CalendarScreen />;
     case 'classificacao':
