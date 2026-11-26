@@ -13,7 +13,10 @@ import type {
 import type { EstadoComercial } from '../types/commercial';
 import { publicPath } from '../publicPath';
 import { carregarDatabaseTaticas, setDatabaseTaticas } from './tacticsDatabase';
+import { carregarDatabaseTreinos, setDatabaseTreinos } from './trainingDatabase';
 import type { DatabaseTaticas } from '../types/tactics';
+import type { DatabaseTreinos } from '../types/training';
+import type { EstadoTreinoJogador, ProgramacaoTreinoClube } from '../types/training';
 
 /** Linha IndexedDB — chave primária = time_id. */
 export type ComercialDexieRow = EstadoComercial;
@@ -26,6 +29,8 @@ class GVSManagerDB extends Dexie {
   calendario!: Table<JogoCalendario, number>;
   meta!: Table<EstadoMeta, string>;
   comercial!: Table<ComercialDexieRow, string>;
+  treinos_jogadores!: Table<EstadoTreinoJogador & { time_id: string }, number>;
+  programacao_treinos!: Table<ProgramacaoTreinoClube, string>;
 
   constructor() {
     super('GVSManagerDB_v1');
@@ -41,6 +46,11 @@ class GVSManagerDB extends Dexie {
 
     this.version(2).stores({
       comercial: 'time_id',
+    });
+
+    this.version(3).stores({
+      treinos_jogadores: 'jogador_id, time_id',
+      programacao_treinos: 'time_id',
     });
   }
 }
@@ -78,12 +88,14 @@ export async function carregarDatabaseInicial(): Promise<{
   times: Time[];
   jogadores: Jogador[];
   taticas: DatabaseTaticas;
+  treinos: DatabaseTreinos;
 }> {
-  const [campRes, timesRes, jogRes, taticas] = await Promise.all([
+  const [campRes, timesRes, jogRes, taticas, treinos] = await Promise.all([
     fetch(publicPath('database/campeonato.json')),
     fetch(publicPath('database/times.json')),
     fetch(publicPath('database/jogadores.json')),
     carregarDatabaseTaticas(),
+    carregarDatabaseTreinos(),
   ]);
 
   if (!campRes.ok || !timesRes.ok || !jogRes.ok) {
@@ -97,6 +109,7 @@ export async function carregarDatabaseInicial(): Promise<{
   ])) as [CampeonatoConfig, Time[], Jogador[]];
 
   setDatabaseTaticas(taticas);
+  setDatabaseTreinos(treinos);
 
   const jogadores = enriquecerElenco(normalizarJogadores(jogadoresRaw, times));
 
@@ -110,7 +123,7 @@ export async function carregarDatabaseInicial(): Promise<{
     await db.jogadores.bulkPut(jogadores);
   });
 
-  return { campeonato, times, jogadores, taticas };
+  return { campeonato, times, jogadores, taticas, treinos };
 }
 
 export async function exportarSaveGame(): Promise<SaveGamePayload> {

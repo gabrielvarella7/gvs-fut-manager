@@ -10,6 +10,7 @@ import {
 } from '../../career/playerUtils';
 import { obterNivelRivalidade } from '../../career/mercadoTransferencias';
 import { pretensaoClubeVendedor, pretensaoSalarioJogador } from '../../career/transfers';
+import { rotuloTendenciaSaida, rumorPendenteResposta } from '../../career/sondagemMercado';
 import type { NegociacaoTransferencia } from '../../career/types';
 import type { Jogador, Posicao } from '../../types/schema';
 import { useGameStore } from '../../store/useGameStore';
@@ -42,6 +43,8 @@ export function TransfersScreen() {
   const enviarOferta = useGameStore((s) => s.enviarOfertaTransferencia);
   const aceitarContra = useGameStore((s) => s.aceitarContraproposta);
   const cancelar = useGameStore((s) => s.cancelarNegociacao);
+  const responderSondagem = useGameStore((s) => s.responderSondagemEntrada);
+  const apresentarAoJogador = useGameStore((s) => s.apresentarOfertaAoJogador);
   const rumores = useGameStore((s) => s.mundoClube?.rumoresOfertas ?? []);
 
   const [aba, setAba] = useState<Aba>('comprar');
@@ -104,15 +107,36 @@ export function TransfersScreen() {
       titulo="Transferências"
       subtitulo={`${nomeClube} · Caixa ${formatarDinheiro(financas.saldo_caixa)}`}
     >
-      {rumores.length > 0 && (
-        <CmPanel className="mb-4 border-amber-900/40 bg-amber-950/20">
-          <p className="text-xs font-medium uppercase text-amber-300">Sondagens / mercado paralelo</p>
-          <ul className="mt-2 space-y-1 text-sm text-zinc-300">
-            {rumores.slice(0, 4).map((r) => (
-              <li key={r.id}>
-                {r.texto} (indicativo {formatarDinheiro(r.valorIndicativo)})
-              </li>
-            ))}
+      {rumores.filter(rumorPendenteResposta).length > 0 && (
+        <CmPanel className="mb-4 border-amber-600/60 bg-amber-950/30">
+          <p className="text-xs font-semibold uppercase text-amber-200">
+            Proposta obrigatória — responda para continuar
+          </p>
+          <ul className="mt-3 space-y-3">
+            {rumores.filter(rumorPendenteResposta).map((r) => {
+              const jog = jogadoresReais.find((j) => j.id === r.jogadorId);
+              return (
+                <li key={r.id} className="rounded border border-amber-900/50 bg-zinc-950/40 p-3 text-sm">
+                  <p className="text-zinc-100">{r.texto}</p>
+                  <p className="mt-1 text-xs text-zinc-400">
+                    Indicativo {formatarDinheiro(r.valorIndicativo)} ·{' '}
+                    {rotuloTendenciaSaida(r.tendenciaSair ?? 50)}
+                    {jog ? ` · ${jog.nome} (${jog.overall} OVR)` : ''}
+                  </p>
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    <CmBtn
+                      variant="primary"
+                      onClick={() => responderSondagem(r.id, 'negociar', r.valorIndicativo)}
+                    >
+                      Aceitar negociar
+                    </CmBtn>
+                    <CmBtn variant="danger" onClick={() => responderSondagem(r.id, 'recusar')}>
+                      Recusar sondagem
+                    </CmBtn>
+                  </div>
+                </li>
+              );
+            })}
           </ul>
         </CmPanel>
       )}
@@ -237,6 +261,7 @@ export function TransfersScreen() {
               onAtualizar={(patch) => atualizarOferta(negAtiva.id, patch)}
               onEnviar={() => enviarOferta(negAtiva.id)}
               onAceitar={() => aceitarContra(negAtiva.id)}
+              onApresentarJogador={() => apresentarAoJogador(negAtiva.id)}
               onCancelar={() => {
                 cancelar(negAtiva.id);
                 setNegociacaoAtiva(null);
@@ -364,6 +389,7 @@ function PainelNegociacao({
   onAtualizar,
   onEnviar,
   onAceitar,
+  onApresentarJogador,
   onCancelar,
 }: {
   neg: NegociacaoTransferencia;
@@ -373,6 +399,7 @@ function PainelNegociacao({
   onAtualizar: (p: Partial<NegociacaoTransferencia['ofertaAtual']>) => void;
   onEnviar: () => void;
   onAceitar: () => void;
+  onApresentarJogador: () => void;
   onCancelar: () => void;
 }) {
   const j = jogadores.find((x) => x.id === neg.jogadorId);
@@ -419,6 +446,18 @@ function PainelNegociacao({
       <p className="mt-3 rounded border border-zinc-800 bg-zinc-950/60 px-3 py-2 text-sm text-zinc-300">
         {neg.mensagem}
       </p>
+      {neg.tendenciaAceitarSaida != null && (
+        <p className="mt-2 text-sm text-amber-200/90">
+          Disposição do atleta: {rotuloTendenciaSaida(neg.tendenciaAceitarSaida)} (
+          {neg.tendenciaAceitarSaida}%)
+        </p>
+      )}
+      {neg.status === 'em_analise' && (
+        <p className="mt-2 text-xs text-zinc-500">
+          Negociação em andamento — avance dias no escritório para o clube responder
+          {neg.diasRestantesFase != null ? ` (${neg.diasRestantesFase} dia(s) restantes nesta fase).` : '.'}
+        </p>
+      )}
 
       {(neg.contraOfertaClube || neg.contraOfertaJogador) && (
         <div className="mt-3">
@@ -518,6 +557,11 @@ function PainelNegociacao({
         {neg.status === 'contra_proposta' && (
           <CmBtn variant="primary" onClick={onAceitar}>
             Aceitar contra-proposta
+          </CmBtn>
+        )}
+        {neg.status === 'aguardando_jogador' && (
+          <CmBtn variant="primary" onClick={onApresentarJogador}>
+            Apresentar proposta ao jogador
           </CmBtn>
         )}
         <CmBtn variant="ghost" onClick={onCancelar}>

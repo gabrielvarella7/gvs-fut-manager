@@ -42,6 +42,7 @@ export type StatusNegociacao =
   | 'rascunho'
   | 'em_analise'
   | 'contra_proposta'
+  | 'aguardando_jogador'
   | 'aceita'
   | 'recusada'
   | 'concluida';
@@ -60,6 +61,10 @@ export interface NegociacaoTransferencia {
   atualizadoEm: string;
   /** Rodada da mesa com empresário (1–3). */
   rodadaNegociacao?: number;
+  origemSondagemId?: string;
+  tendenciaAceitarSaida?: number;
+  faseNegociacao?: 'clubes' | 'jogador';
+  diasRestantesFase?: number;
 }
 
 export type TelaJogo =

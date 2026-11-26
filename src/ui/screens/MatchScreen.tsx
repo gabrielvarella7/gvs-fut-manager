@@ -20,10 +20,11 @@ import { MatchCenter } from '../match/MatchCenter';
 import { gerarRelatorioPreJogo } from '../../career/relatorioPreJogo';
 import { multFadigaPreparadorFisico, nivelStaff } from '../../career/staffEfeitos';
 import { formacaoIdDeEsquema, taticaCpuAutomatica } from '../../engine/tacticsEngine';
+import { improvisacaoMultTreino } from '../../engine/trainingEngine';
 import { PreMatchReport } from '../match/PreMatchReport';
 import { MatchPreGame } from '../match/MatchPreGame';
 import type { VelocidadePlayback } from '../MatchPlayback';
-import { CmBtn, CmShell } from '../cm/CmShell';
+import { CmBtn, CmPanel, CmShell } from '../cm/CmShell';
 
 function elencoTime(jogadores: Jogador[], timeId: string): Jogador[] {
   return jogadores.filter((j) => j.time_id === timeId);
@@ -40,6 +41,9 @@ export function MatchScreen() {
   const taticaPersonalizada = useGameStore((s) => s.usoTaticaPersonalizada);
   const dbTaticas = useGameStore((s) => s.dbTaticas);
   const configTatica = useGameStore((s) => s.configTatica);
+  const partidaModoAuxiliar = useGameStore((s) => s.partidaModoAuxiliar);
+  const limparPartidaModoAuxiliar = useGameStore((s) => s.limparPartidaModoAuxiliar);
+  const jogarComAuxiliarAction = useGameStore((s) => s.jogarComAuxiliar);
   const salvar = useGameStore((s) => s.salvarCarreira);
   const sair = useGameStore((s) => s.sairParaMenu);
   const campeonato = useGameStore((s) => s.campeonato);
@@ -135,6 +139,18 @@ export function MatchScreen() {
         clubeRealId && mundoClube ?
           multFadigaPreparadorFisico(nivelStaff(mundoClube, 'PREPARADOR_FISICO'))
         : undefined;
+      const improvisacaoPorJogador: Record<number, number> = {};
+      if (mundoClube?.estadosTreino) {
+        for (const est of mundoClube.estadosTreino) {
+          improvisacaoPorJogador[est.jogador_id] = improvisacaoMultTreino(est);
+        }
+      }
+      const bonusTreino = mundoClube?.bonusTreinoProximoJogo;
+      const multExec = mundoClube?.multiplicadorExecucaoTaticaTreino;
+      const treinoUser =
+        bonusTreino && Object.keys(bonusTreino).length > 0
+          ? { bonusTreino, multExecucaoTreino: multExec ?? 1 }
+          : {};
       return {
         mandante: {
           timeId: mandanteLiga.id,
@@ -149,6 +165,7 @@ export function MatchScreen() {
             mandanteLiga.id === clubeRealId
               ? taticaUsuario
               : taticaCpuAutomatica(esqM, mandanteLiga.id),
+          ...(mandanteLiga.id === clubeRealId ? treinoUser : {}),
         },
         visitante: {
           timeId: visitanteLiga.id,
@@ -162,10 +179,14 @@ export function MatchScreen() {
             visitanteLiga.id === clubeRealId
               ? taticaUsuario
               : taticaCpuAutomatica(esqV, visitanteLiga.id),
+          ...(visitanteLiga.id === clubeRealId ? treinoUser : {}),
         },
         dbTaticas,
         config: {
           bonusMandoCampo: neutro ? 1 : (campeonato?.bonus_mando_campo ?? 1.05),
+          ...(Object.keys(improvisacaoPorJogador).length > 0 ?
+            { improvisacaoMultPorJogador: improvisacaoPorJogador }
+          : {}),
         },
         estadio: neutro ? 'Campo neutro' : mandanteLiga.estadio,
         contexto,
@@ -280,6 +301,12 @@ export function MatchScreen() {
   const idPartida = modoLiga ? partidaLiga?.id : jogo?.id;
   const emTransmissao = !!partidaAtual && partidaJogoId === idPartida;
 
+  const encerrarAuxiliar = useCallback(() => {
+    limparPartidaModoAuxiliar();
+    encerrarTransmissao();
+    irPara(modoLiga ? 'escritorio' : 'hub_torneio');
+  }, [limparPartidaModoAuxiliar, encerrarTransmissao, irPara, modoLiga]);
+
   const iniciarPartida = useCallback(async () => {
     if (!simInput || idPartida == null) return;
     if (emTransmissao) return;
@@ -313,6 +340,13 @@ export function MatchScreen() {
     registrar,
     registrarLiga,
   ]);
+
+  useEffect(() => {
+    if (!partidaModoAuxiliar || !simInput || emTransmissao || busy) return;
+    void (async () => {
+      await iniciarPartida();
+    })();
+  }, [partidaModoAuxiliar, simInput, emTransmissao, busy, iniciarPartida]);
 
   useEffect(() => {
     if (checkpoint?.partidaJogoId === idPartida) return;
@@ -444,7 +478,21 @@ export function MatchScreen() {
         </div>
       }
     >
-      {!emTransmissao && preJogo && simInput && (
+      {partidaModoAuxiliar && partidaAtual && emTransmissao && (
+        <CmPanel className="mb-4 border-emerald-800/60">
+          <p className="text-lg font-semibold text-emerald-200">
+            Auxiliar: placar final {partidaAtual.golsMandante} x {partidaAtual.golsVisitante}
+          </p>
+          <p className="mt-2 text-sm text-zinc-400">
+            O jogo foi simulado sem transmissão. Resultado já foi registrado na tabela.
+          </p>
+          <div className="mt-3">
+            <CmBtn onClick={encerrarAuxiliar}>Voltar ao escritório</CmBtn>
+          </div>
+        </CmPanel>
+      )}
+
+      {!partidaModoAuxiliar && !emTransmissao && preJogo && simInput && (
         <>
           {relatorioLiga ? (
             <PreMatchReport
@@ -454,6 +502,11 @@ export function MatchScreen() {
                   <CmBtn onClick={() => void iniciarPartida()} disabled={busy}>
                     {busy ? 'Preparando…' : 'Iniciar partida'}
                   </CmBtn>
+                  {modoLiga && (
+                    <CmBtn variant="ghost" onClick={jogarComAuxiliarAction}>
+                      Mandar auxiliar
+                    </CmBtn>
+                  )}
                   <CmBtn variant="ghost" onClick={() => abrirTatica()}>
                     Táticas (pré-jogo)
                   </CmBtn>
@@ -489,7 +542,7 @@ export function MatchScreen() {
         </>
       )}
 
-      {emTransmissao && partidaAtual && (
+      {emTransmissao && partidaAtual && !partidaModoAuxiliar && (
         <>
           <MatchCenter
             result={partidaAtual}

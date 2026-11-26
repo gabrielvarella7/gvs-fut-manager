@@ -1,6 +1,5 @@
 import type { PreJogoInfo } from '../../engine/matchStats';
 import type { ProbabilidadesResultado } from '../../engine/matchEngine';
-import { StatBar } from './StatBar';
 
 type Props = {
   mandanteNome: string;
@@ -44,7 +43,7 @@ export function MatchPreGame({ mandanteNome, visitanteNome, estadio, preJogo }: 
       </div>
 
       <div className="rounded-lg border border-zinc-700 bg-zinc-900/60 p-4">
-        <h3 className="mb-3 text-sm font-semibold text-zinc-200">Quem vencerá? (22 OVR + casa + momento)</h3>
+        <h3 className="mb-3 text-sm font-semibold text-zinc-200">Quem vencerá?</h3>
         <div className="flex flex-wrap gap-2">
           <span className="rounded-full border border-emerald-800 bg-emerald-950/50 px-3 py-1 text-sm">
             {mandanteNome} {voto.vm}%
@@ -58,21 +57,11 @@ export function MatchPreGame({ mandanteNome, visitanteNome, estadio, preJogo }: 
         </div>
       </div>
 
-      <div className="rounded-lg border border-zinc-700 bg-zinc-900/60 p-4">
-        <h3 className="mb-3 text-sm font-semibold text-zinc-200">Força do elenco escalado</h3>
-        <StatBar
-          label="Índice"
-          mandante={preJogo.forcaMandante}
-          visitante={preJogo.forcaVisitante}
-          mandanteNome={mandanteNome}
-          visitanteNome={visitanteNome}
-        />
-        {preJogo.mandoBonus > 1 && (
-          <p className="mt-2 text-xs text-zinc-500">
-            Mandante com bônus de {((preJogo.mandoBonus - 1) * 100).toFixed(0)}% de mando de campo.
-          </p>
-        )}
-      </div>
+      {preJogo.mandoBonus > 1 && (
+        <p className="text-xs text-zinc-500">
+          Mandante com bônus de mando de campo (+{((preJogo.mandoBonus - 1) * 100).toFixed(0)}%).
+        </p>
+      )}
     </div>
   );
 }

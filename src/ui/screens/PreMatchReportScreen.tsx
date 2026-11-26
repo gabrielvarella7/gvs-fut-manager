@@ -21,6 +21,7 @@ export function PreMatchReportScreen() {
   const gradePartida =
     taticaPersonalizada && gradeTatica11?.length === 11 ? gradeTatica11 : null;
   const irPara = useGameStore((s) => s.irPara);
+  const jogarComAuxiliar = useGameStore((s) => s.jogarComAuxiliar);
 
   const prox =
     brasileirao && clubeRealId ? proximaPartidaUsuario(brasileirao, clubeRealId) : null;
@@ -75,7 +76,12 @@ export function PreMatchReportScreen() {
                 Ajustar táticas
               </CmBtn>
               {diaJogo && (
-                <CmBtn onClick={() => irPara('partida')}>Ir para a partida</CmBtn>
+                <>
+                  <CmBtn onClick={() => irPara('partida')}>Ir para a partida</CmBtn>
+                  <CmBtn variant="ghost" onClick={jogarComAuxiliar}>
+                    Mandar auxiliar (resultado direto)
+                  </CmBtn>
+                </>
               )}
             </>
           }

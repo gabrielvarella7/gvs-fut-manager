@@ -39,6 +39,7 @@ import {
   taticaCpuAutomatica,
   type ResultadoAvaliacaoTatica,
 } from './tacticsEngine';
+import { aplicarBonusTreinoModificadores } from './trainingEngine';
 
 export const MOTOR_DEFAULTS = {
   improvisacaoMult: 0.8,
@@ -75,11 +76,14 @@ export interface MatchTeamInput {
   fadigaPorMinutoMult?: number;
   /** Estilo + instruções (formação derivada do esquema se omitida). */
   tatica?: ConfiguracaoTaticaClube;
+  bonusTreino?: Record<string, number>;
+  multExecucaoTreino?: number;
 }
 
 export interface MatchSimConfig {
   bonusMandoCampo: number;
   improvisacaoMult?: number;
+  improvisacaoMultPorJogador?: Record<number, number>;
   energiaLimiteFadiga?: number;
   fadigaPorMinuto?: number;
 }
@@ -203,13 +207,15 @@ export function calcularForcaSetores(
     if (expulsos?.has(jogador.id)) continue;
     const setor = setorDaPosicao(posicaoEscalada);
     const energia = energiaPorId.get(jogador.id) ?? jogador.energia;
+    const multImp =
+      cfg.improvisacaoMultPorJogador?.[jogador.id] ?? cfg.improvisacaoMult;
     const rend = rendimentoJogadorEmCampo({
       jogador,
       posicaoEscalada,
       celula: celulaCampo,
       energia,
       energiaLimiteFadiga: cfg.energiaLimiteFadiga,
-      improvisacaoMult: cfg.improvisacaoMult,
+      improvisacaoMult: multImp,
       fatorMotivacao: opcoes.fatorMotivacao,
       fatorMoralTime: opcoes.fatorMoralTime,
     });
@@ -356,6 +362,7 @@ export function simularPartida(input: MatchSimInput): MatchSimResult {
   const fadigaBase = input.config.fadigaPorMinuto ?? MOTOR_DEFAULTS.fadigaPorMinuto;
   const cfg = {
     improvisacaoMult: input.config.improvisacaoMult ?? MOTOR_DEFAULTS.improvisacaoMult,
+    improvisacaoMultPorJogador: input.config.improvisacaoMultPorJogador,
     energiaLimiteFadiga:
       input.config.energiaLimiteFadiga ?? MOTOR_DEFAULTS.energiaLimiteFadiga,
     fadigaPorMinuto: fadigaBase * (isClassico ? 1.28 : 1),
@@ -467,8 +474,22 @@ export function simularPartida(input: MatchSimInput): MatchSimResult {
     esquemaProprio: input.visitante.esquema,
     esquemaAdversario: input.mandante.esquema,
   });
-  const modsM = impactoM.modificadoresFinais;
-  const modsV = impactoV.modificadoresFinais;
+  let modsM = impactoM.modificadoresFinais;
+  let modsV = impactoV.modificadoresFinais;
+  if (input.mandante.bonusTreino && Object.keys(input.mandante.bonusTreino).length > 0) {
+    modsM = aplicarBonusTreinoModificadores(
+      modsM,
+      input.mandante.bonusTreino,
+      input.mandante.multExecucaoTreino ?? 1,
+    );
+  }
+  if (input.visitante.bonusTreino && Object.keys(input.visitante.bonusTreino).length > 0) {
+    modsV = aplicarBonusTreinoModificadores(
+      modsV,
+      input.visitante.bonusTreino,
+      input.visitante.multExecucaoTreino ?? 1,
+    );
+  }
 
   const diffJogo = sortearDiffComVariancia(faixaPrep.cruzamento.diff, rnd);
   let golsMandante: number;

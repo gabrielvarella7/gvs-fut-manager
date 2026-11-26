@@ -234,20 +234,6 @@ export function PreMatchReport({ relatorio: r, acoes }: Props) {
         <div className="space-y-4">
           <div className="rounded-lg border border-zinc-700 bg-zinc-900/60 p-4">
             <h3 className="mb-3 text-sm font-semibold text-zinc-200">Quem vencerá?</h3>
-            <p className="mb-2 text-xs text-zinc-500">
-              Média OVR dos 22 · casa · momento — com faixa de variância até o apito.
-            </p>
-            {r.preJogo.cruzamento && (
-              <p className="mb-2 font-mono text-xs text-zinc-400">
-                OVR médio {r.preJogo.cruzamento.mediaOvrM.toFixed(1)} vs{' '}
-                {r.preJogo.cruzamento.mediaOvrV.toFixed(1)} · momento{' '}
-                {(r.preJogo.cruzamento.momentoM * 100 - 100).toFixed(1)}% /{' '}
-                {(r.preJogo.cruzamento.momentoV * 100 - 100).toFixed(1)}% · índice{' '}
-                {r.preJogo.forcaMandante.toFixed(1)} vs {r.preJogo.forcaVisitante.toFixed(1)} (Δ{' '}
-                {r.preJogo.cruzamento.diff >= 0 ? '+' : ''}
-                {r.preJogo.cruzamento.diff.toFixed(1)})
-              </p>
-            )}
             <div className="flex flex-wrap gap-2">
               <PollPill label={nomeM} pct={voto.vm} tone="mandante" />
               <PollPill label="Empate" pct={voto.e} tone="empate" />

@@ -1,3 +1,8 @@
+import type {
+  EstadoTreinoJogador,
+  ProgramacaoTreinoClube,
+} from './training';
+
 /** Mundo vivo do clube — staff, base, torcida e burocracia paralela à temporada. */
 
 export type CargoStaff =
@@ -50,6 +55,12 @@ export interface PedidoRenovacaoContrato {
   mensagem: string;
 }
 
+export type StatusSondagemMercado =
+  | 'pendente_resposta'
+  | 'negociando'
+  | 'encerrada'
+  | 'recusada';
+
 export interface RumorOfertaMercado {
   id: string;
   jogadorId: number;
@@ -58,6 +69,12 @@ export interface RumorOfertaMercado {
   valorIndicativo: number;
   rodada: number;
   texto: string;
+  status?: StatusSondagemMercado;
+  criadoEmISO?: string;
+  prazoRespostaISO?: string;
+  tendenciaSair?: number;
+  valorPedido?: number;
+  diasNegociacaoRestantes?: number;
 }
 
 export interface ClimaTorcedor {
@@ -84,4 +101,11 @@ export interface EstadoMundoClube {
   rumoresOfertas: RumorOfertaMercado[];
   climaTorcedor: ClimaTorcedor;
   rodadaUltimoTick: number;
+  /** Programação semanal (regime + sessões + familiaridade). */
+  programacaoTreino?: ProgramacaoTreinoClube;
+  estadosTreino?: EstadoTreinoJogador[];
+  /** Bônus ativos até a próxima partida do usuário. */
+  bonusTreinoProximoJogo?: Record<string, number>;
+  multiplicadorExecucaoTaticaTreino?: number;
+  treinoBonusRodada?: number;
 }

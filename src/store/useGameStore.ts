@@ -52,6 +52,16 @@ import {
   resumoContratacaoCompra,
 } from '../career/transfers';
 import { detectarClassico } from '../engine/matchContext';
+import { corrigirDataNaoUltrapassarJogo, podeAvancarUmDia } from '../career/calendarioUsuario';
+import {
+  avancarNegociacaoPorDia,
+  enriquecerRumorEntrada,
+  jogadorAceitaProposta,
+  negociacaoDeSondagem,
+  rumorPendenteResposta,
+  rotuloTendenciaSaida,
+  tendenciaJogadorAceitarSaida,
+} from '../career/sondagemMercado';
 import {
   aplicarBalanceamentoNaTemporada,
   avancarDias,
@@ -82,9 +92,17 @@ import {
   tickMundoPorDia,
   tickMundoPosRodada,
 } from '../career/mundoParalelo';
-import type { FocoCategoriaBase, MicrocicloTreino, NivelInvestimentoBase } from '../types/mundoClube';
-import { aplicarMicrocicloTreino } from '../career/treinos';
-import { nivelStaff } from '../career/staffEfeitos';
+import type { FocoCategoriaBase, NivelInvestimentoBase } from '../types/mundoClube';
+import { corpoTecnicoDeMundo } from '../career/treinoStaff';
+import {
+  criarProgramacaoTreino,
+  garantirEstadosTreino,
+} from '../career/treinoInit';
+import { persistirTreinosDexie } from '../db/trainingPersistence';
+import {
+  processarSemanaTreinos,
+  registrarMudancaEsquemaTreino,
+} from '../engine/trainingEngine';
 import {
   carregarSlot,
   excluirSlot,
@@ -94,6 +112,7 @@ import {
 } from '../career/saveSlots';
 import type { MatchSimResult } from '../engine/matchEngine';
 import type { ConfiguracaoTaticaClube, DatabaseTaticas } from '../types/tactics';
+import type { DatabaseTreinos, PlanoIndividualId } from '../types/training';
 import { configuracaoPadrao, formacaoIdDeEsquema } from '../engine/tacticsEngine';
 import {
   aplicarFadigaPosPartida,
@@ -117,6 +136,7 @@ interface GameStore extends EstadoCarreira {
   campeonato: CampeonatoConfig | null;
   jogadoresReais: Jogador[];
   dbTaticas: DatabaseTaticas | null;
+  dbTreinos: DatabaseTreinos | null;
   dbPronto: boolean;
   partidaJogoId: number | null;
   avisoSalvo: string | null;
@@ -127,7 +147,10 @@ interface GameStore extends EstadoCarreira {
     times: Time[];
     jogadores: Jogador[];
     taticas: DatabaseTaticas;
+    treinos: DatabaseTreinos;
   }) => void;
+  atualizarProgramacaoTreino: (patch: Partial<import('../types/training').ProgramacaoTreinoClube>) => void;
+  definirPlanoIndividualTreino: (jogadorId: number, plano: PlanoIndividualId) => void;
   irPara: (tela: TelaJogo) => void;
   iniciarNovoJogo: () => void;
   salvarPerfil: (perfil: PerfilTecnico) => void;
@@ -166,6 +189,7 @@ interface GameStore extends EstadoCarreira {
   ) => void;
   atualizarPartidaTransmissao: (result: MatchSimResult) => void;
   limparPendingResume: () => void;
+  garantirCalendarioUsuario: () => void;
   avancarUmDia: () => void;
   avancarAteDiaDeJogo: () => void;
   registrarResultadoBrasileirao: (
@@ -185,8 +209,17 @@ interface GameStore extends EstadoCarreira {
   recusarPropostaPatrocinioComercial: (propostaId: string) => void;
   definirInvestimentoBase: (nivel: NivelInvestimentoBase) => void;
   definirFocoBase: (foco: FocoCategoriaBase) => void;
-  /** Aplica microciclo da rodada; retorna mensagem de erro ou null se ok. */
-  aplicarTreinoSemana: (microciclo: MicrocicloTreino, destaques: number[]) => string | null;
+  /** Aplica a semana de treinos; retorna mensagem de erro ou null se ok. */
+  aplicarTreinoSemana: () => string | null;
+  partidaModoAuxiliar: boolean;
+  jogarComAuxiliar: () => void;
+  limparPartidaModoAuxiliar: () => void;
+  responderSondagemEntrada: (
+    rumorId: string,
+    acao: 'recusar' | 'negociar',
+    valorPedido?: number,
+  ) => void;
+  apresentarOfertaAoJogador: (negId: string) => void;
 }
 
 const estadoInicial = (): EstadoCarreira & {
@@ -207,6 +240,7 @@ const estadoInicial = (): EstadoCarreira & {
   jogadorPerfilId: null,
   saveSlotId: null,
   dbTaticas: null,
+  dbTreinos: null,
   perfil: null,
   timesFicticios: [],
   timeUsuarioId: null,
@@ -233,19 +267,42 @@ const estadoInicial = (): EstadoCarreira & {
   comercial: null,
   mundoClube: null,
   negociacoesTransferencia: [],
+  partidaModoAuxiliar: false,
 });
 
 export const useGameStore = create<GameStore>((set, get) => ({
   ...estadoInicial(),
-  setDatabase: ({ campeonato, times, jogadores, taticas }) =>
+  setDatabase: ({ campeonato, times, jogadores, taticas, treinos }) =>
     set({
       campeonato,
       timesReais: times,
       jogadoresReais: enriquecerElenco(jogadores),
       dbTaticas: taticas,
+      dbTreinos: treinos,
       dbPronto: true,
     }),
   irPara: (tela) => {
+    const s0 = get();
+    const sondagensPendentes =
+      s0.mundoClube?.rumoresOfertas.filter(rumorPendenteResposta) ?? [];
+    const telasLiberadas = new Set<TelaJogo>([
+      'transferencias',
+      'partida',
+      'relatorio_pre_jogo',
+      'tatica',
+      'configuracoes',
+      'carregar',
+    ]);
+    if (sondagensPendentes.length > 0 && !telasLiberadas.has(tela)) {
+      set({
+        tela: 'transferencias',
+        avisoSalvo: 'Há propostas de mercado aguardando sua resposta.',
+      });
+      return;
+    }
+    if (tela === 'escritorio' && s0.clubeRealId) {
+      get().garantirCalendarioUsuario();
+    }
     const profissional = !!get().clubeRealId;
     if (
       (tela === 'escritorio' ||
@@ -366,12 +423,26 @@ export const useGameStore = create<GameStore>((set, get) => ({
           ...s.configTatica,
           formacao_id: formacaoIdDeEsquema(esquema),
         } as ConfiguracaoTaticaClube);
+      const formNova = formacaoIdDeEsquema(esquema);
+      const formAnt = s.configTatica?.formacao_id;
+      let mundoClube = s.mundoClube;
+      if (mundoClube?.programacaoTreino && s.clubeRealId) {
+        mundoClube = {
+          ...mundoClube,
+          programacaoTreino: registrarMudancaEsquemaTreino(
+            mundoClube.programacaoTreino,
+            formAnt,
+            formNova,
+          ),
+        };
+      }
       return {
         esquemaAtual: esquema,
         alinhamento11,
         gradeTatica11: personalizado ? gradeTatica11 : null,
         usoTaticaPersonalizada: personalizado,
         configTatica: cfg,
+        mundoClube,
         avisoSalvo: 'Tática salva para os próximos jogos',
       };
     }),
@@ -423,7 +494,16 @@ export const useGameStore = create<GameStore>((set, get) => ({
     };
     const elencoClube = get().jogadoresReais.filter((j) => j.time_id === id);
     const comercial = criarEstadoComercialInicial(clube, elencoClube);
-    const mundoClube = criarEstadoMundoClube(clube);
+    const formacaoId = formacaoIdDeEsquema(esquema);
+    const mundoClube = {
+      ...criarEstadoMundoClube(clube),
+      programacaoTreino: criarProgramacaoTreino(id, formacaoId),
+      estadosTreino: garantirEstadosTreino(
+        get().jogadoresReais,
+        id,
+        undefined,
+      ),
+    };
     let financas = inicializarFinancasClube(clube, elencoClube);
     financas = sincronizarFinancasComercial(financas, comercial, 10);
     set({
@@ -451,11 +531,58 @@ export const useGameStore = create<GameStore>((set, get) => ({
   atualizarPartidaTransmissao: (result) =>
     set({ partidaAtual: result }),
   limparPendingResume: () => set({ pendingResumePartida: false }),
+  garantirCalendarioUsuario: () => {
+    const s = get();
+    if (!s.brasileirao || !s.clubeRealId) return;
+    let brasileirao = corrigirDataNaoUltrapassarJogo(s.brasileirao, s.clubeRealId);
+    let mundoClube = s.mundoClube;
+  if (mundoClube) {
+      let rumoresMutados = false;
+      const rumoresOfertas = mundoClube.rumoresOfertas.map((r) => {
+        if (!rumorPendenteResposta(r)) return r;
+        if (r.tendenciaSair != null && r.status === 'pendente_resposta') return r;
+        const jog = s.jogadoresReais.find((j) => j.id === r.jogadorId);
+        if (!jog) return r;
+        rumoresMutados = true;
+        return enriquecerRumorEntrada(r, jog, brasileirao.dataAtualISO);
+      });
+      if (rumoresMutados) {
+        mundoClube = { ...mundoClube, rumoresOfertas };
+      }
+    }
+    const dataAjustada = brasileirao !== s.brasileirao;
+    if (dataAjustada || mundoClube !== s.mundoClube) {
+      set({
+        brasileirao,
+        ...(mundoClube !== s.mundoClube ? { mundoClube } : {}),
+        ...(dataAjustada ?
+          { avisoSalvo: 'Data ajustada ao dia da partida pendente.' }
+        : {}),
+      });
+    }
+  },
   avancarUmDia: () => {
     const s = get();
     if (!s.brasileirao || !s.clubeRealId) return;
+    const brasileiraoCorrigido = corrigirDataNaoUltrapassarJogo(s.brasileirao, s.clubeRealId);
+    if (brasileiraoCorrigido !== s.brasileirao) {
+      set({ brasileirao: brasileiraoCorrigido });
+    }
+    const base = get().brasileirao!;
+    if ((s.mundoClube?.rumoresOfertas ?? []).some(rumorPendenteResposta)) {
+      set({
+        tela: 'transferencias',
+        avisoSalvo: 'Responda às sondagens antes de avançar o calendário.',
+      });
+      return;
+    }
+    const calendario = podeAvancarUmDia(base, s.clubeRealId);
+    if (!calendario.ok) {
+      set({ avisoSalvo: calendario.motivo ?? 'Não é possível avançar o dia.' });
+      return;
+    }
     const clube = s.timesReais.find((t) => t.id === s.clubeRealId);
-    const { estado, noticias } = avancarDias(s.brasileirao, 1, clube?.nome ?? 'Clube');
+    const { estado, noticias } = avancarDias(base, 1, clube?.nome ?? 'Clube');
     let jogadores = s.jogadoresReais;
     let mundo = s.mundoClube;
     let extras: NoticiaCarreira[] = [];
@@ -471,24 +598,152 @@ export const useGameStore = create<GameStore>((set, get) => ({
       mundo = tick.mundo;
       extras = tick.noticias;
     }
+    let negociacoes = s.negociacoesTransferencia;
+    for (let i = 0; i < negociacoes.length; i++) {
+      const neg = negociacoes[i]!;
+      if (neg.status !== 'em_analise' && neg.status !== 'contra_proposta') continue;
+      const jog = jogadores.find((j) => j.id === neg.jogadorId);
+      if (!jog) continue;
+      const prox = avancarNegociacaoPorDia(neg, jog, neg.ofertaAtual.valorTransferencia);
+      if (prox) negociacoes = negociacoes.map((n) => (n.id === neg.id ? prox : n));
+    }
     set({
       brasileirao: estado,
       jogadoresReais: jogadores,
       mundoClube: mundo,
+      negociacoesTransferencia: negociacoes,
       noticias: deduplicarNoticias([...noticias, ...extras, ...s.noticias]),
     });
     if (extras.length) void persistirJogadoresDexie(jogadores).catch(console.error);
   },
+  jogarComAuxiliar: () => {
+    const s = get();
+    if (!s.brasileirao || !s.clubeRealId) return;
+    const prox = proximaPartidaUsuario(s.brasileirao, s.clubeRealId);
+    if (!prox) return;
+    if (!ehDiaDeJogo(s.brasileirao, s.clubeRealId)) {
+      set({ avisoSalvo: 'O auxiliar só atua no dia da partida.' });
+      return;
+    }
+    set({
+      partidaModoAuxiliar: true,
+      tela: 'partida',
+      partidaJogoEmCurso: prox.id,
+      partidaAtual: null,
+      partidaJogoId: null,
+      transmissaoCheckpoint: null,
+      pendingResumePartida: false,
+    });
+  },
+  limparPartidaModoAuxiliar: () => set({ partidaModoAuxiliar: false }),
+  responderSondagemEntrada: (rumorId, acao, valorPedido) => {
+    const s = get();
+    if (!s.clubeRealId || !s.mundoClube) return;
+    const rumor = s.mundoClube.rumoresOfertas.find((r) => r.id === rumorId);
+    if (!rumor || !rumorPendenteResposta(rumor)) return;
+    const jogador = s.jogadoresReais.find((j) => j.id === rumor.jogadorId);
+    if (!jogador) return;
+    const rumoresRestantes = s.mundoClube.rumoresOfertas.map((r) =>
+      r.id === rumorId ? { ...r, status: 'encerrada' as const } : r,
+    );
+    if (acao === 'recusar') {
+      set({
+        mundoClube: { ...s.mundoClube, rumoresOfertas: rumoresRestantes },
+        avisoSalvo: 'Sondagem recusada.',
+        noticias: deduplicarNoticias([
+          {
+            id: `n_snd_${Date.now()}`,
+            data: new Date().toISOString(),
+            titulo: 'Proposta recusada',
+            texto: `Você recusou o interesse do ${rumor.timeCompradorNome} em ${jogador.nome}.`,
+          },
+          ...s.noticias,
+        ]),
+      });
+      return;
+    }
+    const valor = valorPedido ?? rumor.valorIndicativo;
+    const neg = negociacaoDeSondagem(rumor, jogador, s.clubeRealId, valor);
+    set({
+      mundoClube: { ...s.mundoClube, rumoresOfertas: rumoresRestantes },
+      negociacoesTransferencia: [neg, ...s.negociacoesTransferencia].slice(0, 12),
+      tela: 'transferencias',
+      avisoSalvo: `${rotuloTendenciaSaida(rumor.tendenciaSair ?? 50)} — negociação iniciada.`,
+    });
+  },
+  apresentarOfertaAoJogador: (negId) => {
+    const s = get();
+    if (!s.financas) return;
+    const neg = s.negociacoesTransferencia.find((n) => n.id === negId);
+    if (!neg || neg.status !== 'aguardando_jogador') return;
+    const jogador = s.jogadoresReais.find((j) => j.id === neg.jogadorId);
+    if (!jogador) return;
+    const oferta = neg.contraOfertaClube ?? neg.ofertaAtual;
+    const aceita = jogadorAceitaProposta(jogador, neg.tendenciaAceitarSaida, oferta);
+    if (!aceita) {
+      set({
+        negociacoesTransferencia: s.negociacoesTransferencia.map((n) =>
+          n.id === negId ?
+            { ...n, status: 'recusada' as const, mensagem: `${jogador.nome} recusou sair do clube.` }
+          : n,
+        ),
+        avisoSalvo: 'Jogador recusou a proposta.',
+      });
+      return;
+    }
+    const negFechamento: NegociacaoTransferencia = {
+      ...neg,
+      ofertaAtual: oferta,
+      timeCompradorId: neg.timeCompradorId,
+    };
+    const fechamento = concluirVenda(s.jogadoresReais, negFechamento, s.financas);
+    if (fechamento.erro) {
+      set({ avisoSalvo: fechamento.erro });
+      return;
+    }
+    const timeNome = s.timesReais.find((t) => t.id === neg.timeCompradorId)?.nome ?? 'clube';
+    const alinhamento = s.alinhamento11
+      ? s.alinhamento11.map((jid) => (jid === neg.jogadorId ? 0 : jid))
+      : s.alinhamento11;
+    set({
+      jogadoresReais: fechamento.jogadores,
+      financas: fechamento.financas,
+      negociacoesTransferencia: s.negociacoesTransferencia.map((n) =>
+        n.id === negId ? { ...n, status: 'concluida' as const } : n,
+      ),
+      alinhamento11: alinhamento,
+      avisoSalvo: 'Jogador aceitou — venda concluída.',
+      noticias: deduplicarNoticias([
+        {
+          id: `n_tr_j_${Date.now()}`,
+          data: new Date().toISOString(),
+          titulo: 'Venda fechada',
+          texto: `${jogador.nome} aceitou ir ao ${timeNome}.`,
+        },
+        ...s.noticias,
+      ]),
+    });
+    void persistirJogadoresDexie(fechamento.jogadores).catch(console.error);
+  },
   avancarAteDiaDeJogo: () => {
     const s = get();
     if (!s.brasileirao || !s.clubeRealId) return;
+    if ((s.mundoClube?.rumoresOfertas ?? []).some(rumorPendenteResposta)) {
+      set({
+        tela: 'transferencias',
+        avisoSalvo: 'Responda às sondagens antes de avançar o calendário.',
+      });
+      return;
+    }
     const clube = s.timesReais.find((t) => t.id === s.clubeRealId);
-    const dias = diasAteProximoJogo(s.brasileirao, s.clubeRealId);
-    let estado = s.brasileirao;
+    let estado = corrigirDataNaoUltrapassarJogo(s.brasileirao, s.clubeRealId);
     let jogadores = s.jogadoresReais;
     let mundo = s.mundoClube;
+    let negociacoes = s.negociacoesTransferencia;
     const blocos: NoticiaCarreira[] = [];
-    for (let d = 0; d < dias; d++) {
+    for (let guard = 0; guard < 60; guard++) {
+      const calendario = podeAvancarUmDia(estado, s.clubeRealId);
+      if (!calendario.ok) break;
       const av = avancarDias(estado, 1, clube?.nome ?? 'Clube');
       estado = av.estado;
       blocos.push(...av.noticias);
@@ -504,14 +759,23 @@ export const useGameStore = create<GameStore>((set, get) => ({
         mundo = tick.mundo;
         blocos.push(...tick.noticias);
       }
+      for (let i = 0; i < negociacoes.length; i++) {
+        const neg = negociacoes[i]!;
+        if (neg.status !== 'em_analise' && neg.status !== 'contra_proposta') continue;
+        const jog = jogadores.find((j) => j.id === neg.jogadorId);
+        if (!jog) continue;
+        const prox = avancarNegociacaoPorDia(neg, jog, neg.ofertaAtual.valorTransferencia);
+        if (prox) negociacoes = negociacoes.map((n) => (n.id === neg.id ? prox : n));
+      }
     }
     set({
       brasileirao: estado,
       jogadoresReais: jogadores,
       mundoClube: mundo,
+      negociacoesTransferencia: negociacoes,
       noticias: deduplicarNoticias([...blocos, ...s.noticias]),
     });
-    if (dias > 0) void persistirJogadoresDexie(jogadores).catch(console.error);
+    if (blocos.length > 0) void persistirJogadoresDexie(jogadores).catch(console.error);
   },
   registrarResultadoBrasileirao: (partidaId, result) => {
     const s = get();
@@ -727,6 +991,14 @@ export const useGameStore = create<GameStore>((set, get) => ({
       jogadores = tickRodada.jogadores;
       mundoClube = tickRodada.mundo;
       noticiasMundo.push(...tickRodada.noticias);
+      if (partida.ehDoUsuario) {
+        mundoClube = {
+          ...mundoClube,
+          bonusTreinoProximoJogo: undefined,
+          multiplicadorExecucaoTaticaTreino: undefined,
+          treinoBonusRodada: undefined,
+        };
+      }
     }
     const noticiaRodada = {
       id: `rod_${partida?.rodada ?? 0}_${Date.now()}`,
@@ -868,6 +1140,9 @@ export const useGameStore = create<GameStore>((set, get) => ({
     if (brasileirao && timesReais.length > 0) {
       brasileirao = aplicarBalanceamentoNaTemporada(brasileirao, timesReais);
     }
+    if (brasileirao && data.clubeRealId) {
+      brasileirao = corrigirDataNaoUltrapassarJogo(brasileirao, data.clubeRealId);
+    }
     const clubeSave = timesReais.find((t) => t.id === data.clubeRealId);
     const jogadoresCarregados = enriquecerElenco(
       data.elencoPersistido && data.elencoPersistido.length > 0
@@ -902,6 +1177,18 @@ export const useGameStore = create<GameStore>((set, get) => ({
     let mundoClube = data.mundoClube ?? null;
     if (clubeSave) {
       mundoClube = normalizarEstadoMundoClube(mundoClube, clubeSave);
+      if (data.clubeRealId && mundoClube && !mundoClube.programacaoTreino) {
+        const formId = formacaoIdDeEsquema(data.esquemaAtual ?? '4-4-2');
+        mundoClube = {
+          ...mundoClube,
+          programacaoTreino: criarProgramacaoTreino(data.clubeRealId, formId),
+          estadosTreino: garantirEstadosTreino(
+            jogadoresCarregados,
+            data.clubeRealId,
+            mundoClube.estadosTreino,
+          ),
+        };
+      }
     }
     set({
       saveSlotId: id,
@@ -1154,6 +1441,27 @@ export const useGameStore = create<GameStore>((set, get) => ({
     };
     const resultado = avaliarRespostaVenda(jogador, valorMinimoPedido, ofertaComprador);
     if (resultado.status === 'aceita') {
+      if (neg.origemSondagemId) {
+        set({
+          negociacoesTransferencia: s.negociacoesTransferencia.map((n) =>
+            n.id === negId
+              ? {
+                  ...negAtualizada,
+                  ofertaAtual: ofertaComprador,
+                  contraOfertaClube: ofertaComprador,
+                  status: 'aguardando_jogador' as const,
+                  faseNegociacao: 'jogador' as const,
+                  mensagem: `Acordo entre clubes. ${jogador.nome} precisa aceitar a proposta pessoal.`,
+                  tendenciaAceitarSaida:
+                    neg.tendenciaAceitarSaida ??
+                    tendenciaJogadorAceitarSaida(jogador, ofertaComprador.valorTransferencia),
+                }
+              : n,
+          ),
+          avisoSalvo: 'Apresente a proposta ao jogador na aba Negociações.',
+        });
+        return;
+      }
       const negFechamento: NegociacaoTransferencia = {
         ...negAtualizada,
         ofertaAtual: ofertaComprador,
@@ -1381,42 +1689,90 @@ export const useGameStore = create<GameStore>((set, get) => ({
     if (!s.mundoClube) return;
     set({ mundoClube: aplicarFocoBase(s.mundoClube, foco) });
   },
-  aplicarTreinoSemana: (microciclo, destaques) => {
+  atualizarProgramacaoTreino: (patch) => {
     const s = get();
-    if (!s.clubeRealId || !s.mundoClube || !s.brasileirao) {
+    if (!s.mundoClube || !s.clubeRealId || !s.mundoClube.programacaoTreino) return;
+    set({
+      mundoClube: {
+        ...s.mundoClube,
+        programacaoTreino: { ...s.mundoClube.programacaoTreino, ...patch },
+      },
+    });
+  },
+  definirPlanoIndividualTreino: (jogadorId, plano) => {
+    const s = get();
+    if (!s.mundoClube || !s.clubeRealId) return;
+    const estados = garantirEstadosTreino(
+      s.jogadoresReais,
+      s.clubeRealId,
+      s.mundoClube.estadosTreino,
+    ).map((e) => (e.jogador_id === jogadorId ? { ...e, plano_individual_id: plano } : e));
+    set({
+      mundoClube: { ...s.mundoClube, estadosTreino: estados },
+    });
+  },
+  aplicarTreinoSemana: () => {
+    const s = get();
+    if (!s.clubeRealId || !s.mundoClube || !s.brasileirao || !s.dbTreinos) {
       return 'Disponível apenas na carreira profissional.';
     }
     const rodada = s.brasileirao.rodadaAtual;
     if (s.mundoClube.ultimoTreino?.rodadaAplicada === rodada) {
       return 'Você já treinou nesta rodada.';
     }
-    const prep = nivelStaff(s.mundoClube, 'PREPARADOR_FISICO');
-    const { jogadores, relatorio } = aplicarMicrocicloTreino({
+    const formacaoId = formacaoIdDeEsquema(s.esquemaAtual);
+    let programacao =
+      s.mundoClube.programacaoTreino ?? criarProgramacaoTreino(s.clubeRealId, formacaoId);
+    const estados = garantirEstadosTreino(
+      s.jogadoresReais,
+      s.clubeRealId,
+      s.mundoClube.estadosTreino,
+    );
+    const resultado = processarSemanaTreinos({
+      dbTreinos: s.dbTreinos,
       jogadores: s.jogadoresReais,
+      estadosTreino: estados,
+      programacao,
+      formacaoAtivaId: formacaoId,
+      corpoTecnico: corpoTecnicoDeMundo(s.mundoClube),
       clubeId: s.clubeRealId,
-      microciclo,
-      destaques: destaques.slice(0, 3),
-      nivelPreparador: prep,
+      isViradaDeMes: false,
     });
     const noticia: NoticiaCarreira = {
-      id: `treino_r${rodada}_${microciclo}`,
+      id: `treino_r${rodada}_${Date.now()}`,
       data: new Date().toISOString(),
-      titulo: 'Microciclo no CT',
-      texto: relatorio,
+      titulo: 'Semana de treinos',
+      texto: resultado.resumo,
     };
+    const evolTexto =
+      resultado.evolucoes.length > 0
+        ? ` Destaques: ${resultado.evolucoes
+            .filter((e) => e.tipo === 'EVOLUCAO')
+            .slice(0, 3)
+            .map((e) => `${e.jogadorNome} +${e.atributoAlterado}`)
+            .join(', ')}.`
+        : '';
+    if (evolTexto) noticia.texto += evolTexto;
+
     set({
-      jogadoresReais: jogadores,
+      jogadoresReais: resultado.jogadoresAtualizados,
       mundoClube: {
         ...s.mundoClube,
-        ultimoTreino: {
-          rodadaAplicada: rodada,
-          microciclo,
-          destaques: destaques.slice(0, 3),
-        },
+        programacaoTreino: resultado.programacaoAtualizada,
+        estadosTreino: resultado.estadosTreinoAtualizados,
+        bonusTreinoProximoJogo: resultado.bonusProximoJogo,
+        multiplicadorExecucaoTaticaTreino: resultado.multiplicadorExecucaoTatica,
+        treinoBonusRodada: rodada,
+        ultimoTreino: { rodadaAplicada: rodada, microciclo: 'tatico', destaques: [] },
       },
       noticias: deduplicarNoticias([noticia, ...s.noticias]),
     });
-    void persistirJogadoresDexie(jogadores).catch(console.error);
+    void persistirJogadoresDexie(resultado.jogadoresAtualizados).catch(console.error);
+    void persistirTreinosDexie(
+      s.clubeRealId,
+      resultado.programacaoAtualizada,
+      resultado.estadosTreinoAtualizados,
+    ).catch(console.error);
     return null;
   },
   recusarPropostaPatrocinioComercial: (propostaId) => {

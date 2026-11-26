@@ -7,6 +7,7 @@ import {
 } from './atributosJogador';
 import { criarRng } from '../engine/matchEngine';
 import { gerarNoticiaAssistenteMercado } from './assistenteTecnico';
+import { enriquecerRumorEntrada } from './sondagemMercado';
 import {
   criarAtributosOlheiro,
   gerarNoticiaOlheiroMercado,
@@ -773,9 +774,18 @@ export function tickMundoPosRodada(params: TickRodadaMundoParams): {
   jogadores = mercado.jogadores;
   noticias.push(...mercado.noticias);
   if (mercado.rumorUsuario) {
+    const jAlvo = jogadores.find((j) => j.id === mercado.rumorUsuario.jogadorId);
+    const rumor =
+      jAlvo != null
+        ? enriquecerRumorEntrada(
+            mercado.rumorUsuario,
+            jAlvo,
+            params.brasileirao.dataAtualISO,
+          )
+        : mercado.rumorUsuario;
     mundo = {
       ...mundo,
-      rumoresOfertas: [mercado.rumorUsuario, ...mundo.rumoresOfertas].slice(0, 8),
+      rumoresOfertas: [rumor, ...mundo.rumoresOfertas].slice(0, 8),
     };
   }
 
