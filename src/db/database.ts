@@ -11,6 +11,7 @@ import type {
   Time,
 } from '../types/schema';
 import type { EstadoComercial } from '../types/commercial';
+import { publicPath } from '../publicPath';
 
 /** Linha IndexedDB — chave primária = time_id. */
 export type ComercialDexieRow = EstadoComercial;
@@ -76,9 +77,9 @@ export async function carregarDatabaseInicial(): Promise<{
   jogadores: Jogador[];
 }> {
   const [campRes, timesRes, jogRes] = await Promise.all([
-    fetch('/database/campeonato.json'),
-    fetch('/database/times.json'),
-    fetch('/database/jogadores.json'),
+    fetch(publicPath('database/campeonato.json')),
+    fetch(publicPath('database/times.json')),
+    fetch(publicPath('database/jogadores.json')),
   ]);
 
   if (!campRes.ok || !timesRes.ok || !jogRes.ok) {

@@ -1,6 +1,8 @@
 import { somGolAtivo } from '../config/gamePreferences';
 
-const SRC_GOL = '/audio/gol-torcida.mp3';
+import { publicPath } from '../publicPath';
+
+const SRC_GOL = publicPath('audio/gol-torcida.mp3');
 /** Duração audível na transmissão (corte do trecho do arquivo). */
 const DURACAO_S = 1;
 
