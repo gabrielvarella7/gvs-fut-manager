@@ -85,6 +85,17 @@ export function CmCareerShell({
               ))}
             </nav>
           )}
+          <div
+            className="min-h-[2.75rem] empty:hidden"
+            aria-live="polite"
+            aria-atomic="true"
+          >
+            {avisoSalvo && (
+              <p className="rounded border border-emerald-700 bg-emerald-950/50 px-3 py-2 text-sm text-emerald-200">
+                {avisoSalvo}
+              </p>
+            )}
+          </div>
           <div className="flex flex-wrap gap-2">
             {acoesExtras}
             {(exibirSalvarEscolha || escolhaPendente) && onSalvarEscolha && (
@@ -105,11 +116,6 @@ export function CmCareerShell({
         </div>
       }
     >
-      {avisoSalvo && (
-        <p className="mb-3 rounded border border-emerald-700 bg-emerald-950/50 px-3 py-2 text-sm text-emerald-200">
-          {avisoSalvo}
-        </p>
-      )}
       {children}
     </CmShell>
   );

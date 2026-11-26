@@ -17,7 +17,9 @@ export function CmShell({ titulo, subtitulo, children, rodape }: Props) {
       </header>
       <main className="cm-body flex-1 px-4 py-4">{children}</main>
       {rodape && (
-        <footer className="cm-footer border-t border-zinc-800 bg-zinc-950 px-4 py-3">{rodape}</footer>
+        <footer className="cm-footer sticky bottom-0 z-20 border-t border-zinc-800 bg-zinc-950/95 px-4 py-3 backdrop-blur-sm">
+          {rodape}
+        </footer>
       )}
     </div>
   );
