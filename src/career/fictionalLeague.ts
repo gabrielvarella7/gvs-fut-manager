@@ -6,6 +6,29 @@ import type { Jogador, Posicao } from '../types/schema';
 import type { TimeFicticio, JogoTorneio, DesempenhoTorneio } from './types';
 import { criarRng } from '../engine/matchEngine';
 
+/** IDs do torneio amador (evitam colisão com partidas do Brasileirão, que começam em 1). */
+export const ID_TORNEIO_AMADOR_BASE = 9000;
+
+export function idPartidaTorneio(rodada: 1 | 2 | 3): number {
+  return ID_TORNEIO_AMADOR_BASE + rodada;
+}
+
+/** Saves antigos usavam id 1–3; migra sem perder placares. */
+export function migrarIdsTorneioAmador(jogos: JogoTorneio[]): JogoTorneio[] {
+  if (jogos.length === 0) return jogos;
+  const maxId = Math.max(...jogos.map((j) => j.id));
+  if (maxId >= ID_TORNEIO_AMADOR_BASE) return jogos;
+  return jogos.map((j) => ({ ...j, id: idPartidaTorneio(j.rodada) }));
+}
+
+export function proximoJogoTorneioAmador(jogos: JogoTorneio[]): JogoTorneio | null {
+  return (
+    [...jogos]
+      .filter((j) => j.ehDoUsuario && !j.finalizado)
+      .sort((a, b) => a.rodada - b.rodada)[0] ?? null
+  );
+}
+
 const SQUAD: Posicao[] = [
   'GOL',
   'GOL',
@@ -94,7 +117,7 @@ export function montarCalendarioUsuario(
   }
   const oponentes = embaralhados.slice(0, 3);
   return oponentes.map((visitanteId, i) => ({
-    id: i + 1,
+    id: idPartidaTorneio((i + 1) as 1 | 2 | 3),
     rodada: (i + 1) as 1 | 2 | 3,
     mandanteId: timeUsuarioId,
     visitanteId,

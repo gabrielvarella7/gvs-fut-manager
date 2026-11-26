@@ -1,10 +1,10 @@
-import type { MatchSimInput, MatchSimResult } from './matchEngine';
+import { simularPartida, type MatchSimInput, type MatchSimResult } from './matchEngine';
 import type {
   SimulationWorkerRequest,
   SimulationWorkerResponse,
 } from './simulation.worker';
 
-export function simularPartidaNoWorker(input: MatchSimInput): Promise<MatchSimResult> {
+function simularPartidaNoWorkerInner(input: MatchSimInput): Promise<MatchSimResult> {
   return new Promise((resolve, reject) => {
     const worker = new Worker(new URL('./simulation.worker.ts', import.meta.url), {
       type: 'module',
@@ -29,4 +29,14 @@ export function simularPartidaNoWorker(input: MatchSimInput): Promise<MatchSimRe
     const request: SimulationWorkerRequest = { type: 'SIMULATE_MATCH', input };
     worker.postMessage(request);
   });
+}
+
+/** Worker em produção (GitHub Pages); cai para simulação na thread principal se falhar. */
+export async function simularPartidaNoWorker(input: MatchSimInput): Promise<MatchSimResult> {
+  try {
+    return await simularPartidaNoWorkerInner(input);
+  } catch (err) {
+    console.warn('Worker indisponível — simulando na thread principal', err);
+    return simularPartida(input);
+  }
 }

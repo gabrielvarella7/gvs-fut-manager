@@ -79,7 +79,9 @@ import {
   calcularDesempenho,
   gerarPropostas,
   gerarTimesFicticios,
+  migrarIdsTorneioAmador,
   montarCalendarioUsuario,
+  proximoJogoTorneioAmador,
 } from '../career/fictionalLeague';
 import { deduplicarNoticias } from '../career/noticias';
 import {
@@ -322,8 +324,13 @@ export const useGameStore = create<GameStore>((set, get) => ({
     }
     if (tela === 'relatorio_pre_jogo') {
       const s = get();
+      if (!s.clubeRealId) {
+        const proxT = proximoJogoTorneioAmador(s.jogos);
+        set({ tela, partidaJogoEmCurso: proxT?.id ?? null });
+        return;
+      }
       const proxLiga =
-        s.clubeRealId && s.brasileirao
+        s.brasileirao
           ? proximaPartidaUsuario(s.brasileirao, s.clubeRealId)
           : null;
       set({
@@ -334,32 +341,49 @@ export const useGameStore = create<GameStore>((set, get) => ({
     }
     if (tela === 'partida') {
       const s = get();
-      const proxLiga =
-        s.clubeRealId && s.brasileirao
-          ? proximaPartidaUsuario(s.brasileirao, s.clubeRealId)
-          : null;
-      if (proxLiga && s.clubeRealId && ehDiaDeJogo(s.brasileirao!, s.clubeRealId)) {
+      if (!s.clubeRealId) {
+        const proxT = proximoJogoTorneioAmador(s.jogos);
+        if (!proxT) {
+          set({
+            tela: 'hub_torneio',
+            partidaJogoEmCurso: null,
+            avisoSalvo:
+              s.jogos.filter((j) => j.ehDoUsuario).every((j) => j.finalizado)
+                ? 'Torneio já disputado — use “Encerrar torneio” para ver propostas.'
+                : 'Nenhuma rodada pendente no torneio.',
+          });
+          return;
+        }
         set({
           tela,
           partidaAtual: null,
           partidaJogoId: null,
+          transmissaoCheckpoint: null,
+          pendingResumePartida: false,
+          partidaJogoEmCurso: proxT.id,
+        });
+        return;
+      }
+      const proxLiga = s.brasileirao
+        ? proximaPartidaUsuario(s.brasileirao, s.clubeRealId)
+        : null;
+      if (proxLiga && ehDiaDeJogo(s.brasileirao!, s.clubeRealId)) {
+        set({
+          tela,
+          partidaAtual: null,
+          partidaJogoId: null,
+          transmissaoCheckpoint: null,
+          pendingResumePartida: false,
           partidaJogoEmCurso: proxLiga.id,
         });
         return;
       }
-      const prox = s.jogos.find((j) => j.ehDoUsuario && !j.finalizado);
-      if (!prox) {
-        set({
-          tela: s.clubeRealId ? 'escritorio' : 'hub_torneio',
-          partidaJogoEmCurso: null,
-        });
-        return;
-      }
       set({
-        tela,
-        partidaAtual: null,
-        partidaJogoId: null,
-        partidaJogoEmCurso: prox.id,
+        tela: 'escritorio',
+        partidaJogoEmCurso: null,
+        avisoSalvo: proxLiga
+          ? 'Só dá para jogar no dia da partida. Avance o calendário até a data do jogo.'
+          : 'Não há partida do campeonato pendente.',
       });
       return;
     }
@@ -1034,7 +1058,10 @@ export const useGameStore = create<GameStore>((set, get) => ({
   abrirPerfilJogador: (id) => set({ jogadorPerfilId: id, tela: 'perfil_jogador' }),
   fecharPerfilJogador: () => set({ jogadorPerfilId: null, tela: 'elenco' }),
   registrarResultadoPartida: (jogoId, result) => {
-    const jogos = get().jogos.map((j) =>
+    const s = get();
+    const alvo = s.jogos.find((j) => j.id === jogoId);
+    if (!alvo || alvo.finalizado) return;
+    const jogos = s.jogos.map((j) =>
       j.id === jogoId
         ? {
             ...j,
@@ -1045,12 +1072,13 @@ export const useGameStore = create<GameStore>((set, get) => ({
           }
         : j,
     );
-    const desempenho = calcularDesempenho(jogos, get().timeUsuarioId!);
+    const desempenho = calcularDesempenho(jogos, s.timeUsuarioId!);
     set({
       jogos,
       desempenho,
       partidaAtual: result,
       partidaJogoId: jogoId,
+      partidaJogoEmCurso: jogoId,
       tela: 'partida',
     });
   },
@@ -1200,7 +1228,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
       gradeTatica11: data.gradeTatica11 ?? null,
       configTatica: data.configTatica ?? configuracaoPadrao(data.esquemaAtual ?? '4-4-2'),
       timesFicticios: data.timesFicticios ?? [],
-      jogos: data.jogos ?? [],
+      jogos: migrarIdsTorneioAmador(data.jogos ?? []),
       desempenho: data.desempenho ?? desempenhoZerado(),
       torneioConcluido: data.torneioConcluido ?? false,
       propostas: data.propostas ?? [],

@@ -50,7 +50,6 @@ export function MatchScreen() {
   const registrar = useGameStore((s) => s.registrarResultadoPartida);
   const registrarLiga = useGameStore((s) => s.registrarResultadoBrasileirao);
   const encerrarTransmissao = useGameStore((s) => s.encerrarTransmissao);
-  const finalizar = useGameStore((s) => s.finalizarTorneioSePronto);
   const irPara = useGameStore((s) => s.irPara);
   const abrirTatica = useGameStore((s) => s.abrirTaticaNaPartida);
   const salvarCheckpoint = useGameStore((s) => s.salvarCheckpointTransmissao);
@@ -73,13 +72,18 @@ export function MatchScreen() {
   const progressRef = useRef<PlaybackProgress>({ idx: 0, golsM: 0, golsV: 0, minuto: 0 });
   const [resumePlayback, setResumePlayback] = useState<PlaybackProgress | null>(null);
   const [playbackKey, setPlaybackKey] = useState('0');
+  const [erroSim, setErroSim] = useState<string | null>(null);
 
-  const partidaLiga = useMemo(
-    () => brasileirao?.partidas.find((p) => p.id === jogoEmCursoId) ?? null,
-    [brasileirao, jogoEmCursoId],
-  );
+  const faseTorneioAmador = !clubeRealId;
+  const partidaLiga = useMemo(() => {
+    if (faseTorneioAmador || !brasileirao || jogoEmCursoId == null) return null;
+    return brasileirao.partidas.find((p) => p.id === jogoEmCursoId) ?? null;
+  }, [faseTorneioAmador, brasileirao, jogoEmCursoId]);
   const modoLiga = !!clubeRealId && !!partidaLiga;
-  const jogo = modoLiga ? null : jogos.find((j) => j.id === jogoEmCursoId) ?? null;
+  const jogo = useMemo(() => {
+    if (!faseTorneioAmador || jogoEmCursoId == null) return null;
+    return jogos.find((j) => j.id === jogoEmCursoId) ?? null;
+  }, [faseTorneioAmador, jogos, jogoEmCursoId]);
 
   const mandanteLiga = modoLiga
     ? timesReais.find((t) => t.id === partidaLiga!.mandanteId)
@@ -310,7 +314,12 @@ export function MatchScreen() {
   const iniciarPartida = useCallback(async () => {
     if (!simInput || idPartida == null) return;
     if (emTransmissao) return;
+    if (jogo?.finalizado) {
+      setErroSim('Esta rodada já foi finalizada. Volte ao torneio e abra a próxima.');
+      return;
+    }
     setBusy(true);
+    setErroSim(null);
     try {
       if (modoLiga && brasileirao && clubeRealId) {
         await sincronizarCarreiraDexie({ brasileirao, clubeRealId });
@@ -327,6 +336,10 @@ export function MatchScreen() {
       }
       setPausado(false);
       setMinuto(0);
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : 'Falha ao simular a partida.';
+      setErroSim(msg);
+      console.error(e);
     } finally {
       setBusy(false);
     }
@@ -442,7 +455,6 @@ export function MatchScreen() {
       irPara('escritorio');
       return;
     }
-    finalizar();
     irPara('hub_torneio');
   };
 
@@ -455,6 +467,13 @@ export function MatchScreen() {
   if (!jogoEmCursoId || (!modoLiga && !jogo) || (modoLiga && !partidaLiga)) {
     return (
       <CmShell titulo="Sem partida">
+        <CmPanel className="mb-4">
+          <p className="text-sm text-zinc-300">
+            {faseTorneioAmador
+              ? 'Volte ao torneio e use “Jogar rodada” na rodada liberada.'
+              : 'Avance o calendário até o dia do jogo e tente de novo pelo escritório.'}
+          </p>
+        </CmPanel>
         <CmBtn onClick={() => irPara(modoLiga ? 'escritorio' : 'hub_torneio')}>Voltar</CmBtn>
       </CmShell>
     );
@@ -492,8 +511,30 @@ export function MatchScreen() {
         </CmPanel>
       )}
 
+      {!partidaModoAuxiliar && !emTransmissao && !simInput && (
+        <CmPanel className="mb-4 border-amber-700/50">
+          <p className="text-sm text-amber-100">Não foi possível montar a partida.</p>
+          <p className="mt-1 text-xs text-zinc-400">
+            Verifique elenco/tática e tente de novo. Se persistir, salve e recarregue a página.
+          </p>
+          <div className="mt-3 flex gap-2">
+            <CmBtn onClick={() => irPara(faseTorneioAmador ? 'hub_torneio' : 'escritorio')}>
+              Voltar
+            </CmBtn>
+            <CmBtn variant="ghost" onClick={abrirTatica}>
+              Táticas
+            </CmBtn>
+          </div>
+        </CmPanel>
+      )}
+
       {!partidaModoAuxiliar && !emTransmissao && preJogo && simInput && (
         <>
+          {erroSim && (
+            <CmPanel className="mb-4 border-red-800/60">
+              <p className="text-sm text-red-200">{erroSim}</p>
+            </CmPanel>
+          )}
           {relatorioLiga ? (
             <PreMatchReport
               relatorio={relatorioLiga}

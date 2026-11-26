@@ -1,5 +1,5 @@
 import { useEffect } from 'react';
-import { getTimeFicticio } from '../../career/fictionalLeague';
+import { getTimeFicticio, proximoJogoTorneioAmador } from '../../career/fictionalLeague';
 import { esquemaSugerido } from '../../data/esquemasTaticos';
 import { useGameStore } from '../../store/useGameStore';
 import { CmCareerShell } from '../cm/CmCareerShell';
@@ -21,7 +21,7 @@ export function TournamentHubScreen() {
   );
 
   const time = getTimeFicticio(times, timeUsuarioId ?? '');
-  const proximo = jogos.find((j) => j.ehDoUsuario && !j.finalizado);
+  const proximo = proximoJogoTorneioAmador(jogos);
 
   const jogar = () => {
     if (proximo) irPara('partida');
