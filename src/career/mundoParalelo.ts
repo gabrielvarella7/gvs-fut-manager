@@ -632,7 +632,7 @@ export function simularMercadoCpuRodada(
     const pool = jogadores.filter((j) => j.time_id === vendedor && j.idade <= 29 && j.overall >= 70);
     const alvo = pool[Math.floor(rnd() * Math.max(pool.length, 1))];
     if (alvo && pool.length > 0) {
-      const nomeComp = times.find((t) => t.id === comprador)?.nome_curto ?? comprador;
+      const nomeComp = times.find((t) => t.id === comprador)?.nome ?? comprador;
       const valor = alvo.valor_mercado ?? alvo.overall * 800_000;
       noticias.push({
         id: `merc_cpu_${rodada}_${alvo.id}`,
@@ -751,7 +751,7 @@ export function tickMundoPosRodada(params: TickRodadaMundoParams): {
     pos,
   );
   mundo = { ...mundo, climaTorcedor: clima, rodadaUltimoTick: params.rodada };
-  noticias.push(...noticiasClimaTorcedor(clima, params.time.nome_curto ?? params.time.nome_completo));
+  noticias.push(...noticiasClimaTorcedor(clima, params.time.nome ?? params.time.nome_completo));
 
   mundo = gerarPedidosRenovacao(jogadores, mundo, params.rodada, params.clubeId);
 

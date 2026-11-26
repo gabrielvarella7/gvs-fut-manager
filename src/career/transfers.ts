@@ -171,7 +171,7 @@ export function gerarOfertaCompraCpu(
 }
 
 export function avaliarRespostaVenda(
-  jogador: Jogador,
+  _jogador: Jogador,
   valorPedido: number,
   oferta: OfertaTransferencia,
 ): ResultadoNegociacao {

@@ -85,7 +85,7 @@ export function aplicarAltaMedica(j: Jogador, nivelMedico: number): Jogador {
     const grupos = ['tecnicos', 'mentais', 'fisicos'] as const;
     for (let i = 0; i < perda; i++) {
       const g = grupos[i % grupos.length]!;
-      const registro = atributos[g] as Record<string, number>;
+      const registro = atributos[g] as unknown as Record<string, number>;
       const keys = Object.keys(registro);
       const k = keys[(i * 7 + j.id) % keys.length]!;
       registro[k] = Math.max(1, registro[k]! - 1);

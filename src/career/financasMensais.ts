@@ -1,5 +1,6 @@
 import { fatorComercialClube } from '../data/perfilComercialClubes';
 import type { FinancasClube, Jogador, LancamentoContabil, Time } from '../types/schema';
+import { adaptarTimeMercado } from './mercadoTransferencias';
 
 export interface ResumoFechamentoMensal {
   financasAtualizadas: FinancasClube;

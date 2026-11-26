@@ -74,6 +74,8 @@ function corpoSalvavel(estado: EstadoCarreira): EstadoCarreira {
     mundoClube: estado.mundoClube ?? null,
     negociacoesTransferencia: estado.negociacoesTransferencia ?? [],
     elencoPersistido: estado.elencoPersistido,
+    transmissaoCheckpoint: null,
+    pendingResumePartida: false,
     tela:
       estado.tela === 'partida'
         ? estado.clubeRealId

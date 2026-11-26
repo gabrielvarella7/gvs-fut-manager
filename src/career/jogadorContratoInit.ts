@@ -2,7 +2,6 @@ import { garantirAtributosJogador } from './atributosJogador';
 import type { Jogador } from '../types/schema';
 import {
   calcularSuscetibilidadeJogador,
-  calcularValorMercado,
   inicializarContratoPadrao,
   adaptarTimeMercado,
   type TimeMercado,

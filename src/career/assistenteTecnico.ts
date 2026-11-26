@@ -82,7 +82,7 @@ export function gerarNoticiaAssistenteMercado(params: {
     const pickIndex =
       precisao > 0.7 ? 0 : precisao > 0.5 ? Math.min(1, candidatos.length - 1) : Math.min(3, candidatos.length - 1);
     const alvo = candidatos[pickIndex]!;
-    const timeNome = params.times.find((t) => t.id === alvo.time_id)?.nome_curto ?? alvo.time_id;
+    const timeNome = params.times.find((t) => t.id === alvo.time_id)?.nome ?? alvo.time_id;
     const bomNegocio = pickIndex === 0 && alvo.overall >= (medias[posCarente] ?? 65) + 2;
 
     if (!bomNegocio && precisao < 0.55) {

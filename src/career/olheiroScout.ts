@@ -148,7 +148,7 @@ export function gerarNoticiaOlheiroMercado(params: {
 
   const errou = confiancaMedia < 0.45 && rnd() < 0.35;
   const pick = ranked[errou ? Math.min(ranked.length - 1, 2 + Math.floor(rnd() * 3)) : 0]!.j;
-  const timeNome = params.times.find((t) => t.id === pick.time_id)?.nome_curto ?? pick.time_id;
+  const timeNome = params.times.find((t) => t.id === pick.time_id)?.nome ?? pick.time_id;
   const agora = new Date().toISOString();
 
   if (eixo === 'potencial') {
