@@ -591,7 +591,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
             seedHorario: seed,
           });
           const md = calcularReceitaMatchday(input);
-          const desc = `Matchday ${clube.nome_curto} x ${visitante.nome_curto} · ${md.publico.toLocaleString('pt-BR')} torcedores (${comercial.politicaIngressosPadrao.toLowerCase()})`;
+          const desc = `Matchday ${clube.nome} x ${visitante.nome} · ${md.publico.toLocaleString('pt-BR')} torcedores (${comercial.politicaIngressosPadrao.toLowerCase()})`;
           const { financasAtualizadas } = registrarBilheteriaMatchday({
             financas,
             rodada: partida.rodada,
@@ -803,6 +803,8 @@ export const useGameStore = create<GameStore>((set, get) => ({
       mundoClube: s.mundoClube,
       negociacoesTransferencia: s.negociacoesTransferencia,
       elencoPersistido: s.jogadoresReais,
+      transmissaoCheckpoint: s.transmissaoCheckpoint,
+      pendingResumePartida: s.pendingResumePartida,
       tela:
         s.tela === 'partida'
           ? s.clubeRealId
@@ -1053,7 +1055,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
           return;
         }
         const nomeVendedor = s.timesReais.find((t) => t.id === neg.timeVendedorId)?.nome;
-        const clubeNome = s.timesReais.find((t) => t.id === s.clubeRealId)?.nome_curto ?? 'Clube';
+        const clubeNome = s.timesReais.find((t) => t.id === s.clubeRealId)?.nome ?? 'Clube';
         const festa = noticiasClimaTorcedor(
           s.mundoClube?.climaTorcedor ?? { indice: 62, sequenciaRuim: 0, sequenciaBoa: 0 },
           clubeNome,

@@ -94,7 +94,7 @@ export function CmCareerShell({
                 {rotuloSalvarEscolha}
               </CmBtn>
             )}
-            <CmBtn variant="ghost" onClick={salvar} title="Salvar o jogo (slot de carreira)">
+            <CmBtn variant="ghost" onClick={salvar}>
               Salvar jogo
             </CmBtn>
             <CmBtn variant="danger" onClick={sair}>

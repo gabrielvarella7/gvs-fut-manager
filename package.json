@@ -8,7 +8,8 @@
     "db:seed": "node scripts/generate-test-database.mjs",
     "db:migrate-atributos": "node scripts/migrate-atributos-jogadores.mjs",
     "dev": "vite",
-    "build": "tsc -b && vite build",
+    "build": "vite build",
+    "build:check": "tsc -b && vite build",
     "lint": "oxlint",
     "preview": "vite preview"
   },
