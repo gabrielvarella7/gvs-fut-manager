@@ -491,6 +491,27 @@ function PainelNegociacao({
           {neg.diasRestantesFase != null ? ` (${neg.diasRestantesFase} dia(s) restantes nesta fase).` : '.'}
         </p>
       )}
+      {neg.status === 'negociando_jogador' && (
+        <p className="mt-2 text-xs text-amber-200/80">
+          Atleta avalia clube, minutos e salário
+          {neg.diasRestantesFase != null ? ` — ${neg.diasRestantesFase} dia(s) restantes.` : '.'} Avance o
+          calendário.
+        </p>
+      )}
+      {neg.status === 'em_exames' && (
+        <p className="mt-2 text-xs text-sky-200/80">
+          Exames médicos em andamento
+          {neg.diasRestantesFase != null ? ` — ${neg.diasRestantesFase} dia(s).` : '.'} O jogador ainda
+          pertence ao elenco.
+        </p>
+      )}
+      {neg.status === 'assinando' && (
+        <p className="mt-2 text-xs text-emerald-200/80">
+          Assinatura formal
+          {neg.diasRestantesFase != null ? ` — ${neg.diasRestantesFase} dia(s).` : '.'} Só após assinar
+          sai a notícia e ele deixa o elenco.
+        </p>
+      )}
 
       {(neg.contraOfertaClube || neg.contraOfertaJogador) && (
         <div className="mt-3">

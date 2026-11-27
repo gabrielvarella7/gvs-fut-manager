@@ -19,6 +19,7 @@
     "smoke:performance": "node scripts/smoke-performance-career.mjs",
     "smoke:affinity": "node scripts/smoke-affinity-ovr-parity.mjs",
     "smoke:matrix": "node scripts/smoke-position-recalculator.mjs",
+    "smoke:pipeline-venda": "npx --yes tsx scripts/smoke-pipeline-venda.mjs",
     "smoke:slots": "npx --yes tsx scripts/smoke-pe-pd-st-slots.mjs",
     "smoke:sub23-ovr": "npx --yes tsx scripts/smoke-sub23-ovr-plantel.mjs",
     "smoke:elenco-campo": "node scripts/smoke-lineup-elenco-campo.mjs",
