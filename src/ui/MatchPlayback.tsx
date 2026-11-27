@@ -33,8 +33,11 @@ type Props = {
   onIntervalo?: () => void;
   /** Increment to jump playback to the final whistle without leaving the screen. */
   skipToEndNonce?: number;
-  /** Fired once when a lance is consumed into the feed (for CM04 highlights). */
-  onLanceConsumido?: (l: Lancamento) => void;
+  /**
+   * Fired when a lance is consumed into the feed (CM04 highlights).
+   * May return a Promise — playback waits (radar stays on that minute) until it settles.
+   */
+  onLanceConsumido?: (l: Lancamento) => void | Promise<void>;
 };
 
 function delayMs(atual: Lancamento, anterior: Lancamento | null, velocidade: number): number {
@@ -74,6 +77,8 @@ export function MatchPlayback({
   const [idx, setIdx] = useState(resumeFrom?.idx ?? 0);
   const [placar, setPlacar] = useState({ m: resumeFrom?.golsM ?? 0, v: resumeFrom?.golsV ?? 0 });
   const [aoVivo, setAoVivo] = useState(true);
+  /** Blocks scheduling the next lance while a highlight (or other async consumer) runs. */
+  const [holdLance, setHoldLance] = useState(false);
   const listaRef = useRef<HTMLUListElement>(null);
   const intervaloDisparadoRef = useRef(false);
   const lastSkipNonce = useRef(0);
@@ -118,29 +123,47 @@ export function MatchPlayback({
   }, [skipToEndNonce, lanc.length, result.golsMandante, result.golsVisitante]);
 
   useEffect(() => {
-    if (pausado || !aoVivo || idx >= lanc.length) return;
+    if (pausado || holdLance || !aoVivo || idx >= lanc.length) return;
 
     const atual = lanc[idx];
     const anterior = idx > 0 ? lanc[idx - 1] : null;
+    let cancelled = false;
     const t = window.setTimeout(() => {
-      if (atual.tipo === 'gol') {
-        tocarComemoracaoTorcidaGol();
-        setPlacar((p) =>
-          atual.timeId === result.mandanteId
-            ? { ...p, m: p.m + 1 }
-            : { ...p, v: p.v + 1 },
-        );
-      }
-      onLanceConsumidoRef.current?.(atual);
-      setIdx((i) => i + 1);
-      if (atual.tipo === 'intervalo' && !intervaloDisparadoRef.current) {
-        intervaloDisparadoRef.current = true;
-        onIntervaloRef.current?.();
-      }
+      void (async () => {
+        // Hold BEFORE notifying consumer so the next lance cannot race ahead
+        // while a highlight freezes the clock on this event minute.
+        setHoldLance(true);
+        try {
+          if (atual.tipo === 'gol') {
+            tocarComemoracaoTorcidaGol();
+            setPlacar((p) =>
+              atual.timeId === result.mandanteId
+                ? { ...p, m: p.m + 1 }
+                : { ...p, v: p.v + 1 },
+            );
+          }
+          // Notify first (sync pause for highlights), then advance radar to this minute.
+          const wait = onLanceConsumidoRef.current?.(atual);
+          setIdx((i) => i + 1);
+          await wait;
+          if (cancelled) return;
+          if (atual.tipo === 'intervalo' && !intervaloDisparadoRef.current) {
+            intervaloDisparadoRef.current = true;
+            onIntervaloRef.current?.();
+          }
+        } finally {
+          // Always release — if cleanup cancelled mid-flight, leaving hold stuck
+          // would freeze the radar permanently.
+          setHoldLance(false);
+        }
+      })();
     }, delayMs(atual, anterior, velocidade));
 
-    return () => window.clearTimeout(t);
-  }, [idx, lanc, result.mandanteId, aoVivo, velocidade, pausado]);
+    return () => {
+      cancelled = true;
+      window.clearTimeout(t);
+    };
+  }, [idx, lanc, result.mandanteId, aoVivo, velocidade, pausado, holdLance]);
 
   useEffect(() => {
     if (idx >= lanc.length) setAoVivo(false);

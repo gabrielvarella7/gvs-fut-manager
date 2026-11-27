@@ -269,7 +269,9 @@ export function MatchCenter({
 
   const handleLance = useCallback(
     async (l: Lancamento) => {
-      clockRef.current = l.minuto;
+      const eventMinute = Math.floor(l.minuto);
+      // Keep highlight clock locked to THIS lance — never an older buffered minute.
+      clockRef.current = eventMinute;
       const attackingHome =
         l.tipo === 'gol' || l.tipo === 'chance'
           ? l.timeId === result.mandanteId
@@ -289,14 +291,17 @@ export function MatchCenter({
 
       if (!triggerGoal && !triggerChance) return;
 
-      // Freeze live match clock for the whole clip; resume after ENCERRAMENTO.
+      // Already showing a clip — do not queue a stale older minute over the live radar.
+      if (manager.isPlaying() || activeClip) return;
+
+      // Freeze live match clock NOW (sync) for the whole clip; resume after ENCERRAMENTO.
       pausedForClipRef.current = true;
       onPausado(true);
 
       const event = triggerGoal ? 'GOAL' : 'DANGEROUS_CHANCE';
       const clip = buildCm04HighlightClip({
         event,
-        minuto: l.minuto,
+        minuto: eventMinute,
         roster,
         attackingHome,
         autorId: l.jogadorId,
@@ -304,9 +309,12 @@ export function MatchCenter({
         highlight: l.highlight,
         tipoLance: l.tipo,
       });
+      // Belt-and-suspenders: every frame clock === live event minute.
+      clip.clockAtEvent = eventMinute;
+      for (const f of clip.frames) f.clock = eventMinute;
       await manager.playClip(clip);
     },
-    [manager, onPausado, result.mandanteId, roster],
+    [manager, onPausado, result.mandanteId, roster, activeClip],
   );
 
   const stats =
@@ -493,9 +501,7 @@ export function MatchCenter({
           playbackKey={playbackKey}
           onIntervalo={onIntervalo}
           skipToEndNonce={skipToEndNonce}
-          onLanceConsumido={(l) => {
-            void handleLance(l);
-          }}
+          onLanceConsumido={handleLance}
         />
       </div>
 
