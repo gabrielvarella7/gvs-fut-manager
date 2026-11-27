@@ -54,12 +54,13 @@ export function multChanceLesaoFisiologista(nivel: number): number {
 }
 
 /**
- * Fisioterapeuta: até −40% tempo fora (piso ×0,60).
- * Blueprint: max(0.6, 1 - (nivel - 10) * 0.04)
+ * Fisioterapeuta: até −45% tempo fora (piso ×0,55).
+ * Nível 11 → 0,96 (calibração estiramento Jul).
+ * Blueprint: max(0.55, 1 - (nivel - 10) * 0.04)
  */
 export function multDuracaoFisioterapeuta(nivel: number): number {
   const n = Math.max(1, Math.min(20, nivel));
-  return Math.max(0.6, 1 - (n - 10) * 0.04);
+  return Math.max(0.55, 1 - (n - 10) * 0.04);
 }
 
 /** Preparador: atenua custo energético positivo do regime. */

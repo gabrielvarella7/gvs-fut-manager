@@ -20,15 +20,8 @@ import {
 import { recuperarEnergiaUmDia } from './energia';
 import {
   gerarAlertaFisiologistaElenco,
-  gerarGeneticaAtleta,
   garantirGeneticaJogador,
 } from './genetica';
-import {
-  probabilidadeLesaoTraumatica,
-  propensaoDeJogador,
-  multRiscoPorEnergia,
-  multRiscoPorIdade,
-} from './departamentoMedico';
 import { nivelDiretorBase } from './staffEfeitos';
 import { calcularValorMercado } from './mercadoTransferencias';
 import {
@@ -44,10 +37,14 @@ import type { EstadoLesao, GravidadeLesao } from '../types/schema';
 import {
   aplicarAltaMedica,
   criarLesaoComReabilitacao,
-  multChanceLesaoFisiologista,
   nivelStaff,
   staffEstaAtualizado,
 } from './staffEfeitos';
+import {
+  mesDeDataISO,
+  tentarGerarLesao,
+} from '../engine/injuryEngine';
+import type { RegimeIntensidadeId } from '../types/training';
 import type {
   CargoStaff,
   ClimaTorcedor,
@@ -201,63 +198,6 @@ function rndSeed(...parts: (number | string)[]): number {
   return s >>> 0;
 }
 
-function sortearLesao(
-  j: Jogador,
-  rnd: () => number,
-  motivo: string,
-  mundo?: EstadoMundoClube | null,
-  opts?: { isClassico?: boolean; marcacaoSufocante?: boolean },
-): EstadoLesao | null {
-  const resistencia = j.atributos.fisicos.fora_por_lesao;
-  const nivelFisio = mundo?.staff.find((s) => s.cargo === 'FISIOLOGISTA')?.nivel ?? 10;
-  const prop = propensaoDeJogador(j);
-  let chance: number;
-  if (motivo === 'jogo') {
-    // Traumática (choque) + componente de sobrecarga por energia.
-    const traumatica = probabilidadeLesaoTraumatica({
-      isClassico: opts?.isClassico,
-      marcacaoSufocante: opts?.marcacaoSufocante,
-      nivelFisiologista: nivelFisio,
-      resistenciaLesao: resistencia,
-    });
-    const sobrecarga =
-      0.035 *
-      multRiscoPorEnergia(j.energia) *
-      multRiscoPorIdade(j.idade) *
-      multChanceLesaoFisiologista(nivelFisio) *
-      prop;
-    chance = traumatica + sobrecarga;
-  } else {
-    chance =
-      0.018 *
-      multRiscoPorEnergia(j.energia) *
-      multRiscoPorIdade(j.idade) *
-      multChanceLesaoFisiologista(nivelFisio) *
-      prop *
-      (1.1 - resistencia / 24);
-  }
-  if (rnd() > chance) return null;
-  const grav: GravidadeLesao =
-    rnd() < 0.55 ? 'LEVE' : rnd() < 0.85 ? 'MODERADA' : 'GRAVE';
-  const diasBase =
-    grav === 'LEVE' ? 4 + Math.floor(rnd() * 8)
-    : grav === 'MODERADA' ? 12 + Math.floor(rnd() * 14)
-    : 28 + Math.floor(rnd() * 25);
-  const tipos =
-    motivo === 'jogo' && rnd() < 0.35
-      ? ['entorse', 'contusão', 'choque no joelho', 'trauma no tornozelo']
-      : ['muscular', 'panturrilha', 'estiramento', 'sobrecarga'];
-  const nivelFisioTerapia = mundo?.staff.find((s) => s.cargo === 'FISIOTERAPEUTA')?.nivel ?? 10;
-  return criarLesaoComReabilitacao(
-    diasBase,
-    grav,
-    `${tipos[Math.floor(rnd() * tipos.length)]} (${grav.toLowerCase()})`,
-    j,
-    nivelFisioTerapia,
-    { tipo: motivo === 'jogo' && rnd() < 0.4 ? 'TRAUMATICA' : 'SOBRECARGA' },
-  );
-}
-
 export function recuperarLesoesUmDia(
   jogadores: Jogador[],
   mundo?: EstadoMundoClube | null,
@@ -283,6 +223,7 @@ export function aplicarLesoesPosPartida(
   mundo?: EstadoMundoClube | null,
   /** Já lesionados em campo — não sortear de novo. */
   idsJaLesionados?: ReadonlySet<number>,
+  opts?: { mesAtual?: number; isClassico?: boolean },
 ): { jogadores: Jogador[]; noticias: NoticiaCarreira[] } {
   const rnd = criarRng(seed);
   const set = new Set(idsParticipantes);
@@ -290,20 +231,29 @@ export function aplicarLesoesPosPartida(
   const next = jogadores.map((j) => {
     if (!set.has(j.id) || !jogadorDisponivel(j)) return j;
     if (idsJaLesionados?.has(j.id)) return j;
-    const lesao = sortearLesao(j, rnd, 'jogo', mundo);
-    if (!lesao) return j;
+    const gerado = tentarGerarLesao({
+      jogador: j,
+      contexto: 'JOGO',
+      mesAtual: opts?.mesAtual ?? 6,
+      nivelFisiologista: nivelStaff(mundo, 'FISIOLOGISTA'),
+      nivelFisioterapeuta: nivelStaff(mundo, 'FISIOTERAPEUTA'),
+      isClassicoOuDecisao: opts?.isClassico,
+      rng: rnd,
+    });
+    if (!gerado) return j;
+    const { lesao, diagnostico } = gerado;
     noticias.push({
       id: `lesao_${j.id}_${seed}`,
       data: new Date().toISOString(),
       titulo: `Lesão: ${j.nome}`,
-      texto: `${j.nome} teve ${lesao.descricao} e ficará cerca de ${lesao.diasRestantes} dias afastado.`,
+      texto: diagnostico.mancheteNoticia,
     });
     return { ...j, lesao, energia: Math.min(j.energia, 42) };
   });
   return { jogadores: next, noticias };
 }
 
-/** Aplica lesões ocorridas durante a simulação (fadiga). */
+/** Aplica lesões ocorridas durante a simulação (fadiga / catálogo). */
 export function aplicarLesoesEmCampo(
   jogadores: Jogador[],
   lesoes: {
@@ -311,6 +261,10 @@ export function aplicarLesoesEmCampo(
     descricao: string;
     gravidade: GravidadeLesao;
     diasBase: number;
+    lesaoId?: string;
+    sequelaPendente?: number;
+    /** Se true, diasBase já inclui fisio — não reaplicar. */
+    diasFinais?: boolean;
   }[],
   mundo?: EstadoMundoClube | null,
 ): { jogadores: Jogador[]; noticias: NoticiaCarreira[] } {
@@ -321,18 +275,38 @@ export function aplicarLesoesEmCampo(
   const next = jogadores.map((j) => {
     const info = porId.get(j.id);
     if (!info) return j;
-    const lesao = criarLesaoComReabilitacao(
-      info.diasBase,
-      info.gravidade,
-      info.descricao,
-      j,
-      nivelFisio,
-    );
+    const lesao = info.diasFinais
+      ? ({
+          diasRestantes: Math.max(2, info.diasBase),
+          gravidade: info.gravidade,
+          descricao: info.descricao,
+          atributosReferencia: {
+            tecnicos: { ...j.atributos.tecnicos },
+            mentais: { ...j.atributos.mentais },
+            fisicos: { ...j.atributos.fisicos },
+          },
+          overallReferencia: j.overall,
+          tipo: 'SOBRECARGA' as const,
+          lesaoId: info.lesaoId,
+          sequelaPendente: info.sequelaPendente,
+          rodadasForaBase: Math.max(1, Math.round(info.diasBase / 6)),
+        } satisfies EstadoLesao)
+      : criarLesaoComReabilitacao(
+          info.diasBase,
+          info.gravidade,
+          info.descricao,
+          j,
+          nivelFisio,
+          {
+            lesaoId: info.lesaoId,
+            ...(info.sequelaPendente != null ? { sequelaPendente: info.sequelaPendente } : {}),
+          },
+        );
     noticias.push({
       id: `lesao_campo_${j.id}_${Date.now()}`,
       data: new Date().toISOString(),
       titulo: `Lesão em campo: ${j.nome}`,
-      texto: `${j.nome} saiu com ${info.descricao} (${info.gravidade.toLowerCase()}). Previsão de ${lesao.diasRestantes} dias fora.`,
+      texto: `${j.nome}: ${info.descricao} (${info.gravidade.toLowerCase()}). Previsão de ${lesao.diasRestantes} dias.`,
     });
     return { ...j, lesao, energia: Math.min(j.energia, 38) };
   });
@@ -695,17 +669,28 @@ export function tickMundoPorDia(params: TickDiaMundoParams): {
   });
   if (alertaFisio) noticias.push(alertaFisio);
 
+  const mesAtual = mesDeDataISO(params.dataISO);
+  const intensidadeTreino = (regimeId ?? 'EQUILIBRADO') as RegimeIntensidadeId;
   const elenco = jogadores.filter((j) => j.time_id === params.clubeId && jogadorDisponivel(j));
   for (const j of elenco) {
     if (j.status_escalacao === 'NAO_RELACIONADO') continue;
-    const lesao = sortearLesao(j, rnd, 'treino', mundo);
-    if (!lesao) continue;
-    jogadores = jogadores.map((x) => (x.id === j.id ? { ...x, lesao } : x));
+    const gerado = tentarGerarLesao({
+      jogador: j,
+      contexto: 'TREINO',
+      mesAtual,
+      nivelFisiologista: nivelFisiologista,
+      nivelFisioterapeuta: nivelStaff(mundo, 'FISIOTERAPEUTA'),
+      intensidadeTreino,
+      exposicaoDias: 1,
+      rng: rnd,
+    });
+    if (!gerado) continue;
+    jogadores = jogadores.map((x) => (x.id === j.id ? { ...x, lesao: gerado.lesao } : x));
     noticias.push({
       id: `lesao_treino_${j.id}_${params.dataISO}`,
       data: `${params.dataISO}T10:00:00.000Z`,
       titulo: `Baixa no treino — ${j.nome}`,
-      texto: `${j.nome}: ${lesao.descricao}. Previsão de ${lesao.diasRestantes} dias.`,
+      texto: gerado.diagnostico.mancheteNoticia,
     });
     if (noticias.length >= 3) break;
   }
@@ -850,6 +835,7 @@ export function tickMundoPosRodada(params: TickRodadaMundoParams): {
       params.seed ^ 0x55,
       mundo,
       jaLesionados,
+      { mesAtual: mesDeDataISO(params.brasileirao.dataAtualISO) },
     );
     jogadores = lesoes.jogadores;
     noticias.push(...lesoes.noticias);

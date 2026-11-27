@@ -9,9 +9,7 @@ import {
   temCicatrizFisica,
 } from '../career/curvaCarreira';
 import {
-  probabilidadeLesaoSobrecargaSemanal,
   preservacaoAtributosMedico,
-  sortearLesaoSobrecarga,
   fatorCustoEnergiaPreparador,
 } from '../career/departamentoMedico';
 import {
@@ -22,7 +20,7 @@ import {
 } from '../career/genetica';
 import { bonusRecuperacaoSessao } from '../career/energia';
 import { calcularValorMercado } from '../career/mercadoTransferencias';
-import { aplicarAltaMedica, criarLesaoComReabilitacao } from '../career/staffEfeitos';
+import { aplicarAltaMedica } from '../career/staffEfeitos';
 import type { GravidadeLesao, Jogador } from '../types/schema';
 import type { ModificadoresTaticos } from '../types/tactics';
 import type {
@@ -31,7 +29,12 @@ import type {
   EstadoTreinoJogador,
   ProfissionalCorpoTecnico,
   ProgramacaoTreinoClube,
+  RegimeIntensidadeId,
 } from '../types/training';
+import {
+  diasParaRodadasTreino,
+  tentarGerarLesao,
+} from './injuryEngine';
 
 export interface RelatorioEvolucaoAtleta {
   jogadorId: number;
@@ -66,7 +69,8 @@ const CHAVES_ATTR: AtributoTreinoXp[] = ['defesa', 'passe', 'chute', 'velocidade
 
 function gravidadeParaSchema(g: string): GravidadeLesao {
   if (g === 'GRAVE') return 'GRAVE';
-  if (g === 'MODERADA' || g === 'SERIA') return 'MODERADA';
+  if (g === 'SERIA') return 'SERIA';
+  if (g === 'MODERADA') return 'MODERADA';
   return 'LEVE';
 }
 
@@ -195,6 +199,8 @@ export function processarSemanaTreinos(params: {
   clubeId: string;
   overridesPlano?: Map<number, EstadoTreinoJogador['plano_individual_id']>;
   isViradaDeMes?: boolean;
+  /** Mês civil 1–12 — spikes Jan/Fev e Mai–Ago. */
+  mesAtual?: number;
   rng?: () => number;
 }): ResultadoSemanaTreino {
   const {
@@ -207,6 +213,7 @@ export function processarSemanaTreinos(params: {
     clubeId,
     overridesPlano,
     isViradaDeMes = false,
+    mesAtual = 6,
   } = params;
   const rng = params.rng ?? Math.random;
 
@@ -285,14 +292,25 @@ export function processarSemanaTreinos(params: {
       estado.lesao_ativa.rodadas_restantes -= 1;
       jogador.status_escalacao = 'NAO_RELACIONADO';
       jogador.energia = Math.min(100, jogador.energia + 18);
-      jogador.lesao = criarLesaoComReabilitacao(
-        Math.max(1, estado.lesao_ativa.rodadas_restantes) * 6,
-        gravidadeParaSchema(estado.lesao_ativa.gravidade),
-        estado.lesao_ativa.nome,
-        jogador,
-        nivelFisio,
-        { tipo: 'SOBRECARGA', rodadasForaBase: estado.lesao_ativa.rodadas_restantes },
+      const diasRestantes = Math.max(
+        0,
+        (jogador.lesao?.diasRestantes ?? estado.lesao_ativa.rodadas_restantes * 6) - 6,
       );
+      jogador.lesao = {
+        diasRestantes: Math.max(diasRestantes, estado.lesao_ativa.rodadas_restantes * 6),
+        gravidade: gravidadeParaSchema(estado.lesao_ativa.gravidade),
+        descricao: estado.lesao_ativa.nome,
+        atributosReferencia: jogador.lesao?.atributosReferencia ?? {
+          tecnicos: { ...jogador.atributos.tecnicos },
+          mentais: { ...jogador.atributos.mentais },
+          fisicos: { ...jogador.atributos.fisicos },
+        },
+        overallReferencia: jogador.lesao?.overallReferencia ?? jogador.overall,
+        tipo: jogador.lesao?.tipo ?? 'SOBRECARGA',
+        lesaoId: estado.lesao_ativa.lesao_id,
+        sequelaPendente: estado.lesao_ativa.perda_pendente_alta,
+        rodadasForaBase: estado.lesao_ativa.rodadas_restantes,
+      };
 
       if (estado.lesao_ativa.rodadas_restantes <= 0) {
         // Médico elite preserva 100%; sequela cai em velocidade.
@@ -490,50 +508,44 @@ export function processarSemanaTreinos(params: {
         ? Math.min(100, jogador.energia + 4)
         : jogador.energia;
     jogador.energia = energiaComPrevencao;
-    const probLesaoSemana =
-      probabilidadeLesaoSobrecargaSemanal({
-        energia: jogador.energia,
-        idade: jogador.idade,
-        riscoRegime: regime.multiplicadores.risco_lesao,
-        riscoSessao: sessaoPrincipal.multiplicador_risco_lesao * riscoPlano,
-        nivelFisiologista,
-        propensaoLesao: genetica.propensao_lesao,
-        regimeExtremo: regime.id === 'EXTREMO',
-      });
 
-    if (rng() < probLesaoSemana) {
-      const lesaoSorteada = sortearLesaoSobrecarga(nivelFisio, jogador.energia, rng);
+    // Sessão/regime/plano modulam a exposição semanal (~6 dias de treino).
+    const exposicao =
+      6 *
+      regime.multiplicadores.risco_lesao *
+      sessaoPrincipal.multiplicador_risco_lesao *
+      riscoPlano;
+    const gerado = tentarGerarLesao({
+      jogador,
+      contexto: 'TREINO',
+      mesAtual,
+      nivelFisiologista,
+      nivelFisioterapeuta: nivelFisio,
+      intensidadeTreino: regime.id as RegimeIntensidadeId,
+      exposicaoDias: Math.max(1, exposicao),
+      rng,
+    });
 
+    if (gerado) {
+      const { diagnostico, lesao } = gerado;
+      const rodadas = diasParaRodadasTreino(diagnostico.diasRecuperacao);
       estado.lesao_ativa = {
-        lesao_id: lesaoSorteada.lesao_id,
-        nome: lesaoSorteada.nome,
-        gravidade:
-          lesaoSorteada.tipo === 'RUPTURA_LCA'
-            ? 'GRAVE'
-            : lesaoSorteada.tipo === 'LESAO_GRAU_2'
-              ? 'SERIA'
-              : lesaoSorteada.tipo === 'ESTIRAMENTO_GRAU_1'
-                ? 'MODERADA'
-                : 'LEVE',
-        rodadas_restantes: lesaoSorteada.rodadas_restantes,
-        perda_pendente_alta: lesaoSorteada.sequela_pendente,
+        lesao_id: diagnostico.lesaoId,
+        nome: diagnostico.nome,
+        gravidade: diagnostico.gravidade,
+        rodadas_restantes: rodadas,
+        perda_pendente_alta: diagnostico.sequelaPendente,
       };
       jogador.status_escalacao = 'NAO_RELACIONADO';
-      jogador.lesao = criarLesaoComReabilitacao(
-        lesaoSorteada.rodadas_restantes * 6,
-        lesaoSorteada.gravidade,
-        lesaoSorteada.nome,
-        jogador,
-        nivelFisio,
-        { tipo: 'SOBRECARGA', rodadasForaBase: lesaoSorteada.rodadas_restantes },
-      );
+      // Dias já finais (fisio aplicado no injuryEngine) — não reaplicar.
+      jogador.lesao = lesao;
 
       novasLesoes.push({
         jogadorId: jogador.id,
         jogadorNome: jogador.nome,
-        lesaoNome: lesaoSorteada.nome,
+        lesaoNome: diagnostico.nome,
         gravidade: estado.lesao_ativa.gravidade,
-        rodadasFora: lesaoSorteada.rodadas_restantes,
+        rodadasFora: rodadas,
       });
     }
 

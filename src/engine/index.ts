@@ -1,5 +1,26 @@
 export * from './matchEngine';
 export {
+  CATALOGO_30_LESOES,
+  avaliarRiscoOcorrenciaLesao,
+  diagnosticarLesaoConfirmada,
+  diasParaRodadasTreino,
+  definirLesaoPorId,
+  mesDeDataISO,
+  montarEstadoLesaoDeDiagnostico,
+  multChanceLesaoFisiologistaEngine,
+  multDuracaoFisioterapeutaEngine,
+  somaPesosCatalogo,
+  sortearDiagnosticoLesao,
+  tentarGerarLesao,
+} from './injuryEngine';
+export type {
+  CategoriaLesao,
+  ContextoOcorrencia,
+  DefinicaoLesao,
+  DiagnosticoGerado,
+  GravidadeLesaoCatalogo,
+} from './injuryEngine';
+export {
   gerarGraficoMomentum,
   mapearEstiloTatica,
   mesclarSerieMomento,

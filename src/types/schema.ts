@@ -2,7 +2,7 @@ export type Posicao = 'GOL' | 'ZAG' | 'LAT' | 'VOL' | 'MEI' | 'ATA';
 
 export type StatusEscalacao = 'TITULAR' | 'RESERVA' | 'NAO_RELACIONADO';
 
-export type GravidadeLesao = 'LEVE' | 'MODERADA' | 'GRAVE';
+export type GravidadeLesao = 'LEVE' | 'MODERADA' | 'SERIA' | 'GRAVE';
 
 /** Origem da lesão — traumática (choque) vs sobrecarga muscular. */
 export type TipoLesao = 'TRAUMATICA' | 'SOBRECARGA';
@@ -15,8 +15,12 @@ export interface EstadoLesao {
   atributosReferencia?: AtributosJogador;
   overallReferencia?: number;
   tipo?: TipoLesao;
-  /** Rodadas-base do catálogo (1 / 3 / 6 / 16) antes do fisioterapeuta. */
+  /** Rodadas-base aproximadas (dias/6) — recuperação canônica é por dias. */
   rodadasForaBase?: number;
+  /** Id do catálogo de 30 lesões (injuryEngine). */
+  lesaoId?: string;
+  /** Perda de atributo pendente na alta se médico não for elite. */
+  sequelaPendente?: number;
 }
 
 /** Faixa genética de fragilidade muscular (multiplicador 0,50–2,20). */

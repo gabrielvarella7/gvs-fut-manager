@@ -2404,6 +2404,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
       corpoTecnico: corpoTecnicoDeMundo(s.mundoClube),
       clubeId: s.clubeRealId,
       isViradaDeMes: viradaMes,
+      mesAtual: Number.isFinite(mesAtual) ? mesAtual : 6,
     });
     const noticia: NoticiaCarreira = {
       id: `treino_r${rodada}_${Date.now()}`,

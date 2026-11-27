@@ -24,15 +24,16 @@ import {
   multiplicadorDrainGeneticaNoMinuto,
   MAX_SUBSTITUICOES_PARTIDA,
   recuperacaoDiariaEnergia,
-  sortearGravidadeLesaoFadiga,
-  diasBaseLesaoFadiga,
-  descricaoLesaoFadiga,
   tetoDrainPartidaPct,
   timeEmWO,
   vetoresTaticosDeConfig,
 } from '../career/energia';
 import { getGeneticaSegura } from '../career/genetica';
 import type { EsquemaTatico, GravidadeLesao, Jogador, Posicao } from '../types/schema';
+import {
+  diagnosticarLesaoConfirmada,
+  mesDeDataISO,
+} from './injuryEngine';
 import { type ContextoDinamicoPartida, modificadoresUrgencia } from './matchContext';
 import {
   construirEstatisticasPartida,
@@ -165,7 +166,12 @@ export interface LesaoEmCampo {
   minuto: number;
   descricao: string;
   gravidade: GravidadeLesao;
+  /** Dias de recuperação (já com fisio se diasFinais). */
   diasBase: number;
+  lesaoId?: string;
+  sequelaPendente?: number;
+  /** true = diasBase já finais (não reaplicar fisio). */
+  diasFinais?: boolean;
 }
 
 export interface MatchSimInput {
@@ -182,6 +188,8 @@ export interface MatchSimInput {
   indicePartidaTemporada?: number;
   /** Data da partida (ISO) — densidade do calendário / descanso. */
   dataPartidaISO?: string;
+  /** Fisioterapeuta 1–20 — encurta dias do diagnóstico em campo. */
+  nivelFisioterapeuta?: number;
 }
 
 export interface ProbabilidadesResultado {
@@ -914,16 +922,23 @@ export function simularPartida(input: MatchSimInput): MatchSimResult {
         continue;
       }
 
-      const gravidade = sortearGravidadeLesaoFadiga(eAgora, rnd);
-      const diasBase = diasBaseLesaoFadiga(gravidade, rnd);
-      const descricao = descricaoLesaoFadiga(gravidade, rnd);
+      const diag = diagnosticarLesaoConfirmada({
+        jogador: { ...j, energia: eAgora },
+        contexto: 'JOGO',
+        nivelFisioterapeuta: input.nivelFisioterapeuta ?? 10,
+        mesAtual: input.dataPartidaISO ? mesDeDataISO(input.dataPartidaISO) : 6,
+        rng: rnd,
+      });
       lesoesEmCampo.push({
         jogadorId: j.id,
         timeId,
         minuto,
-        descricao,
-        gravidade,
-        diasBase,
+        descricao: diag.nome,
+        gravidade: diag.gravidade,
+        diasBase: diag.diasRecuperacao,
+        lesaoId: diag.lesaoId,
+        sequelaPendente: diag.sequelaPendente,
+        diasFinais: true,
       });
 
       const idsEmCampo = new Set(
@@ -982,7 +997,7 @@ export function simularPartida(input: MatchSimInput): MatchSimResult {
           timeId,
           jogadorId: j.id,
           jogadorNome: j.nome,
-          texto: `${j.nome} sente ${descricao} (${Math.round(eAgora)}% de energia) e precisa sair.`,
+          texto: `${j.nome} sente ${diag.nome} (${Math.round(eAgora)}% de energia) e precisa sair.`,
         });
         corpo.push({
           minuto,
@@ -1005,7 +1020,7 @@ export function simularPartida(input: MatchSimInput): MatchSimResult {
           timeId,
           jogadorId: j.id,
           jogadorNome: j.nome,
-          texto: `${j.nome} se lesiona (${descricao}) sem substituições restantes — ${nomeTime} fica com um a menos.`,
+          texto: `${j.nome} se lesiona (${diag.nome}) sem substituições restantes — ${nomeTime} fica com um a menos.`,
         });
       }
 
