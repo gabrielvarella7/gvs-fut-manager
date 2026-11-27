@@ -577,6 +577,11 @@ function PainelNegociacao({
           sai a notícia e ele deixa o elenco.
         </p>
       )}
+      {neg.status === 'melada' && (
+        <p className="mt-2 text-xs text-rose-300/90">
+          Negociação melada — exames, fair play financeiro ou prazo de janela. O atleta permanece no elenco.
+        </p>
+      )}
 
       {(neg.contraOfertaClube || neg.contraOfertaJogador) && (
         <div className="mt-3">

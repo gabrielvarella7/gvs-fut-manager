@@ -1,6 +1,14 @@
 import type { Jogador, Time } from '../types/schema';
-import type { NegociacaoTransferencia, OfertaTransferencia } from './types';
+import type { NegociacaoTransferencia, OfertaTransferencia, TipoNegocioTransferencia } from './types';
 import { salarioMensal } from './playerUtils';
+import {
+  classificarTipoNegocio,
+  deveMelarNosExames,
+  distribuirFasesPipeline,
+  emprestimoAceiteRapido,
+  type TipoNegocioMercado,
+  veteranoRecusaContratoCurto,
+} from './transferMarket';
 
 /** Tendência local (evita ciclo com sondagemMercado). */
 function tendenciaBaseSaida(jogador: Jogador, valorOferta: number): number {
@@ -16,19 +24,37 @@ function tendenciaBaseSaida(jogador: Jogador, valorOferta: number): number {
   return Math.max(8, Math.min(92, Math.round(t)));
 }
 
-/** Negociação pessoal do atleta: 3–7 dias. */
-export function diasNegociacaoJogador(rng: () => number = Math.random): number {
-  return 3 + Math.floor(rng() * 5);
+export function resolverTipoNegocioPipeline(
+  jogador: Jogador,
+  oferta: OfertaTransferencia,
+  tipoNegocio?: TipoNegocioTransferencia,
+): TipoNegocioMercado {
+  if (tipoNegocio) return tipoNegocio;
+  return classificarTipoNegocio({ jogador, oferta });
 }
 
-/** Exames médicos: 2–4 dias. */
-export function diasExamesMedicos(rng: () => number = Math.random): number {
-  return 2 + Math.floor(rng() * 3);
+/** @deprecated Preferir distribuirFasesPipeline — mantido p/ smoke legado. */
+export function diasNegociacaoJogador(
+  rng: () => number = Math.random,
+  tipo: TipoNegocioMercado = 'compra_nacional',
+): number {
+  return distribuirFasesPipeline(tipo, rng).jogador;
 }
 
-/** Formalização / assinatura: 1–3 dias. */
-export function diasAssinaturaContrato(rng: () => number = Math.random): number {
-  return 1 + Math.floor(rng() * 3);
+/** Exames médicos / BID: 1–2 dias (survey Parte 3). */
+export function diasExamesMedicos(
+  rng: () => number = Math.random,
+  tipo: TipoNegocioMercado = 'compra_nacional',
+): number {
+  return distribuirFasesPipeline(tipo, rng).exames;
+}
+
+/** Formalização / assinatura. */
+export function diasAssinaturaContrato(
+  rng: () => number = Math.random,
+  tipo: TipoNegocioMercado = 'compra_nacional',
+): number {
+  return distribuirFasesPipeline(tipo, rng).assinatura;
 }
 
 export function forcaDoClube(times: Time[], timeId: string): number {
@@ -42,6 +68,7 @@ export function forcaDoClube(times: Time[], timeId: string): number {
  * - clube mais fraco / mais forte
  * - expectativa de minutos (jogar mais no clube mais fraco)
  * - salário para cima / para baixo
+ * - cenários A/D do survey (empréstimo rápido / veterano)
  */
 export function avaliarDecisaoSaidaJogador(input: {
   jogador: Jogador;
@@ -60,6 +87,18 @@ export function avaliarDecisaoSaidaJogador(input: {
     nomeComprador = 'o clube comprador',
     rng = Math.random,
   } = input;
+
+  const vet = veteranoRecusaContratoCurto(jogador, oferta.duracaoMeses, oferta.luvas);
+  if (vet.recusa) {
+    return { aceita: false, motivo: vet.motivo! };
+  }
+
+  if (emprestimoAceiteRapido(jogador, oferta)) {
+    return {
+      aceita: true,
+      motivo: `${jogador.nome} aceitou o empréstimo para ${nomeComprador} com salário integral (reserva buscando minutos). Seguirá para os exames médicos.`,
+    };
+  }
 
   const salarioAtual = salarioMensal(jogador);
   const salarioNovo = oferta.salarioCltMensal + oferta.direitoImagemMensal;
@@ -135,14 +174,33 @@ export function iniciarFaseNegociacaoJogador(
   neg: NegociacaoTransferencia,
   jogadorNome: string,
   rng: () => number = Math.random,
+  jogador?: Jogador,
 ): NegociacaoTransferencia {
-  const dias = diasNegociacaoJogador(rng);
+  const oferta = neg.contraOfertaClube ?? neg.ofertaAtual;
+  const tipo = resolverTipoNegocioPipeline(
+    jogador ?? ({ time_id: neg.timeVendedorId } as Jogador),
+    oferta,
+    neg.tipoNegocio,
+  );
+  const fases =
+    neg.diasFaseJogador != null && neg.diasFaseExames != null && neg.diasFaseAssinatura != null
+      ? {
+          jogador: neg.diasFaseJogador,
+          exames: neg.diasFaseExames,
+          assinatura: neg.diasFaseAssinatura,
+        }
+      : distribuirFasesPipeline(tipo, rng);
+
   return {
     ...neg,
     status: 'negociando_jogador',
     faseNegociacao: 'jogador',
-    diasRestantesFase: dias,
-    mensagem: `${jogadorNome} avalia a proposta pessoal (força do clube, minutos e salário). Previsão: ${dias} dia(s).`,
+    tipoNegocio: tipo,
+    diasFaseJogador: fases.jogador,
+    diasFaseExames: fases.exames,
+    diasFaseAssinatura: fases.assinatura,
+    diasRestantesFase: fases.jogador,
+    mensagem: `${jogadorNome} avalia a proposta pessoal (${tipo.replace('_', ' ')}). Previsão: ${fases.jogador} dia(s) nesta fase.`,
     atualizadoEm: new Date().toISOString(),
   };
 }
@@ -150,6 +208,7 @@ export function iniciarFaseNegociacaoJogador(
 export type ResultadoAvancoPipeline =
   | { tipo: 'continuar'; neg: NegociacaoTransferencia }
   | { tipo: 'recusada'; neg: NegociacaoTransferencia }
+  | { tipo: 'melada'; neg: NegociacaoTransferencia }
   | { tipo: 'pronta_para_assinar'; neg: NegociacaoTransferencia };
 
 export function estaEmPipelineVenda(neg: NegociacaoTransferencia): boolean {
@@ -161,7 +220,7 @@ export function estaEmPipelineVenda(neg: NegociacaoTransferencia): boolean {
   );
 }
 
-/** Avança 1 dia nas fases jogador → exames → assinatura. */
+/** Avança 1 dia nas fases jogador → exames → assinatura (com melada calibrada). */
 export function avancarPipelineVendaPorDia(
   neg: NegociacaoTransferencia,
   ctx: {
@@ -215,7 +274,7 @@ export function avancarPipelineVendaPorDia(
         },
       };
     }
-    const dExames = diasExamesMedicos(rng);
+    const dExames = neg.diasFaseExames ?? diasExamesMedicos(rng, neg.tipoNegocio ?? 'compra_nacional');
     return {
       tipo: 'continuar',
       neg: {
@@ -231,7 +290,21 @@ export function avancarPipelineVendaPorDia(
   }
 
   if (neg.status === 'em_exames') {
-    const dAssina = diasAssinaturaContrato(rng);
+    if (deveMelarNosExames(rng)) {
+      return {
+        tipo: 'melada',
+        neg: {
+          ...neg,
+          status: 'melada',
+          mensagem:
+            'Negociação melada: exames médicos, fair play financeiro ou prazo de inscrição na janela.',
+          diasRestantesFase: 0,
+          atualizadoEm: new Date().toISOString(),
+        },
+      };
+    }
+    const dAssina =
+      neg.diasFaseAssinatura ?? diasAssinaturaContrato(rng, neg.tipoNegocio ?? 'compra_nacional');
     return {
       tipo: 'continuar',
       neg: {
@@ -268,5 +341,17 @@ export function noticiaAssinouContrato(
     data: dataISO,
     titulo: 'Assinou contrato',
     texto: `${jogadorNome} assinou contrato com o ${timeCompradorNome} e deixou o elenco.`,
+  };
+}
+
+export function noticiaNegociacaoMelada(
+  jogadorNome: string,
+  dataISO: string,
+): { id: string; data: string; titulo: string; texto: string } {
+  return {
+    id: `n_tr_melada_${Date.now()}_${Math.floor(Math.random() * 999)}`,
+    data: dataISO,
+    titulo: 'Negociação melada',
+    texto: `A saída de ${jogadorNome} caiu por exames médicos, fair play ou prazo de janela.`,
   };
 }

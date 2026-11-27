@@ -78,6 +78,7 @@ import {
   forcaDoClube,
   iniciarFaseNegociacaoJogador,
   noticiaAssinouContrato,
+  noticiaNegociacaoMelada,
 } from '../career/pipelineVenda';
 import {
   aplicarBalanceamentoNaTemporada,
@@ -415,6 +416,12 @@ function tickNegociacoesUmDia(params: {
       nomeComprador,
     });
     if (!resultado) continue;
+
+    if (resultado.tipo === 'melada') {
+      negociacoes = negociacoes.map((n) => (n.id === neg.id ? resultado.neg : n));
+      noticias.push(noticiaNegociacaoMelada(jog.nome, params.dataISO));
+      continue;
+    }
 
     if (resultado.tipo === 'recusada' || resultado.tipo === 'continuar') {
       negociacoes = negociacoes.map((n) => (n.id === neg.id ? resultado.neg : n));
@@ -920,6 +927,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
         clubeId: s.clubeRealId,
         dataISO: estado.dataAtualISO,
         comercialHumor: s.comercial?.indicadores.humor_torcida,
+        times: s.timesReais,
       });
       jogadores = tick.jogadores;
       mundo = tick.mundo;
@@ -1043,6 +1051,8 @@ export const useGameStore = create<GameStore>((set, get) => ({
           tendenciaJogadorAceitarSaida(jogador, oferta.valorTransferencia),
       },
       jogador.nome,
+      Math.random,
+      jogador,
     );
     set({
       negociacoesTransferencia: s.negociacoesTransferencia.map((n) =>
@@ -1087,6 +1097,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
           clubeId: s.clubeRealId,
           dataISO: estado.dataAtualISO,
           comercialHumor: s.comercial?.indicadores.humor_torcida,
+          times: s.timesReais,
         });
         jogadores = tick.jogadores;
         mundo = tick.mundo;
@@ -1959,6 +1970,8 @@ export const useGameStore = create<GameStore>((set, get) => ({
             tendenciaJogadorAceitarSaida(jog, base.ofertaAtual.valorTransferencia),
         },
         jog.nome,
+        Math.random,
+        jog,
       );
       set({
         negociacoesTransferencia: s.negociacoesTransferencia.map((n) =>
@@ -2133,6 +2146,8 @@ export const useGameStore = create<GameStore>((set, get) => ({
             tendenciaJogadorAceitarSaida(jogador, neg.contraOfertaClube.valorTransferencia),
         },
         jogador.nome,
+        Math.random,
+        jogador,
       );
       set({
         negociacoesTransferencia: s.negociacoesTransferencia.map((n) =>
