@@ -184,13 +184,54 @@ export interface Jogador {
   suscetibilidade?: SuscetibilidadeTransferencia;
   /** Indisponível enquanto diasRestantes > 0. */
   lesao?: EstadoLesao | null;
-  /** Jogador promovido da base; guia evolução conforme o foco do clube. */
-  formacaoBase?: {
-    foco: 'VENDER' | 'PROFISSIONALIZAR';
-    promovidoRodada: number;
-    /** Teto informacional de OVR (modo profissionalizar). */
-    potencialOvr?: number;
-  };
+  /**
+   * Genética (opcional). Presente em joias da base; demais elenco pode receber
+   * quando o sistema de genética estiver ativo no save.
+   */
+  genetica?: GeneticaJogador;
+  /** Jogador promovido da base; guia evolução, pressão e identidade. */
+  formacaoBase?: FormacaoBaseJogador;
+}
+
+/** Perfil genético — teto, absorção de treino e propensão a lesão. */
+export interface GeneticaJogador {
+  potencial_maximo: number;
+  /** Multiplicador de ganho de XP / evolução (≈0,7–1,4). */
+  fator_absorcao: number;
+  /** 0,5 (duro) … 2,0+ (frágil). */
+  propensao_lesao: number;
+  perfil_scout: string;
+}
+
+export type TierCategoriaBase = 'FRACO' | 'MEDIO' | 'BOM' | 'CRAQUE';
+
+export type FocoFormacaoLegado = 'VENDER' | 'PROFISSIONALIZAR';
+
+export interface FormacaoBaseJogador {
+  /** Foco vigente na promoção (novos) ou legado (saves antigos). */
+  foco:
+    | 'VENDER_PROFISSIONALIZAR'
+    | 'TITULARES_CLUBE'
+    | 'EQUILIBRADO'
+    | FocoFormacaoLegado;
+  promovidoRodada: number;
+  /** Teto informacional de OVR. */
+  potencialOvr?: number;
+  tier?: TierCategoriaBase;
+  /** Falso precoce: OVR alto, teto baixo. */
+  precoceEstagnado?: boolean;
+  /** Diamante bruto: OVR baixo, teto alto. */
+  diamanteBruto?: boolean;
+  /** Minutos totais no profissional (identidade / pressão). */
+  minutosProfissional?: number;
+  /** Rodadas seguidas como NAO_RELACIONADO (estagnação). */
+  rodadasBancoSeguidas?: number;
+  /** Sequência de bons jogos (assédio de empresário). */
+  bonsJogosSeguidos?: number;
+  /** Já sofreu pressão de empresário neste ciclo. */
+  pressaoEmpresario?: boolean;
+  /** Cria da casa (conta para identidade_base da torcida). */
+  criaDaCasa?: boolean;
 }
 
 export interface LinhaTabela {

@@ -144,9 +144,22 @@ export function PlayerProfileScreen() {
           )}
           {jogador.formacaoBase && (
             <p className="mt-2 text-xs text-zinc-500">
-              Base · {jogador.formacaoBase.foco === 'VENDER' ? 'vender' : 'profissionalizar'}
+              Cria da base
+              {jogador.formacaoBase.tier ? ` · ${jogador.formacaoBase.tier.toLowerCase()}` : ''}
               {jogador.formacaoBase.potencialOvr != null &&
                 ` · potencial ~${jogador.formacaoBase.potencialOvr} OVR`}
+              {jogador.formacaoBase.precoceEstagnado ? ' · precoce estagnado' : ''}
+              {jogador.formacaoBase.diamanteBruto ? ' · diamante bruto' : ''}
+              {(jogador.formacaoBase.rodadasBancoSeguidas ?? 0) >= 10 &&
+                ` · ${jogador.formacaoBase.rodadasBancoSeguidas} rodadas fora da lista`}
+            </p>
+          )}
+          {jogador.genetica && (
+            <p className="mt-1 text-xs text-zinc-500">
+              Genética · teto {jogador.genetica.potencial_maximo} · absorção{' '}
+              {jogador.genetica.fator_absorcao.toFixed(2)}× · lesão ×
+              {jogador.genetica.propensao_lesao.toFixed(2)}
+              <span className="mt-0.5 block">{jogador.genetica.perfil_scout}</span>
             </p>
           )}
         </CmPanel>

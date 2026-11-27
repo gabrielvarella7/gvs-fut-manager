@@ -37,6 +37,7 @@ import {
   sortearDiffComVariancia,
 } from './matchResultadoCore';
 import { rendimentoJogadorEmCampo } from './matchRendimentoCampo';
+import { efeitoSobrecargaExtremo17 } from '../career/youthAcademy';
 import {
   aplicarConfrontoTaticoNosLambdas,
   calcularConfrontoTatico,
@@ -189,6 +190,10 @@ export interface OpcoesForcaSetores {
   fatorMoralTime?: number;
   multiplicadorDia?: number;
   jogadoresExpulsos?: ReadonlySet<number>;
+  criseOuDecisivo?: boolean;
+  jogandoFora?: boolean;
+  minuto?: number;
+  rnd?: () => number;
 }
 
 function jogadorAptoEscalacao(j: Jogador): boolean {
@@ -259,6 +264,10 @@ export function calcularForcaSetores(
       improvisacaoMult: multImp,
       fatorMotivacao: opcoes.fatorMotivacao,
       fatorMoralTime: opcoes.fatorMoralTime,
+      criseOuDecisivo: opcoes.criseOuDecisivo,
+      jogandoFora: opcoes.jogandoFora,
+      minuto: opcoes.minuto,
+      rnd: opcoes.rnd,
     });
     soma[setor] += rend;
     contagem[setor] += 1;
@@ -493,16 +502,32 @@ export function simularPartida(input: MatchSimInput): MatchSimResult {
   const globalM = faixaPrep.forcaMandante;
   const globalV = faixaPrep.forcaVisitante;
 
-  const opcoesM = (): OpcoesForcaSetores => ({
+  const criseM =
+    isClassico ||
+    ctx?.necessidadeMandante === 'DESESPERO_REBAIXAMENTO' ||
+    ctx?.necessidadeMandante === 'DECISIVO_TITULO';
+  const criseV =
+    isClassico ||
+    ctx?.necessidadeVisitante === 'DESESPERO_REBAIXAMENTO' ||
+    ctx?.necessidadeVisitante === 'DECISIVO_TITULO';
+  const opcoesM = (minuto = 45): OpcoesForcaSetores => ({
     multiplicadorMando: mandoMult,
     fatorMotivacao: faixaPrep.motivacaoMandante,
     multiplicadorDia: faixaPrep.variacaoDiaMandante,
     jogadoresExpulsos: expulsosMandante,
+    criseOuDecisivo: criseM,
+    jogandoFora: false,
+    minuto,
+    rnd,
   });
-  const opcoesV = (): OpcoesForcaSetores => ({
+  const opcoesV = (minuto = 45): OpcoesForcaSetores => ({
     fatorMotivacao: faixaPrep.motivacaoVisitante,
     multiplicadorDia: faixaPrep.variacaoDiaVisitante,
     jogadoresExpulsos: expulsosVisitante,
+    criseOuDecisivo: criseV,
+    jogandoFora: true,
+    minuto,
+    rnd,
   });
 
   const confrontoTatico: ConfrontoTatico = calcularConfrontoTatico(
@@ -655,25 +680,29 @@ export function simularPartida(input: MatchSimInput): MatchSimResult {
   const fadigaPorJogador = new Map<number, number>();
   const registrarFadiga = (
     jogador: Jogador,
+    posicaoEscalada: Posicao,
     multEquipe: number,
     desgasteTatico: number,
   ) => {
     const baseIdade = fadigaPorMinutoPorIdade(jogador.idade, rnd);
+    const sobrecarga17 = efeitoSobrecargaExtremo17(jogador, posicaoEscalada, 90);
     fadigaPorJogador.set(
       jogador.id,
-      baseIdade * multEquipe * desgasteTatico,
+      baseIdade * multEquipe * desgasteTatico * (1 + sobrecarga17.fadigaExtra),
     );
   };
-  for (const { jogador } of mandanteEsc) {
+  for (const { jogador, posicaoEscalada } of mandanteEsc) {
     registrarFadiga(
       jogador,
+      posicaoEscalada,
       input.mandante.fadigaPorMinutoMult ?? 1,
       modsM.desgaste_fisico,
     );
   }
-  for (const { jogador } of visitanteEsc) {
+  for (const { jogador, posicaoEscalada } of visitanteEsc) {
     registrarFadiga(
       jogador,
+      posicaoEscalada,
       input.visitante.fadigaPorMinutoMult ?? 1,
       modsV.desgaste_fisico,
     );
@@ -776,6 +805,7 @@ export function simularPartida(input: MatchSimInput): MatchSimResult {
         );
         registrarFadiga(
           reserva,
+          slot.posicaoEscalada,
           (casa
             ? input.mandante.fadigaPorMinutoMult
             : input.visitante.fadigaPorMinutoMult) ?? 1,
