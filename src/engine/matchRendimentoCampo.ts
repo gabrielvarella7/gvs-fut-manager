@@ -1,5 +1,10 @@
 import { metricasMotorDeAtributos } from '../career/atributosJogador';
 import { multiplicadorRendimentoPorEnergia } from '../career/energia';
+import {
+  efeitoSobrecargaExtremo17,
+  multiplicadorInconstanciaJovem,
+  multiplicadorPressaoMental,
+} from '../career/youthAcademy';
 import type { CelulaGrade } from '../data/gradeCampinho';
 import { multiplicadorDesempenhoPosicao } from './posicaoCompatibilidade';
 
@@ -107,6 +112,10 @@ export interface ParametrosRendimentoJogador {
   fatorMotivacao?: number;
   /** Clima depressivo pós-goleada / sequência ruim. */
   fatorMoralTime?: number;
+  criseOuDecisivo?: boolean;
+  jogandoFora?: boolean;
+  minuto?: number;
+  rnd?: () => number;
 }
 
 export function rendimentoJogadorEmCampo(p: ParametrosRendimentoJogador): number {
@@ -126,6 +135,16 @@ export function rendimentoJogadorEmCampo(p: ParametrosRendimentoJogador): number
 
   const motiv = p.fatorMotivacao ?? 1;
   const moral = p.fatorMoralTime ?? 1;
+  const pressao = multiplicadorPressaoMental(p.jogador, {
+    criseOuDecisivo: p.criseOuDecisivo ?? false,
+    jogandoFora: p.jogandoFora ?? false,
+  });
+  const inconst = p.rnd ? multiplicadorInconstanciaJovem(p.jogador, p.rnd) : 1;
+  const extremo17 = efeitoSobrecargaExtremo17(
+    p.jogador,
+    p.posicaoEscalada,
+    p.minuto ?? 45,
+  );
 
-  return base * mult * fadiga * motiv * moral;
+  return base * mult * fadiga * motiv * moral * pressao * inconst * extremo17.rendimentoFinal;
 }

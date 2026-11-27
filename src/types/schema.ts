@@ -197,16 +197,45 @@ export interface Jogador {
   genetica?: GeneticaAtleta;
   /** ISO da última partida disputada (curva de recuperação D+1…D+6). */
   ultimaPartidaISO?: string;
-  /** Jogador promovido da base; guia evolução conforme o foco do clube. */
-  formacaoBase?: {
-    foco: 'VENDER' | 'PROFISSIONALIZAR';
-    promovidoRodada: number;
-    /** Teto informacional de OVR (modo profissionalizar). */
-    potencialOvr?: number;
-  };
+  /** Jogador promovido da base; guia evolução, pressão e identidade. */
+  formacaoBase?: FormacaoBaseJogador;
+}
+
+export type TierCategoriaBase = 'FRACO' | 'MEDIO' | 'BOM' | 'CRAQUE';
+
+export type FocoFormacaoLegado = 'VENDER' | 'PROFISSIONALIZAR';
+
+export interface FormacaoBaseJogador {
+  /** Foco vigente na promoção (novos) ou legado (saves antigos). */
+  foco:
+    | 'VENDER_PROFISSIONALIZAR'
+    | 'TITULARES_CLUBE'
+    | 'EQUILIBRADO'
+    | FocoFormacaoLegado;
+  promovidoRodada: number;
+  /** Teto informacional de OVR. */
+  potencialOvr?: number;
+  tier?: TierCategoriaBase;
+  /** Falso precoce: OVR alto, teto baixo. */
+  precoceEstagnado?: boolean;
+  /** Diamante bruto: OVR baixo, teto alto. */
+  diamanteBruto?: boolean;
+  /** Minutos totais no profissional (identidade / pressão). */
+  minutosProfissional?: number;
+  /** Rodadas seguidas como NAO_RELACIONADO (estagnação). */
+  rodadasBancoSeguidas?: number;
+  /** Sequência de bons jogos (assédio de empresário). */
+  bonsJogosSeguidos?: number;
+  /** Já sofreu pressão de empresário neste ciclo. */
+  pressaoEmpresario?: boolean;
+  /** Cria da casa (conta para identidade_base da torcida). */
+  criaDaCasa?: boolean;
 }
 
 /** Potential Ability + absorção + fragilidade — ocultos no scouting. */
+/** Alias usado pela base / mundoClube. */
+export type GeneticaJogador = GeneticaAtleta;
+
 export interface GeneticaAtleta {
   /** Teto máximo de overall que o atleta pode atingir (40 a 99). */
   potencial_maximo: number;

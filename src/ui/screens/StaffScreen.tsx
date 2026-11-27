@@ -52,7 +52,7 @@ export function StaffScreen() {
               ? `Téc ${p.atributosOlheiro.tecnicos} · Fís ${p.atributosOlheiro.fisicos} · Men ${p.atributosOlheiro.mentais} · Pot ${p.atributosOlheiro.potencial} — relatórios na aba Notícias`
               : 'Indica reforços por notícias';
           } else if (p.cargo === 'DIRETOR_BASE') {
-            efeito = `Mais e melhores jovens (nível ${p.nivel}) · foco vender/profissionalizar`;
+            efeito = `Safras Sub-20 e promoções (nível ${p.nivel}) · foco vender, titulares ou equilibrado`;
           } else if (p.cargo === 'ASSISTENTE_TECNICO') {
             efeito =
               p.nivel >= 14 ?
