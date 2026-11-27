@@ -1,6 +1,7 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import { carregarDatabaseInicial } from '../../db/database';
 import { useGameStore } from '../../store/useGameStore';
+import { AssistenteAjuda } from '../components/AssistenteAjuda';
 import { MainMenuScreen } from './MainMenuScreen';
 import { ManagerCreateScreen } from './ManagerCreateScreen';
 import { FictionalTeamPickScreen } from './FictionalTeamPickScreen';
@@ -62,50 +63,80 @@ export function GameRouter() {
     );
   }
 
+  let telaAtual: ReactNode;
   switch (tela) {
     case 'menu':
-      return <MainMenuScreen />;
+      telaAtual = <MainMenuScreen />;
+      break;
     case 'criar_tecnico':
-      return <ManagerCreateScreen />;
+      telaAtual = <ManagerCreateScreen />;
+      break;
     case 'escolher_time_ficticio':
-      return <FictionalTeamPickScreen />;
+      telaAtual = <FictionalTeamPickScreen />;
+      break;
     case 'hub_torneio':
-      return <TournamentHubScreen />;
+      telaAtual = <TournamentHubScreen />;
+      break;
     case 'escritorio':
-      return <OfficeHubScreen />;
+      telaAtual = <OfficeHubScreen />;
+      break;
     case 'noticias':
-      return <NewsScreen />;
+      telaAtual = <NewsScreen />;
+      break;
     case 'transferencias':
-      return <TransfersScreen />;
+      telaAtual = <TransfersScreen />;
+      break;
     case 'financas':
-      return <FinancesScreen />;
+      telaAtual = <FinancesScreen />;
+      break;
     case 'staff':
-      return <StaffScreen />;
+      telaAtual = <StaffScreen />;
+      break;
     case 'base':
-      return <BaseScreen />;
+      telaAtual = <BaseScreen />;
+      break;
     case 'treinos':
-      return <TreinosScreen />;
+      telaAtual = <TreinosScreen />;
+      break;
     case 'calendario':
-      return <CalendarScreen />;
+      telaAtual = <CalendarScreen />;
+      break;
     case 'classificacao':
-      return <ClassificationScreen />;
+      telaAtual = <ClassificationScreen />;
+      break;
     case 'elenco':
-      return <SquadScreen />;
+      telaAtual = <SquadScreen />;
+      break;
     case 'perfil_jogador':
-      return <PlayerProfileScreen />;
+      telaAtual = <PlayerProfileScreen />;
+      break;
     case 'tatica':
-      return <TacticsScreen />;
+      telaAtual = <TacticsScreen />;
+      break;
     case 'partida':
-      return <MatchScreen />;
+      telaAtual = <MatchScreen />;
+      break;
     case 'relatorio_pre_jogo':
-      return <PreMatchReportScreen />;
+      telaAtual = <PreMatchReportScreen />;
+      break;
     case 'propostas':
-      return <OffersScreen />;
+      telaAtual = <OffersScreen />;
+      break;
     case 'carregar':
-      return <LoadGameScreen />;
+      telaAtual = <LoadGameScreen />;
+      break;
     case 'configuracoes':
-      return <SettingsScreen />;
+      telaAtual = <SettingsScreen />;
+      break;
     default:
-      return <MainMenuScreen />;
+      telaAtual = <MainMenuScreen />;
   }
+
+  return (
+    <>
+      {telaAtual}
+      {/* Fora do splash — botão flutuante de ajuda (regras/UI) */}
+      <AssistenteAjuda />
+    </>
+  );
 }

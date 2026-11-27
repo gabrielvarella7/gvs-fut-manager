@@ -974,12 +974,20 @@ export const useGameStore = create<GameStore>((set, get) => ({
       jogadores = aplicadas.jogadores;
       noticiasLesaoCampo.push(...aplicadas.noticias);
     }
+    const minutosM: number[] = [];
+    const minutosV: number[] = [];
+    for (const l of result.lancamentos) {
+      if (l.tipo !== 'gol') continue;
+      if (l.timeId === result.mandanteId) minutosM.push(l.minuto);
+      else minutosV.push(l.minuto);
+    }
     let estado = registrarPlacarPartida(
       s.brasileirao,
       partidaId,
       result.golsMandante,
       result.golsVisitante,
       s.campeonato,
+      { mandante: minutosM, visitante: minutosV },
     );
     const partida = estado.partidas.find((p) => p.id === partidaId);
     const seed = (Date.now() ^ partidaId) >>> 0;
