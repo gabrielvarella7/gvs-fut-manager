@@ -299,6 +299,8 @@ interface GameStore extends EstadoCarreira {
   /** Aplica treino padrão automaticamente se a rodada ainda não treinou. */
   garantirTreinoPadraoRodada: () => void;
   marcarNoticiasComoLidas: () => void;
+  /** Remove notícia do feed; se for alerta de base, limpa sugestão ligada. */
+  dispensarNoticia: (noticiaId: string) => void;
   /** Pula torneio amador e recebe propostas só dos piores clubes. */
   pularTorneioReceberPropostas: () => void;
   /**
@@ -1664,6 +1666,29 @@ export const useGameStore = create<GameStore>((set, get) => ({
       }
     }
     if (mudou) set({ noticiasVistasIds: [...vistas] });
+  },
+  dispensarNoticia: (noticiaId) => {
+    const s = get();
+    const noticia = s.noticias.find((n) => n.id === noticiaId);
+    if (!noticia) return;
+    const noticias = s.noticias.filter((n) => n.id !== noticiaId);
+    let mundoClube = s.mundoClube;
+    const crise = /^crise_base_\d+_(\d+)$/.exec(noticiaId);
+    const gotejo = /^gotejo_\d+_(\d+)$/.exec(noticiaId);
+    const jovemIdRaw = crise?.[1] ?? gotejo?.[1];
+    const jovemId = jovemIdRaw != null ? Number(jovemIdRaw) : NaN;
+    if (mundoClube && Number.isFinite(jovemId)) {
+      const sugestoes = (mundoClube.base.sugestoesPromocao ?? []).filter(
+        (x) => x.jovemId !== jovemId,
+      );
+      if (sugestoes.length !== (mundoClube.base.sugestoesPromocao ?? []).length) {
+        mundoClube = {
+          ...mundoClube,
+          base: { ...mundoClube.base, sugestoesPromocao: sugestoes },
+        };
+      }
+    }
+    set({ noticias, ...(mundoClube !== s.mundoClube ? { mundoClube } : {}) });
   },
   salvarCarreira: () => {
     const s = get();

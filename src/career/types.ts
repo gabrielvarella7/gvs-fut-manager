@@ -123,11 +123,27 @@ export type TelaJogo =
   | 'carregar'
   | 'configuracoes';
 
+/** CTAs opcionais no card de notícia (lesão, indicação da base, plantel curto…). */
+export type AcaoNoticiaTipo =
+  | 'ver_jogador'
+  | 'departamento_medico'
+  | 'promover_base'
+  | 'abrir_base'
+  | 'dispensar';
+
+export interface AcaoNoticia {
+  tipo: AcaoNoticiaTipo;
+  /** Jogador / jovem alvo da ação (ver, promover, médico). */
+  jogadorId?: number;
+  rotulo?: string;
+}
+
 export interface NoticiaCarreira {
   id: string;
   data: string;
   titulo: string;
   texto: string;
+  acoes?: AcaoNoticia[];
 }
 
 export interface PerfilTecnico {
