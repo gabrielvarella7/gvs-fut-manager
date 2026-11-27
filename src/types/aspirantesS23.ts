@@ -11,6 +11,14 @@ export const TETO_PLANTEL_PRO_SUB23 = 30;
 export const MSG_PLANTEL_CHEIO_SUBIR =
   'Plantel cheio, para subir um atleta precisa vender ou dispensar alguém.';
 
+/** Nome padrão da competição espelhada do Brasileirão no Sub-23. */
+export const NOME_COMPETICAO_SUB23 = 'Brasileirão Sub23';
+
+/** Acrescenta o sufixo Sub23 ao nome da competição profissional. */
+export function rotuloCompeticaoSub23(nomeBase?: string | null): string {
+  const base = (nomeBase ?? 'Brasileirão').replace(/\s*Sub-?23\s*$/i, '').trim() || 'Brasileirão';
+  return `${base} Sub23`;
+}
 export interface AtletaSub23 {
   id: number;
   time_id: string;

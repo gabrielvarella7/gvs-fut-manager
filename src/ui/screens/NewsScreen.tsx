@@ -1,21 +1,46 @@
-import { useEffect } from 'react';
+import { useEffect, useMemo } from 'react';
 import { deduplicarNoticias } from '../../career/noticias';
 import { useGameStore } from '../../store/useGameStore';
 import { CmCareerShell } from '../cm/CmCareerShell';
 import { CmPanel } from '../cm/CmShell';
 
+function ehNoticiaSub23(n: { id: string; titulo: string; texto: string }): boolean {
+  return (
+    /sub23|aspirantes|s23/i.test(n.id) ||
+    /sub23|aspirantes|s23/i.test(n.titulo) ||
+    /sub-23|sub23|aspirantes/i.test(n.texto)
+  );
+}
+
 export function NewsScreen() {
-  const noticias = deduplicarNoticias(useGameStore((s) => s.noticias));
+  const todas = deduplicarNoticias(useGameStore((s) => s.noticias));
+  const modoSub23 = useGameStore((s) => s.modoSub23);
   const marcarLidas = useGameStore((s) => s.marcarNoticiasComoLidas);
+
+  const noticias = useMemo(
+    () => (modoSub23 ? todas.filter(ehNoticiaSub23) : todas),
+    [modoSub23, todas],
+  );
 
   useEffect(() => {
     marcarLidas();
   }, [marcarLidas, noticias.length]);
 
   return (
-    <CmCareerShell titulo="Notícias" subtitulo="Imprensa e bastidores do clube">
+    <CmCareerShell
+      titulo="Notícias"
+      subtitulo={
+        modoSub23
+          ? 'Imprensa do Sub23 — resultados e promoções'
+          : 'Imprensa e bastidores do clube'
+      }
+    >
       {noticias.length === 0 ? (
-        <p className="text-sm text-zinc-500">Nenhuma notícia ainda.</p>
+        <p className="text-sm text-zinc-500">
+          {modoSub23
+            ? 'Nenhuma notícia do Sub23 ainda. Avance o calendário profissional para sincronizar rodadas.'
+            : 'Nenhuma notícia ainda.'}
+        </p>
       ) : (
         <ul className="space-y-3">
           {noticias.map((n) => (

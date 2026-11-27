@@ -32,6 +32,7 @@ export function FinancesScreen() {
   const timesReais = useGameStore((s) => s.timesReais);
   const financas = useGameStore((s) => s.financas);
   const comercial = useGameStore((s) => s.comercial);
+  const modoSub23 = useGameStore((s) => s.modoSub23);
   const definirPoliticaIngressos = useGameStore((s) => s.definirPoliticaIngressos);
   const aceitarPropostaTvComercial = useGameStore((s) => s.aceitarPropostaTvComercial);
   const recusarPropostaTvComercial = useGameStore((s) => s.recusarPropostaTvComercial);
@@ -58,8 +59,18 @@ export function FinancesScreen() {
   return (
     <CmCareerShell
       titulo="Finanças do clube"
-      subtitulo={`${clube?.nome_completo ?? 'Clube'} · Caixa ${formatarDinheiro(financas.saldo_caixa)}`}
+      subtitulo={`${clube?.nome_completo ?? 'Clube'} · Caixa ${formatarDinheiro(financas.saldo_caixa)}${
+        modoSub23 ? ' · somente leitura (Sub23)' : ''
+      }`}
     >
+      {modoSub23 && (
+        <CmPanel className="mb-4 border-sky-900/50 bg-sky-950/20">
+          <p className="text-sm text-sky-100">
+            Finanças do clube em modo visualização. Políticas e propostas só podem ser alteradas no
+            profissional.
+          </p>
+        </CmPanel>
+      )}
       {financas.salarios_atrasados && (
         <CmPanel className="mb-4 border-rose-900/60 bg-rose-950/30">
           <p className="text-sm text-rose-200">
@@ -167,12 +178,13 @@ export function FinancesScreen() {
                 <button
                   key={p}
                   type="button"
+                  disabled={modoSub23}
                   onClick={() => definirPoliticaIngressos(p)}
                   className={`rounded border px-3 py-1.5 text-sm ${
                     comercial.politicaIngressosPadrao === p
                       ? 'border-emerald-500 bg-emerald-950/50 text-emerald-200'
                       : 'border-zinc-600 text-zinc-300 hover:border-zinc-500'
-                  }`}
+                  } ${modoSub23 ? 'cursor-not-allowed opacity-60' : ''}`}
                 >
                   {ROTULO_POLITICA[p]}
                 </button>
@@ -183,8 +195,9 @@ export function FinancesScreen() {
             </p>
           </CmPanel>
 
-          {(comercial.propostasTvPendentes.length > 0 ||
-            comercial.propostasPatrocinioPendentes.length > 0) && (
+          {!modoSub23 &&
+            (comercial.propostasTvPendentes.length > 0 ||
+              comercial.propostasPatrocinioPendentes.length > 0) && (
             <div className="mb-4 space-y-3">
               <h3 className="text-sm font-semibold text-zinc-200">Propostas pendentes</h3>
               {comercial.propostasTvPendentes.map((p) => (

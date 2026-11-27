@@ -37,6 +37,7 @@ export function TransfersScreen() {
   const jogadoresReais = useGameStore((s) => s.jogadoresReais);
   const financas = useGameStore((s) => s.financas);
   const negociacoes = useGameStore((s) => s.negociacoesTransferencia);
+  const modoSub23 = useGameStore((s) => s.modoSub23);
   const iniciarCompra = useGameStore((s) => s.iniciarNegociacaoCompra);
   const iniciarVenda = useGameStore((s) => s.iniciarNegociacaoVenda);
   const atualizarOferta = useGameStore((s) => s.atualizarOfertaNegociacao);
@@ -55,6 +56,7 @@ export function TransfersScreen() {
   const [visiveisVenda, setVisiveisVenda] = useState(ITENS_POR_PAGINA);
 
   const nomeClube = timesReais.find((t) => t.id === clubeRealId)?.nome ?? 'Seu clube';
+
   const elencoProprio = useMemo(
     () =>
       clubeRealId
@@ -89,6 +91,31 @@ export function TransfersScreen() {
   const restantesVenda = elencoProprio.length - visiveisVenda;
 
   const negAtiva = negociacoes.find((n) => n.id === negociacaoAtiva) ?? negociacoes[0] ?? null;
+
+  if (modoSub23) {
+    return (
+      <CmCareerShell
+        titulo="Transferências Sub23"
+        subtitulo="Somente leitura — o Sub-23 não negocia no mercado"
+      >
+        <CmPanel>
+          <p className="text-sm text-zinc-300">
+            Atletas Sub-23 não entram em compras ou vendas. A única forma de movê-los ao
+            profissional é pela promoção em Elenco (“Subir profissional”).
+          </p>
+          <p className="mt-2 text-xs text-zinc-500">
+            Negociações ativas do clube profissional: {negociacoes.length}. Volte ao profissional
+            para gerenciar o mercado.
+          </p>
+          {financas && (
+            <p className="mt-2 text-xs text-zinc-500">
+              Caixa do clube (referência): {formatarDinheiro(financas.saldo_caixa)}
+            </p>
+          )}
+        </CmPanel>
+      </CmCareerShell>
+    );
+  }
 
   if (!clubeRealId || !financas) {
     return (

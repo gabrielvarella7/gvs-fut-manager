@@ -1,5 +1,6 @@
 import { classesZonaTabela, LEGENDA_ZONAS, zonaNaPosicao } from '../../career/classificacaoZonas';
 import { formatarDataBr, ordenarTabela } from '../../career/brasileirao';
+import { rotuloCompeticaoSub23 } from '../../types/aspirantesS23';
 import { useGameStore } from '../../store/useGameStore';
 import { CmCareerShell } from '../cm/CmCareerShell';
 import { CmPanel } from '../cm/CmShell';
@@ -7,19 +8,36 @@ import { CmPanel } from '../cm/CmShell';
 export function ClassificationScreen() {
   const campeonato = useGameStore((s) => s.campeonato);
   const brasileirao = useGameStore((s) => s.brasileirao);
+  const aspirantes = useGameStore((s) => s.aspirantesS23);
+  const modoSub23 = useGameStore((s) => s.modoSub23);
   const clubeRealId = useGameStore((s) => s.clubeRealId);
   const timesReais = useGameStore((s) => s.timesReais);
 
-  const tabela = brasileirao ? ordenarTabela(brasileirao.tabela, campeonato) : [];
+  const nomeComp = modoSub23
+    ? rotuloCompeticaoSub23(campeonato?.nome)
+    : (campeonato?.nome ?? 'Brasileirão');
+
+  const tabela = modoSub23
+    ? aspirantes
+      ? [...aspirantes.tabela].sort(
+          (a, b) => b.pontos - a.pontos || b.saldo_gols - a.saldo_gols || b.gols_pro - a.gols_pro,
+        )
+      : []
+    : brasileirao
+      ? ordenarTabela(brasileirao.tabela, campeonato)
+      : [];
+
   const porNome = new Map(timesReais.map((t) => [t.id, t.nome]));
+  const rodada = modoSub23 ? aspirantes?.rodadaAtual : brasileirao?.rodadaAtual;
+  const dataISO = !modoSub23 ? brasileirao?.dataAtualISO : undefined;
 
   return (
     <CmCareerShell
       titulo="Classificação"
       subtitulo={
-        brasileirao
-          ? `${campeonato?.nome ?? 'Brasileirão'} · Rodada ${brasileirao.rodadaAtual}/38 · ${formatarDataBr(brasileirao.dataAtualISO)}`
-          : 'Brasileirão'
+        rodada != null
+          ? `${nomeComp} · Rodada ${rodada}/38${dataISO ? ` · ${formatarDataBr(dataISO)}` : ''}`
+          : nomeComp
       }
     >
       <CmPanel className="overflow-x-auto">
@@ -42,8 +60,8 @@ export function ClassificationScreen() {
             {tabela.map((l, i) => {
               const pos = i + 1;
               const destaque = l.time_id === clubeRealId;
-              const zona = zonaNaPosicao(pos, campeonato);
-              const classes = classesZonaTabela(zona);
+              const zona = modoSub23 ? null : zonaNaPosicao(pos, campeonato);
+              const classes = zona ? classesZonaTabela(zona) : { linha: '', posicao: '' };
               return (
                 <tr
                   key={l.time_id}
@@ -54,6 +72,7 @@ export function ClassificationScreen() {
                   <td className={`py-2 pr-2 ${classes.posicao}`}>{pos}</td>
                   <td className="py-2 font-medium text-zinc-100">
                     {porNome.get(l.time_id) ?? l.time_id}
+                    {modoSub23 ? ' Sub23' : ''}
                   </td>
                   <td className="py-2 text-center font-semibold">{l.pontos}</td>
                   <td className="py-2 text-center">{l.jogos}</td>
@@ -69,16 +88,19 @@ export function ClassificationScreen() {
           </tbody>
         </table>
       </CmPanel>
-      <ul className="mt-4 flex flex-wrap gap-3 text-xs text-zinc-400">
-        {LEGENDA_ZONAS.map((item) => (
-          <li key={item.texto} className="flex items-center gap-2">
-            <span className={`h-2.5 w-2.5 rounded-full ${item.cor}`} />
-            {item.texto}
-          </li>
-        ))}
-      </ul>
+      {!modoSub23 && (
+        <ul className="mt-4 flex flex-wrap gap-3 text-xs text-zinc-400">
+          {LEGENDA_ZONAS.map((item) => (
+            <li key={item.texto} className="flex items-center gap-2">
+              <span className={`h-2.5 w-2.5 rounded-full ${item.cor}`} />
+              {item.texto}
+            </li>
+          ))}
+        </ul>
+      )}
       <p className="mt-2 text-xs text-zinc-600">
         Ordem: pontos, vitórias, saldo de gols, gols marcados.
+        {modoSub23 ? ' · Mesmas zonas do Brasileirão profissional, disputado entre elencos Sub23.' : ''}
       </p>
     </CmCareerShell>
   );

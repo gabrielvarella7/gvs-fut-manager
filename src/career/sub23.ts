@@ -389,7 +389,7 @@ export function atletaSub23ParaProfissional(
     suscetibilidade: {
       indice: 35,
       camada: 'RELUTANTE',
-      motivo_principal: 'Promovido do Sub-23 — Campeonato de Aspirantes.',
+      motivo_principal: 'Promovido do Sub-23 — Brasileirão Sub23.',
     },
   };
 }
@@ -468,7 +468,7 @@ export function promoverSub23ParaPro(params: {
       id: `sub23_promo_${atleta.id}_${params.rodada}`,
       data: new Date().toISOString(),
       titulo: 'Subida ao profissional',
-      texto: `${atleta.nome} (${atleta.posicao}, OVR ${atleta.overall}, ${rotuloTierBase(atleta.tier)}) sobe do Sub-23. 1º contrato assinado. ${reposicao.nome} entra no lugar no Campeonato de Aspirantes.`,
+      texto: `${atleta.nome} (${atleta.posicao}, OVR ${atleta.overall}, ${rotuloTierBase(atleta.tier)}) sobe do Sub-23. 1º contrato assinado. ${reposicao.nome} entra no lugar no Brasileirão Sub23.`,
     },
   ];
 

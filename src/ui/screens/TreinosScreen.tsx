@@ -21,6 +21,7 @@ export function TreinosScreen() {
   const timesReais = useGameStore((s) => s.timesReais);
   const esquema = useGameStore((s) => s.esquemaAtual);
   const dbTreinos = useGameStore((s) => s.dbTreinos);
+  const modoSub23 = useGameStore((s) => s.modoSub23);
   const aplicar = useGameStore((s) => s.aplicarTreinoSemana);
   const atualizarProgramacao = useGameStore((s) => s.atualizarProgramacaoTreino);
   const definirPlano = useGameStore((s) => s.definirPlanoIndividualTreino);
@@ -69,6 +70,26 @@ export function TreinosScreen() {
     setFeedback(err ?? 'Semana processada — bônus ativos no próximo jogo.');
     window.setTimeout(() => setFeedback(null), 6000);
   };
+
+  if (modoSub23) {
+    return (
+      <CmCareerShell
+        titulo="Treinos Sub23"
+        subtitulo="Somente leitura — preparação física e microciclos pela IA"
+      >
+        <CmPanel>
+          <p className="text-sm text-zinc-300">
+            O Sub-23 não usa a programação de treinos do profissional. A IA cuida da preparação dos
+            aspirantes automaticamente entre as rodadas do Brasileirão Sub23.
+          </p>
+          <p className="mt-2 text-xs text-zinc-500">
+            Nenhuma sessão pode ser editada neste modo. Volte ao profissional para treinar o elenco
+            principal.
+          </p>
+        </CmPanel>
+      </CmCareerShell>
+    );
+  }
 
   if (!dbTreinos || !prog) {
     return (
