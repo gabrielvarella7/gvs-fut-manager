@@ -17,6 +17,7 @@ import type {
   TierCategoriaBase,
 } from '../types/mundoClube';
 import {
+  calibrarAtributosParaOverall,
   gerarAtributosNovos,
   overallDeAtributos,
 } from './atributosJogador';
@@ -43,14 +44,33 @@ export const PRIMEIRO_CONTRATO_MESES = 36;
 export const SALARIO_BASE_MIN = 15_000;
 export const SALARIO_BASE_MAX = 35_000;
 
-const TIER_RANGES: Record<
-  TierCategoriaBase,
-  { ovrMin: number; ovrMax: number; tetoMin: number; tetoMax: number }
-> = {
-  FRACO: { ovrMin: 54, ovrMax: 60, tetoMin: 61, tetoMax: 66 },
-  MEDIO: { ovrMin: 61, ovrMax: 65, tetoMin: 68, tetoMax: 74 },
-  BOM: { ovrMin: 65, ovrMax: 70, tetoMin: 76, tetoMax: 83 },
-  CRAQUE: { ovrMin: 70, ovrMax: 75, tetoMin: 85, tetoMax: 94 },
+/**
+ * Pirâmide de OVR inicial na aparição/promoção da base (Sub-20 / Sub-23).
+ * Potencial (teto) é sorteado à parte — um 56 pode crescer até 90 via evolução.
+ * Nunca gera OVR > 80 na base.
+ */
+export const OVR_INICIAL_BASE_MAX = 80;
+export const OVR_INICIAL_BASE_MIN = 48;
+
+export const PIRAMIDE_OVR_INICIAL_BASE: ReadonlyArray<{
+  peso: number;
+  ovrMin: number;
+  ovrMax: number;
+  rotulo: string;
+}> = [
+  { peso: 60, ovrMin: OVR_INICIAL_BASE_MIN, ovrMax: 60, rotulo: '≤60' },
+  { peso: 25, ovrMin: 61, ovrMax: 65, rotulo: '61–65' },
+  { peso: 10, ovrMin: 66, ovrMax: 70, rotulo: '66–70' },
+  { peso: 4, ovrMin: 71, ovrMax: 75, rotulo: '71–75' },
+  { peso: 1, ovrMin: 76, ovrMax: 80, rotulo: '76–80' },
+];
+
+/** Tetos de potencial por tier — independentes do OVR inicial. */
+const TIER_TETO: Record<TierCategoriaBase, { tetoMin: number; tetoMax: number }> = {
+  FRACO: { tetoMin: 61, tetoMax: 66 },
+  MEDIO: { tetoMin: 68, tetoMax: 74 },
+  BOM: { tetoMin: 76, tetoMax: 83 },
+  CRAQUE: { tetoMin: 85, tetoMax: 94 },
 };
 
 export function normalizarFocoBase(
@@ -101,7 +121,26 @@ function sortearTier(pesos: Record<TierCategoriaBase, number>, rnd: () => number
 }
 
 function randInt(rnd: () => number, min: number, max: number): number {
-  return min + Math.floor(rnd() * (max - min + 1));
+  const lo = Math.min(min, max);
+  const hi = Math.max(min, max);
+  return lo + Math.floor(rnd() * (hi - lo + 1));
+}
+
+/** Sorteia OVR-alvo na aparição da base conforme a pirâmide de frequência. */
+export function sortearOvrInicialBase(rnd: () => number): number {
+  const total = PIRAMIDE_OVR_INICIAL_BASE.reduce((s, b) => s + b.peso, 0);
+  let r = rnd() * total;
+  for (const band of PIRAMIDE_OVR_INICIAL_BASE) {
+    r -= band.peso;
+    if (r <= 0) return randInt(rnd, band.ovrMin, band.ovrMax);
+  }
+  const fallback = PIRAMIDE_OVR_INICIAL_BASE[0]!;
+  return randInt(rnd, fallback.ovrMin, fallback.ovrMax);
+}
+
+/** Garante overall final da base ≤ 80 (e ≥ piso). */
+export function clampOvrInicialBase(overall: number): number {
+  return Math.max(OVR_INICIAL_BASE_MIN, Math.min(OVR_INICIAL_BASE_MAX, Math.round(overall)));
 }
 
 function proximoIdJogador(jogadores: Jogador[], sub20: JovemSub20[]): number {
@@ -188,37 +227,35 @@ export function gerarJovemSub20(params: {
   const { id, nome, posicao, idade, foco, qualidade, diretor, rodada, rnd } = params;
   const pesos = pesosTierBase(qualidade, diretor);
   const tier = sortearTier(pesos, rnd);
-  const range = TIER_RANGES[tier];
+  const tetoRange = TIER_TETO[tier];
 
-  // ~20% precoce estagnado (OVR alto, teto baixo); diamante bruto (OVR baixo, teto alto)
+  // ~20% precoce estagnado (teto baixo); diamante bruto (teto alto) — OVR segue a pirâmide
   const rollEspecial = rnd();
   const precoceEstagnado = rollEspecial < 0.2 && (tier === 'BOM' || tier === 'MEDIO' || tier === 'CRAQUE');
   const diamanteBruto =
     !precoceEstagnado && rollEspecial >= 0.2 && rollEspecial < 0.35 && (tier === 'FRACO' || tier === 'MEDIO');
 
-  let ovrAlvo = randInt(rnd, range.ovrMin, range.ovrMax);
-  let tetoAlvo = randInt(rnd, range.tetoMin, range.tetoMax);
+  const ovrAlvo = sortearOvrInicialBase(rnd);
+  let tetoAlvo = randInt(rnd, tetoRange.tetoMin, tetoRange.tetoMax);
 
   if (precoceEstagnado) {
-    ovrAlvo = Math.min(75, ovrAlvo + randInt(rnd, 3, 6));
     tetoAlvo = Math.min(tetoAlvo, ovrAlvo + randInt(rnd, 1, 3));
   }
   if (diamanteBruto) {
-    ovrAlvo = Math.max(52, ovrAlvo - randInt(rnd, 2, 5));
     tetoAlvo = Math.max(tetoAlvo, ovrAlvo + randInt(rnd, 14, 22));
     tetoAlvo = Math.min(94, tetoAlvo);
   }
 
   const bonus = bonusAttrsElite(qualidade, diretor, rnd);
-  // forcaBase ~ escala usada em gerarAtributosNovos (overall≈forca)
+  // forcaBase ~ escala usada em gerarAtributosNovos; calibra attrs ao OVR da pirâmide
   let atributos = gerarAtributosNovos(posicao, ovrAlvo, id, idade, rnd);
   atributos = aplicarBonusAtributos(atributos, bonus, rnd);
-  let overall = overallDeAtributos(posicao, atributos);
-  // Ajuste fino se overall ficou longe do alvo
-  if (Math.abs(overall - ovrAlvo) > 4) {
-    atributos = gerarAtributosNovos(posicao, ovrAlvo + (ovrAlvo - overall) * 0.5, id + 17, idade, rnd);
-    atributos = aplicarBonusAtributos(atributos, bonus, rnd);
-    overall = overallDeAtributos(posicao, atributos);
+  const ovrFinal = clampOvrInicialBase(ovrAlvo);
+  atributos = calibrarAtributosParaOverall(posicao, atributos, ovrFinal);
+  let overall = clampOvrInicialBase(overallDeAtributos(posicao, atributos));
+  if (overall !== ovrFinal) {
+    atributos = calibrarAtributosParaOverall(posicao, atributos, ovrFinal);
+    overall = ovrFinal;
   }
 
   const potencialOvr = Math.max(overall + 1, tetoAlvo);

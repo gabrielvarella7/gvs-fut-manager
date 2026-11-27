@@ -1,81 +1,68 @@
 /**
- * Smoke: Sub-23 OVR na aparição vs plantel pro (5% top-11 / 95% ≤ resto).
+ * Smoke: OVR inicial da base (Sub-20 / Sub-23) segue pirâmide 60/25/10/4/1, teto 80.
+ * Potencial permanece independente (pode ser alto com OVR baixo).
  * Run: npx --yes tsx scripts/smoke-sub23-ovr-plantel.mjs
  */
 import assert from 'node:assert/strict';
+import { gerarAtletaSub23, gerarElencoSub23Clube } from '../src/career/sub23.ts';
 import {
-  CHANCE_OVR_NIVEL_TITULARES,
-  gerarAtletaSub23,
-  gerarElencoSub23Clube,
-  referenciasOvrPlantelPro,
-  sortearOvrAlvoVsPlantel,
-} from '../src/career/sub23.ts';
+  clampOvrInicialBase,
+  gerarJovemSub20,
+  OVR_INICIAL_BASE_MAX,
+  PIRAMIDE_OVR_INICIAL_BASE,
+  sortearOvrInicialBase,
+} from '../src/career/youthAcademy.ts';
 import { criarRng } from '../src/engine/matchEngine.ts';
 
-function media(ns) {
-  return ns.reduce((s, n) => s + n, 0) / Math.max(1, ns.length);
+function bandaDe(ovr) {
+  if (ovr <= 60) return 0;
+  if (ovr <= 65) return 1;
+  if (ovr <= 70) return 2;
+  if (ovr <= 75) return 3;
+  if (ovr <= 80) return 4;
+  return -1;
 }
 
-function plantelStub(top11Avg, restAvg, nRest = 14) {
-  const elenco = [];
-  for (let i = 0; i < 11; i++) elenco.push({ overall: Math.round(top11Avg) });
-  for (let i = 0; i < nRest; i++) elenco.push({ overall: Math.round(restAvg) });
-  return elenco;
-}
-
-// --- referenciasOvrPlantelPro ---
+// --- constantes da pirâmide ---
 {
-  const refs = referenciasOvrPlantelPro(plantelStub(80, 70));
-  assert.ok(Math.abs(refs.mediaTop11 - 80) < 0.01, 'mediaTop11');
-  assert.ok(Math.abs(refs.mediaResto - 70) < 0.01, 'mediaResto');
-  const empty = referenciasOvrPlantelPro([]);
-  assert.equal(empty.mediaTop11, 72);
-  assert.equal(empty.mediaResto, 64);
+  assert.equal(OVR_INICIAL_BASE_MAX, 80);
+  assert.equal(PIRAMIDE_OVR_INICIAL_BASE.reduce((s, b) => s + b.peso, 0), 100);
+  assert.deepEqual(
+    PIRAMIDE_OVR_INICIAL_BASE.map((b) => b.peso),
+    [60, 25, 10, 4, 1],
+  );
+  assert.equal(clampOvrInicialBase(99), 80);
+  assert.equal(clampOvrInicialBase(40), 48);
 }
 
-// --- sortearOvrAlvoVsPlantel distribution ---
+// --- sortearOvrInicialBase distribuição ---
 {
-  const mediaTop11 = 80;
-  const mediaResto = 70;
-  const N = 4000;
-  let titulares = 0;
-  let restoOk = 0;
-  let restoEstourou = 0;
+  const N = 8000;
+  const counts = [0, 0, 0, 0, 0];
   const rnd = criarRng(0x50b23);
   for (let i = 0; i < N; i++) {
-    const r = sortearOvrAlvoVsPlantel({
-      mediaTop11,
-      mediaResto,
-      tier: 'MEDIO',
-      precoceEstagnado: false,
-      diamanteBruto: false,
-      rnd,
-    });
-    if (r.nivelTitulares) {
-      titulares += 1;
-      assert.ok(r.ovrAlvo >= mediaTop11 - 2 && r.ovrAlvo <= mediaTop11 + 3, 'titulares band');
-    } else {
-      if (r.ovrAlvo <= Math.floor(mediaResto)) restoOk += 1;
-      else restoEstourou += 1;
-    }
+    const ovr = sortearOvrInicialBase(rnd);
+    assert.ok(ovr >= 48 && ovr <= 80, `alvo fora da faixa: ${ovr}`);
+    const b = bandaDe(ovr);
+    assert.ok(b >= 0, `banda inválida ${ovr}`);
+    counts[b] += 1;
   }
-  const pct = titulares / N;
-  assert.ok(pct > 0.03 && pct < 0.08, `~5% titulares got ${pct}`);
-  assert.equal(restoEstourou, 0, '95% path never exceeds rest avg');
-  assert.ok(restoOk / (N - titulares) > 0.99, 'rest band');
-  assert.equal(CHANCE_OVR_NIVEL_TITULARES, 0.05);
+  const expected = PIRAMIDE_OVR_INICIAL_BASE.map((b) => b.peso / 100);
+  for (let i = 0; i < 5; i++) {
+    const pct = counts[i] / N;
+    assert.ok(
+      Math.abs(pct - expected[i]) < 0.025,
+      `banda ${i} got ${pct.toFixed(3)} expected ~${expected[i]}`,
+    );
+  }
 }
 
-// --- gerarAtletaSub23 respects plantel caps ---
+// --- gerarAtletaSub23 respeita pirâmide + never >80 ---
 {
-  const elencoPro = plantelStub(82, 71);
-  const refs = referenciasOvrPlantelPro(elencoPro);
   const rnd = criarRng(0xcafebabe);
-  const N = 220;
-  const tetoResto = Math.floor(refs.mediaResto);
-  const capTitulares = Math.ceil(refs.mediaTop11 + 2);
-  let acimaResto = 0;
-  const ovrs = [];
+  const N = 500;
+  const counts = [0, 0, 0, 0, 0];
+  let potencialAltoComOvrBaixo = 0;
   for (let i = 0; i < N; i++) {
     const a = gerarAtletaSub23({
       id: 900_000 + i,
@@ -87,48 +74,58 @@ function plantelStub(top11Avg, restAvg, nRest = 14) {
       rodada: 0,
       seed: 1000 + i,
       rnd,
-      elencoPro,
     });
-    ovrs.push(a.overall);
-    assert.ok(a.overall <= capTitulares, `never above titulares cap (${a.overall})`);
-    if (a.overall > tetoResto) {
-      acimaResto += 1;
-      // 5% path: near top-11 (allow diamante/attr drift)
-      assert.ok(
-        a.overall >= Math.round(refs.mediaTop11) - 6,
-        `above-rest OVR ${a.overall} should be starters-quality vs top11 ${refs.mediaTop11}`,
-      );
-    }
+    assert.ok(a.overall <= OVR_INICIAL_BASE_MAX, `OVR ${a.overall} > 80`);
+    assert.ok(a.overall >= 48, `OVR ${a.overall} < 48`);
+    const b = bandaDe(a.overall);
+    assert.ok(b >= 0, `overall ${a.overall} above 80`);
+    counts[b] += 1;
+    if (a.overall <= 60 && a.potencialOvr >= 85) potencialAltoComOvrBaixo += 1;
   }
-  const pctAltos = acimaResto / N;
-  assert.ok(pctAltos > 0.02 && pctAltos < 0.12, `~5% above rest got ${pctAltos}`);
-  assert.ok(media(ovrs) <= refs.mediaResto + 1.5, `mean OVR ${media(ovrs)} vs resto ${refs.mediaResto}`);
-  // Regression vs bug screenshot (many 78–82 when rest avg ~71)
-  const muitoAltos = ovrs.filter((o) => o >= 78).length;
-  assert.ok(muitoAltos / N < 0.15, `≥78 share ${muitoAltos / N} should be rare when resto=71`);
+  // Distribuição aproximada (attrs podem deslocar um pouco a banda)
+  assert.ok(counts[0] / N > 0.45, `≤60 share ${counts[0] / N}`);
+  assert.ok(counts[4] / N < 0.05, `76–80 share ${counts[4] / N} should be rare`);
+  assert.ok(
+    potencialAltoComOvrBaixo > 0,
+    'potencial independente: ao menos um ≤60 com teto ≥85',
+  );
 }
 
-// --- elenco generation wires plantel ---
+// --- gerarJovemSub20 mesma regra ---
 {
-  const elencoPro = plantelStub(78, 68);
+  const rnd = criarRng(0xabcdef);
+  const N = 300;
+  for (let i = 0; i < N; i++) {
+    const j = gerarJovemSub20({
+      id: 1000 + i,
+      nome: `J${i}`,
+      posicao: 'ATA',
+      idade: 17,
+      foco: 'EQUILIBRADO',
+      qualidade: 14,
+      diretor: 12,
+      rodada: 1,
+      seed: 50 + i,
+      rnd,
+    });
+    assert.ok(j.overall <= 80, `Sub-20 OVR ${j.overall}`);
+    assert.ok(j.potencialOvr >= j.overall, 'potencial ≥ overall');
+  }
+}
+
+// --- elenco Sub-23 completo ---
+{
   const { elenco } = gerarElencoSub23Clube({
     time: { id: 'flu', nome: 'Flu', prestigio: 80, forca_geral: 78 },
     qualidade: 14,
     diretor: 12,
     seed: 42,
     idInicio: 700_000,
-    elencoPro,
   });
   assert.equal(elenco.length, 22);
-  const refs = referenciasOvrPlantelPro(elencoPro);
-  const altos = elenco.filter((a) => a.overall > Math.floor(refs.mediaResto) + 2);
-  for (const a of altos) {
-    assert.ok(
-      a.overall <= Math.ceil(refs.mediaTop11 + 2),
-      `${a.nome} OVR ${a.overall} above titulares cap`,
-    );
-  }
-  assert.ok(altos.length <= 4, `at most a few starters-quality in 22, got ${altos.length}`);
+  assert.ok(elenco.every((a) => a.overall <= 80), 'nenhum Sub-23 >80');
+  const media = elenco.reduce((s, a) => s + a.overall, 0) / elenco.length;
+  assert.ok(media < 68, `média elenco ${media} deve ficar baixa (pirâmide)`);
 }
 
-console.log('smoke-sub23-ovr-plantel: ok');
+console.log('smoke-sub23-ovr-plantel: ok (pirâmide base)');

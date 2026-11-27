@@ -8,6 +8,7 @@ import {
   ctBaseNivel5,
   MSG_PLANTEL_CHEIO,
   pesosTierBase,
+  PIRAMIDE_OVR_INICIAL_BASE,
   plantelProfissionalCount,
   rotuloTierBase,
   TETO_PLANTEL_PROFISSIONAL,
@@ -102,10 +103,15 @@ export function BaseScreen() {
             <p className="mt-1 text-xs text-zinc-500">
               Safra anual (4–7) + gotejamento a cada 12–13 rodadas · chance de fluxo ~{chance}%
             </p>
+            <p className="mt-2 text-xs text-zinc-500">
+              OVR na aparição:{' '}
+              {PIRAMIDE_OVR_INICIAL_BASE.map((b) => `${b.peso}% ${b.rotulo}`).join(' · ')} · nunca
+              {'>'}80 · potencial independente
+            </p>
             {pesos && (
-              <p className="mt-2 text-xs text-zinc-500">
-                Tiers (Fraco {pesos.FRACO}% · Médio {pesos.MEDIO}% · Bom {pesos.BOM}% · Craque{' '}
-                {pesos.CRAQUE}%)
+              <p className="mt-1 text-xs text-zinc-500">
+                Teto/potencial (Fraco {pesos.FRACO}% · Médio {pesos.MEDIO}% · Bom {pesos.BOM}% ·
+                Craque {pesos.CRAQUE}%)
                 {ct5 && diretor >= 18 ? ' — CT Nv5 + diretor 18+ turbinam Bons/Craques.' : ''}
               </p>
             )}
