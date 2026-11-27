@@ -1,3 +1,4 @@
+import { useEffect } from 'react';
 import { deduplicarNoticias } from '../../career/noticias';
 import { useGameStore } from '../../store/useGameStore';
 import { CmCareerShell } from '../cm/CmCareerShell';
@@ -5,6 +6,11 @@ import { CmPanel } from '../cm/CmShell';
 
 export function NewsScreen() {
   const noticias = deduplicarNoticias(useGameStore((s) => s.noticias));
+  const marcarLidas = useGameStore((s) => s.marcarNoticiasComoLidas);
+
+  useEffect(() => {
+    marcarLidas();
+  }, [marcarLidas, noticias.length]);
 
   return (
     <CmCareerShell titulo="Notícias" subtitulo="Imprensa e bastidores do clube">

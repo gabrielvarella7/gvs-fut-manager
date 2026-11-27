@@ -1,8 +1,49 @@
 @import 'tailwindcss';
 
+/*
+  Mestre Mou — paleta Argentina (celeste + azul + branco).
+  Remapeamos a escala "emerald" usada no app para tons celeste/azul,
+  assim botões, nav e acentos mudam de uma vez sem tema roxo genérico.
+*/
+@theme {
+  --color-emerald-50: #f0f7fc;
+  --color-emerald-100: #e0effa;
+  --color-emerald-200: #b9daf3;
+  --color-emerald-300: #8cc4ea;
+  --color-emerald-400: #74acdf;
+  --color-emerald-500: #5b9ad4;
+  --color-emerald-600: #3d7eb8;
+  --color-emerald-700: #1e5a96;
+  --color-emerald-800: #0f3d6e;
+  --color-emerald-900: #0a2748;
+  --color-emerald-950: #061628;
+
+  --color-brand-celeste: #74acdf;
+  --color-brand-azul: #0b3a6e;
+  --color-brand-navy: #061628;
+  --color-brand-branco: #f7fbff;
+}
+
+:root {
+  --mm-bg-0: #061628;
+  --mm-bg-1: #0a2748;
+  --mm-bg-2: #0f3d6e;
+  --mm-celeste: #74acdf;
+  --mm-celeste-soft: rgba(116, 172, 223, 0.18);
+  --mm-branco: #f7fbff;
+  --mm-texto: #e8f2fb;
+  --mm-muted: #9bb8d4;
+  --mm-accent: #5b9ad4;
+  --mm-border: rgba(116, 172, 223, 0.28);
+}
+
 body {
   margin: 0;
-  background: #0a0f0c;
+  color: var(--mm-texto);
+  background:
+    radial-gradient(120% 80% at 50% -10%, rgba(116, 172, 223, 0.22), transparent 55%),
+    linear-gradient(180deg, var(--mm-bg-0) 0%, var(--mm-bg-1) 45%, #040e1a 100%);
   padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom)
     env(safe-area-inset-left);
+  min-height: 100vh;
 }

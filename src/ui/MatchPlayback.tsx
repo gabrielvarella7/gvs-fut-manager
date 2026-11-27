@@ -22,6 +22,8 @@ type Props = {
   onProgress?: (p: PlaybackProgress) => void;
   resumeFrom?: PlaybackProgress | null;
   playbackKey?: string;
+  /** Disparado uma vez ao consumir o lance de intervalo. */
+  onIntervalo?: () => void;
 };
 
 function delayMs(atual: Lancamento, anterior: Lancamento | null, velocidade: number): number {
@@ -50,23 +52,30 @@ export function MatchPlayback({
   onProgress,
   resumeFrom = null,
   playbackKey,
+  onIntervalo,
 }: Props) {
   const [idx, setIdx] = useState(resumeFrom?.idx ?? 0);
   const [placar, setPlacar] = useState({ m: resumeFrom?.golsM ?? 0, v: resumeFrom?.golsV ?? 0 });
   const [aoVivo, setAoVivo] = useState(true);
   const listaRef = useRef<HTMLUListElement>(null);
+  const intervaloDisparadoRef = useRef(false);
   const lanc = result.lancamentos;
 
   useEffect(() => {
     if (resumeFrom) {
       setIdx(resumeFrom.idx);
       setPlacar({ m: resumeFrom.golsM, v: resumeFrom.golsV });
+      const jaPassouIntervalo = lanc
+        .slice(0, resumeFrom.idx)
+        .some((l) => l.tipo === 'intervalo');
+      intervaloDisparadoRef.current = jaPassouIntervalo;
     } else {
       setIdx(0);
       setPlacar({ m: 0, v: 0 });
+      intervaloDisparadoRef.current = false;
     }
     setAoVivo(true);
-  }, [result, playbackKey, resumeFrom]);
+  }, [result, playbackKey]); // resumeFrom sync only on key/result change — avoid reset loops
 
   useEffect(() => {
     if (pausado || !aoVivo || idx >= lanc.length) return;
@@ -83,10 +92,14 @@ export function MatchPlayback({
         );
       }
       setIdx((i) => i + 1);
+      if (atual.tipo === 'intervalo' && !intervaloDisparadoRef.current) {
+        intervaloDisparadoRef.current = true;
+        onIntervalo?.();
+      }
     }, delayMs(atual, anterior, velocidade));
 
     return () => window.clearTimeout(t);
-  }, [idx, lanc, result.mandanteId, aoVivo, velocidade, pausado]);
+  }, [idx, lanc, result.mandanteId, aoVivo, velocidade, pausado, onIntervalo]);
 
   useEffect(() => {
     if (idx >= lanc.length) setAoVivo(false);

@@ -1,10 +1,10 @@
-# GDD - GVS MANAGER (VERSÃO 1.0 - MVP)
+# GDD - Mestre Mou (VERSÃO 1.0 - MVP)
 > **Nota de Uso:** Este é o documento de escopo do Produto Mínimo Viável (MVP). Edite os itens entre `[colchetes]` para personalizar as regras antes de entregar este arquivo à IA no Cursor ou Claude Code.
 
 ---
 
 ## 1. VISÃO GERAL DO PROJETO
-* **Nome do Jogo:** GVS Manager
+* **Nome do Jogo:** Mestre Mou
 * **Gênero:** Simulador de Gerenciamento de Futebol (Estilo *Championship Manager* / *Brasfoot*).
 * **Plataforma Alvo:** [Web Navegador (HTML/CSS/JS ou React) / Desktop Windows (Python)]
 * **Objetivo da Versão 1.0:** Permitir que o jogador escolha um clube, defina a escalação titular, simule partidas em tempo real com narração em texto e dispute um campeonato de pontos corridos completo até o título.

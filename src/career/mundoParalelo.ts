@@ -284,49 +284,90 @@ function evoluiDaBase(j: Jogador, fatorStaff: number, foco: FocoCategoriaBase): 
   return Math.random() < 0.12 + fatorStaff * 0.18;
 }
 
-export function desenvolverElencoPosRodada(
+/** Progressão de overall só na virada de temporada (não por rodada). */
+export function tetoDeltaOverallPorIdade(idade: number): number {
+  if (idade < 23 || idade > 33) return 8;
+  return 4;
+}
+
+function focoAttrsPosicao(j: Jogador): (keyof Jogador['atributos']['tecnicos'])[] {
+  if (j.posicao === 'GOL') return ['dominio', 'cabeceio'];
+  if (j.posicao === 'ZAG' || j.posicao === 'LAT') return ['cabeceio', 'passe'];
+  if (j.posicao === 'VOL') return ['passe', 'lancamentos'];
+  if (j.posicao === 'ATA') return ['chute', 'drible'];
+  return ['passe', 'dominio'];
+}
+
+function aplicarDeltaOverall(j: Jogador, delta: number): Jogador {
+  if (delta === 0) return j;
+  const foco = focoAttrsPosicao(j);
+  let next = j;
+  const passos = Math.abs(delta);
+  for (let i = 0; i < passos; i++) {
+    if (delta > 0) next = evoluirJogadorUmPonto(next, foco);
+    else next = declinioVeterano(next);
+  }
+  return next;
+}
+
+/**
+ * Overall lento: 1× por temporada.
+ * Idade 23–33: máx ±4; muito jovem/velho: até ±8.
+ * Combina curva etária + desempenho em campo (participações / forma do time).
+ */
+export function desenvolverElencoFimTemporada(
   jogadores: Jogador[],
   mundo: EstadoMundoClube,
   clubeId: string,
+  opts: {
+    posicaoTabela: number;
+    vitoriaUser: boolean;
+    empateUser: boolean;
+    participacoes?: Record<number, number>;
+  },
 ): Jogador[] {
   const diretor = nivelDiretorBase(mundo);
   const fatorStaff = (mundo.base.qualidade + diretor) / 40;
+  const formaTime =
+    opts.vitoriaUser ? 1 : opts.empateUser ? 0.35 : opts.posicaoTabela <= 10 ? -0.2 : -0.55;
+  const pressaoTabela = opts.posicaoTabela <= 4 ? 0.4 : opts.posicaoTabela >= 17 ? -0.35 : 0;
+
   return jogadores.map((j) => {
     if (j.time_id !== clubeId) return j;
+
+    // Base de categorias continua evoluindo um pouco na virada (ainda dentro do teto).
     if (j.formacaoBase?.foco === 'VENDER' && evoluiDaBase(j, fatorStaff, 'VENDER')) {
-      const foco: (keyof Jogador['atributos']['tecnicos'])[] =
-        j.posicao === 'ATA' ? ['chute', 'drible'] : ['passe', 'dominio'];
-      return evoluirJogadorUmPonto(j, foco);
+      return aplicarDeltaOverall(j, Math.min(tetoDeltaOverallPorIdade(j.idade), 2 + Math.round(fatorStaff)));
     }
     if (j.formacaoBase?.foco === 'PROFISSIONALIZAR' && evoluiDaBase(j, fatorStaff, 'PROFISSIONALIZAR')) {
-      const foco: (keyof Jogador['atributos']['tecnicos'])[] =
-        j.posicao === 'GOL' ? ['dominio', 'cabeceio']
-        : j.posicao === 'ZAG' || j.posicao === 'LAT' ? ['cabeceio', 'passe']
-        : j.posicao === 'VOL' ? ['passe', 'lancamentos']
-        : j.posicao === 'ATA' ? ['chute', 'drible']
-        : ['passe', 'dominio'];
-      let next = evoluirJogadorUmPonto(j, foco);
-      if (Math.random() < 0.35) next = evoluirJogadorUmPonto(next, foco.slice(0, 2));
-      return next;
+      return aplicarDeltaOverall(j, Math.min(tetoDeltaOverallPorIdade(j.idade), 3 + Math.round(fatorStaff)));
     }
-    if (j.idade > 32) return declinioVeterano(j);
-    if (j.idade > 28) {
-      if (Math.random() > 0.15 * fatorStaff) return j;
-      return declinioVeterano(j);
-    }
-    if (j.idade > 23) {
-      if (Math.random() > 0.22 * fatorStaff) return j;
-      return j;
-    }
-    if (Math.random() > 0.35 + fatorStaff * 0.25) return j;
-    const foco: (keyof Jogador['atributos']['tecnicos'])[] =
-      j.posicao === 'GOL' ? ['dominio', 'cabeceio']
-      : j.posicao === 'ZAG' || j.posicao === 'LAT' ? ['cabeceio', 'passe']
-      : j.posicao === 'VOL' ? ['passe', 'lancamentos']
-      : j.posicao === 'ATA' ? ['chute', 'drible']
-      : ['passe', 'dominio'];
-    return evoluirJogadorUmPonto(j, foco.slice(0, 2));
+
+    const teto = tetoDeltaOverallPorIdade(j.idade);
+    const jogos = opts.participacoes?.[j.id] ?? 0;
+    const desempenhoCampo = Math.min(1.2, jogos / 28) * (0.55 + formaTime * 0.45 + pressaoTabela * 0.25);
+
+    let curvaIdade = 0;
+    if (j.idade <= 21) curvaIdade = 2.2 + fatorStaff * 1.5;
+    else if (j.idade <= 24) curvaIdade = 1.2 + fatorStaff;
+    else if (j.idade <= 28) curvaIdade = 0.25;
+    else if (j.idade <= 33) curvaIdade = -0.4;
+    else if (j.idade <= 36) curvaIdade = -1.8;
+    else curvaIdade = -3.2;
+
+    const bruto = curvaIdade + desempenhoCampo * (j.status_escalacao === 'TITULAR' ? 2.4 : 1.1);
+    const delta = Math.max(-teto, Math.min(teto, Math.round(bruto)));
+    return aplicarDeltaOverall(j, delta);
   });
+}
+
+/** @deprecated Preferir desenvolverElencoFimTemporada — mantido para compat. */
+export function desenvolverElencoPosRodada(
+  jogadores: Jogador[],
+  _mundo: EstadoMundoClube,
+  _clubeId: string,
+): Jogador[] {
+  return jogadores;
 }
 
 export function chancePromocaoBase(mundo: EstadoMundoClube): number {
@@ -757,7 +798,14 @@ export function tickMundoPosRodada(params: TickRodadaMundoParams): {
 
   mundo = gerarPedidosRenovacao(jogadores, mundo, params.rodada, params.clubeId);
 
-  jogadores = desenvolverElencoPosRodada(jogadores, mundo, params.clubeId);
+  // Overall não sobe/desce por rodada — só no fim da temporada (abaixo).
+  const participacoes = { ...(mundo.participacoesTemporada ?? {}) };
+  if (params.idsParticipantes?.length) {
+    for (const id of params.idsParticipantes) {
+      participacoes[id] = (participacoes[id] ?? 0) + 1;
+    }
+    mundo = { ...mundo, participacoesTemporada: participacoes };
+  }
 
   const promo = tentarPromoverDaBase(jogadores, mundo, params.time, params.rodada, params.seed ^ 0xabc);
   jogadores = promo.jogadores;
@@ -774,15 +822,12 @@ export function tickMundoPosRodada(params: TickRodadaMundoParams): {
   jogadores = mercado.jogadores;
   noticias.push(...mercado.noticias);
   if (mercado.rumorUsuario) {
-    const jAlvo = jogadores.find((j) => j.id === mercado.rumorUsuario.jogadorId);
+    const rumorBase = mercado.rumorUsuario;
+    const jAlvo = jogadores.find((j) => j.id === rumorBase.jogadorId);
     const rumor =
       jAlvo != null
-        ? enriquecerRumorEntrada(
-            mercado.rumorUsuario,
-            jAlvo,
-            params.brasileirao.dataAtualISO,
-          )
-        : mercado.rumorUsuario;
+        ? enriquecerRumorEntrada(rumorBase, jAlvo, params.brasileirao.dataAtualISO)
+        : rumorBase;
     mundo = {
       ...mundo,
       rumoresOfertas: [rumor, ...mundo.rumoresOfertas].slice(0, 8),
@@ -830,12 +875,20 @@ export function tickMundoPosRodada(params: TickRodadaMundoParams): {
   }
 
   if (params.rodada > 0 && params.rodada % 38 === 0) {
+    jogadores = desenvolverElencoFimTemporada(jogadores, mundo, params.clubeId, {
+      posicaoTabela: pos,
+      vitoriaUser: params.vitoriaUser,
+      empateUser: params.empateUser,
+      participacoes: mundo.participacoesTemporada,
+    });
     jogadores = jogadores.map((j) => ({ ...j, idade: j.idade + 1 }));
+    mundo = { ...mundo, participacoesTemporada: {} };
     noticias.push({
       id: `idade_${params.rodada}`,
       data: new Date().toISOString(),
       titulo: 'Virada de temporada',
-      texto: 'Idades do elenco atualizadas; veteranos podem perder rendimento físico.',
+      texto:
+        'Overall do elenco reavaliado (progressão lenta por temporada: até ±4 entre 23–33 anos, até ±8 nos extremos). Idades atualizadas.',
     });
   }
 

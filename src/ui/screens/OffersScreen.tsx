@@ -23,7 +23,7 @@ export function OffersScreen() {
   return (
     <CmCareerShell
       titulo="Propostas de clubes"
-      subtitulo={`${perfil?.nome ?? 'Técnico'} — pós-torneio de 3 jogos`}
+      subtitulo={`${perfil?.nome ?? 'Técnico'} — propostas de clubes profissionais`}
       mostrarNav={false}
       acoesExtras={
         <>
@@ -38,8 +38,11 @@ export function OffersScreen() {
     >
       <CmPanel className="mb-4">
         <p className="text-sm text-zinc-300">
-          Desempenho: {desempenho.pontos} pts · Nota {desempenho.nota.toFixed(1)}. Toque no clube
-          desejado e confirme com <strong className="font-medium text-emerald-200">Assumir o time</strong>.
+          {desempenho.pontos > 0 || desempenho.vitorias + desempenho.empates + desempenho.derrotas > 0
+            ? `Desempenho no torneio: ${desempenho.pontos} pts · Nota ${desempenho.nota.toFixed(1)}. `
+            : 'Carreira iniciada sem torneio — propostas dos clubes mais modestos. '}
+          Toque no clube desejado e confirme com{' '}
+          <strong className="font-medium text-emerald-200">Assumir o time</strong>.
         </p>
       </CmPanel>
       <ul className="space-y-3">

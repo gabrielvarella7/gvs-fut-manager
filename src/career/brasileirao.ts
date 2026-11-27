@@ -532,19 +532,29 @@ export function simularRestanteRodada(
 
   let indice = indiceProximaPartida(next);
   for (const p of pendentes) {
-    const { input, seed: s } = montarInputPartidaCpu(
-      p.mandanteId,
-      p.visitanteId,
-      times,
-      jogadores,
-      campeonato.bonus_mando_campo ?? 1.05,
-      seed,
-      next,
-    );
-    seed = (s * 1103515245 + 12345) >>> 0;
-    const r = simularPartidaCpu({ ...input, seed: s, indicePartidaTemporada: indice });
-    next = registrarPlacarPartida(next, p.id, r.golsMandante, r.golsVisitante, campeonato);
-    indice += 1;
+    try {
+      const { input, seed: s } = montarInputPartidaCpu(
+        p.mandanteId,
+        p.visitanteId,
+        times,
+        jogadores,
+        campeonato.bonus_mando_campo ?? 1.05,
+        seed,
+        next,
+      );
+      seed = (s * 1103515245 + 12345) >>> 0;
+      const r = simularPartidaCpu({ ...input, seed: s, indicePartidaTemporada: indice });
+      next = registrarPlacarPartida(next, p.id, r.golsMandante, r.golsVisitante, campeonato);
+      indice += 1;
+    } catch (err) {
+      // Evita truncar a temporada se um confronto CPU falhar (ex.: elenco dizimado por lesões).
+      console.error('Falha ao simular partida CPU', p.id, err);
+      const gm = (seed >>> 3) % 3;
+      const gv = (seed >>> 7) % 3;
+      next = registrarPlacarPartida(next, p.id, gm, gv, campeonato);
+      seed = (seed * 1103515245 + 12345) >>> 0;
+      indice += 1;
+    }
   }
   return next;
 }

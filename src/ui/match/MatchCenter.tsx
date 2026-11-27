@@ -28,6 +28,10 @@ type Props = {
   onPlaybackProgress?: (p: PlaybackProgress) => void;
   resumePlayback?: PlaybackProgress | null;
   playbackKey?: string;
+  /** Intervalo: partida pausada até o usuário iniciar o 2º tempo. */
+  aguardandoSegundoTempo?: boolean;
+  onIniciarSegundoTempo?: () => void;
+  onIntervalo?: () => void;
 };
 
 export function MatchCenter({
@@ -45,6 +49,9 @@ export function MatchCenter({
   onPlaybackProgress,
   resumePlayback,
   playbackKey,
+  aguardandoSegundoTempo = false,
+  onIniciarSegundoTempo,
+  onIntervalo,
 }: Props) {
   const [aba, setAba] = useState<Aba>('comentario');
   const [minuto, setMinuto] = useState(0);
@@ -59,6 +66,8 @@ export function MatchCenter({
     { id: 'comentario', label: 'Comentário' },
     { id: 'prejogo', label: 'Pré-jogo' },
   ];
+
+  const mostrarPlayback = aba === 'comentario' || aba === 'detalhes';
 
   return (
     <div className="space-y-3">
@@ -79,7 +88,8 @@ export function MatchCenter({
         ))}
       </nav>
 
-      {(aba === 'comentario' || aba === 'detalhes') && (
+      {/* Mantém montado para não resetar placar/tempo ao trocar de aba */}
+      <div className={mostrarPlayback ? undefined : 'hidden'} aria-hidden={!mostrarPlayback}>
         <MatchPlayback
           result={result}
           mandanteNome={mandanteNome}
@@ -94,8 +104,9 @@ export function MatchCenter({
           onProgress={onPlaybackProgress}
           resumeFrom={resumePlayback}
           playbackKey={playbackKey}
+          onIntervalo={onIntervalo}
         />
-      )}
+      </div>
 
       {aba === 'estatisticas' && stats && (
         <>
@@ -132,10 +143,39 @@ export function MatchCenter({
         />
       )}
 
+      {aguardandoSegundoTempo && (
+        <div className="rounded border border-amber-700/60 bg-amber-950/40 px-3 py-3 text-sm text-amber-100">
+          <p className="font-medium">Intervalo</p>
+          <p className="mt-1 text-xs text-amber-200/90">
+            Ajuste táticas se quiser. O segundo tempo só começa quando você confirmar.
+          </p>
+          <div className="mt-3 flex flex-wrap gap-2">
+            <CmBtn
+              onClick={() => {
+                onIniciarSegundoTempo?.();
+              }}
+            >
+              Iniciar o segundo tempo
+            </CmBtn>
+            <CmBtn
+              variant="ghost"
+              onClick={() => {
+                onPausado(true);
+                onTaticas();
+              }}
+            >
+              Táticas
+            </CmBtn>
+          </div>
+        </div>
+      )}
+
       <div className="flex flex-wrap items-center gap-2 border-t border-zinc-800 pt-3">
-        <CmBtn variant="ghost" onClick={() => onPausado(!pausado)}>
-          {pausado ? 'Retomar' : 'Pausar'}
-        </CmBtn>
+        {!aguardandoSegundoTempo && (
+          <CmBtn variant="ghost" onClick={() => onPausado(!pausado)}>
+            {pausado ? 'Retomar' : 'Pausar'}
+          </CmBtn>
+        )}
         <CmBtn
           variant="ghost"
           onClick={() => {

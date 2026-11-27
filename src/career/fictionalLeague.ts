@@ -182,6 +182,20 @@ export function gerarPropostas(
   }));
 }
 
+/** Propostas só dos clubes mais fracos — carreira sem torneio inicial. */
+export function gerarPropostasPioresTimes(
+  timesReais: { id: string; nome: string; forca_geral: number }[],
+  quantidade = 4,
+): import('./types').PropostaClube[] {
+  const piores = [...timesReais].sort((a, b) => a.forca_geral - b.forca_geral).slice(0, quantidade);
+  return piores.map((t) => ({
+    timeId: t.id,
+    timeNome: t.nome,
+    forca: t.forca_geral,
+    mensagem: `O ${t.nome} (um dos clubes mais modestos da Série A) oferece chance a um técnico iniciante sem passar pelo torneio amador.`,
+  }));
+}
+
 export function getTimeFicticio(
   times: TimeFicticio[],
   id: string,

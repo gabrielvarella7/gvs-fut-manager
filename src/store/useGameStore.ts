@@ -78,6 +78,7 @@ import {
 import {
   calcularDesempenho,
   gerarPropostas,
+  gerarPropostasPioresTimes,
   gerarTimesFicticios,
   migrarIdsTorneioAmador,
   montarCalendarioUsuario,
@@ -214,6 +215,13 @@ interface GameStore extends EstadoCarreira {
   definirFocoBase: (foco: FocoCategoriaBase) => void;
   /** Aplica a semana de treinos; retorna mensagem de erro ou null se ok. */
   aplicarTreinoSemana: () => string | null;
+  /** Restaura regime/sessões do treino padrão (Equilibrado). */
+  restaurarTreinoPadrao: () => void;
+  /** Aplica treino padrão automaticamente se a rodada ainda não treinou. */
+  garantirTreinoPadraoRodada: () => void;
+  marcarNoticiasComoLidas: () => void;
+  /** Pula torneio amador e recebe propostas só dos piores clubes. */
+  pularTorneioReceberPropostas: () => void;
   partidaModoAuxiliar: boolean;
   jogarComAuxiliar: () => void;
   limparPartidaModoAuxiliar: () => void;
@@ -233,6 +241,9 @@ const estadoInicial = (): EstadoCarreira & {
   avisoSalvo: string | null;
   jogadorPerfilId: number | null;
   saveSlotId: string | null;
+  dbTaticas: DatabaseTaticas | null;
+  dbTreinos: DatabaseTreinos | null;
+  partidaModoAuxiliar: boolean;
 } => ({
   campeonato: null,
   jogadoresReais: [],
@@ -261,6 +272,7 @@ const estadoInicial = (): EstadoCarreira & {
   clubeRealId: null,
   propostaSelecionadaId: null,
   noticias: [],
+  noticiasVistasIds: [],
   tela: 'menu',
   brasileirao: null,
   partidaRetornoTatica: false,
@@ -305,6 +317,15 @@ export const useGameStore = create<GameStore>((set, get) => ({
     }
     if (tela === 'escritorio' && s0.clubeRealId) {
       get().garantirCalendarioUsuario();
+    }
+    if (tela === 'noticias') {
+      get().marcarNoticiasComoLidas();
+    }
+    if (
+      (tela === 'relatorio_pre_jogo' || tela === 'partida') &&
+      s0.clubeRealId
+    ) {
+      get().garantirTreinoPadraoRodada();
     }
     const profissional = !!get().clubeRealId;
     if (
@@ -441,6 +462,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
       clubeRealId: null,
       propostaSelecionadaId: null,
       noticias: [],
+      noticiasVistasIds: [],
       tela: 'hub_torneio',
     });
   },
@@ -1102,6 +1124,44 @@ export const useGameStore = create<GameStore>((set, get) => ({
     const propostas = gerarPropostas(desempenho, timesReais);
     set({ torneioConcluido: true, propostas, tela: 'propostas' });
   },
+  pularTorneioReceberPropostas: () => {
+    const s = get();
+    if (!s.perfil) return;
+    const propostas = gerarPropostasPioresTimes(s.timesReais, 4);
+    set({
+      torneioConcluido: true,
+      propostas,
+      jogos: [],
+      timeUsuarioId: null,
+      timesFicticios: s.timesFicticios.length ? s.timesFicticios : gerarTimesFicticios(Date.now()),
+      desempenho: desempenhoZerado(),
+      noticias: deduplicarNoticias([
+        {
+          id: `n_pular_${Date.now()}`,
+          data: new Date().toISOString(),
+          titulo: 'Carreira sem torneio amador',
+          texto:
+            'Você pulou o torneio pré-contrato. Clubes mais fracos da Série A enviaram propostas de emprego.',
+        },
+        ...s.noticias,
+      ]),
+      tela: 'propostas',
+    });
+  },
+  marcarNoticiasComoLidas: () => {
+    const s = get();
+    const ids = s.noticias.map((n) => n.id);
+    if (ids.length === 0) return;
+    const vistas = new Set(s.noticiasVistasIds);
+    let mudou = false;
+    for (const id of ids) {
+      if (!vistas.has(id)) {
+        vistas.add(id);
+        mudou = true;
+      }
+    }
+    if (mudou) set({ noticiasVistasIds: [...vistas] });
+  },
   salvarCarreira: () => {
     const s = get();
     if (!s.perfil?.nome) return false;
@@ -1123,14 +1183,22 @@ export const useGameStore = create<GameStore>((set, get) => ({
       partidaJogoEmCurso: null,
       clubeRealId: s.clubeRealId,
       propostaSelecionadaId: s.propostaSelecionadaId,
-      noticias: s.noticias,
+      noticias: s.noticias.slice(0, 80),
+      noticiasVistasIds: s.noticiasVistasIds.slice(-200),
       brasileirao: s.brasileirao,
       partidaRetornoTatica: s.partidaRetornoTatica,
       financas: s.financas,
       comercial: s.comercial,
       mundoClube: s.mundoClube,
       negociacoesTransferencia: s.negociacoesTransferencia,
-      elencoPersistido: s.jogadoresReais,
+      // Só o elenco do clube + alterações recentes cabem melhor no localStorage (evita crash ~rodada 19).
+      elencoPersistido: s.clubeRealId
+        ? s.jogadoresReais.filter(
+            (j) =>
+              j.time_id === s.clubeRealId ||
+              (s.mundoClube?.participacoesTemporada?.[j.id] ?? 0) > 0,
+          )
+        : s.jogadoresReais,
       transmissaoCheckpoint: s.transmissaoCheckpoint,
       pendingResumePartida: s.pendingResumePartida,
       tela:
@@ -1140,21 +1208,30 @@ export const useGameStore = create<GameStore>((set, get) => ({
             : 'hub_torneio'
           : s.tela,
     };
-    const meta = gravarSlot(estado, s.perfil.nome);
-    set({
-      saveSlotId: meta.id,
-      avisoSalvo: 'Jogo salvo',
-      partidaAtual: null,
-      partidaJogoId: null,
-      partidaJogoEmCurso: null,
-      tela:
-        s.tela === 'partida'
-          ? s.clubeRealId
-            ? 'escritorio'
-            : 'hub_torneio'
-          : s.tela,
-    });
-    return true;
+    try {
+      const meta = gravarSlot(estado, s.perfil.nome);
+      set({
+        saveSlotId: meta.id,
+        avisoSalvo: 'Jogo salvo',
+        partidaAtual: null,
+        partidaJogoId: null,
+        partidaJogoEmCurso: null,
+        tela:
+          s.tela === 'partida'
+            ? s.clubeRealId
+              ? 'escritorio'
+              : 'hub_torneio'
+            : s.tela,
+      });
+      return true;
+    } catch (err) {
+      console.error(err);
+      set({
+        avisoSalvo:
+          'Falha ao salvar (armazenamento cheio?). Tente de novo após limpar saves antigos.',
+      });
+      return false;
+    }
   },
   listarSaves: () => listarSaves(),
   carregarCarreiraPorId: (id) => {
@@ -1240,6 +1317,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
       clubeRealId: data.clubeRealId ?? null,
       propostaSelecionadaId: data.propostaSelecionadaId ?? null,
       noticias: deduplicarNoticias(data.noticias ?? []),
+      noticiasVistasIds: data.noticiasVistasIds ?? [],
       brasileirao,
       partidaRetornoTatica: data.partidaRetornoTatica ?? false,
       financas,
@@ -1725,12 +1803,18 @@ export const useGameStore = create<GameStore>((set, get) => ({
   atualizarProgramacaoTreino: (patch) => {
     const s = get();
     if (!s.mundoClube || !s.clubeRealId || !s.mundoClube.programacaoTreino) return;
+    const programacaoTreino = { ...s.mundoClube.programacaoTreino, ...patch };
     set({
       mundoClube: {
         ...s.mundoClube,
-        programacaoTreino: { ...s.mundoClube.programacaoTreino, ...patch },
+        programacaoTreino,
       },
     });
+    void persistirTreinosDexie(
+      s.clubeRealId,
+      programacaoTreino,
+      s.mundoClube.estadosTreino ?? [],
+    ).catch(console.error);
   },
   definirPlanoIndividualTreino: (jogadorId, plano) => {
     const s = get();
@@ -1743,6 +1827,47 @@ export const useGameStore = create<GameStore>((set, get) => ({
     set({
       mundoClube: { ...s.mundoClube, estadosTreino: estados },
     });
+    if (s.mundoClube.programacaoTreino) {
+      void persistirTreinosDexie(
+        s.clubeRealId,
+        s.mundoClube.programacaoTreino,
+        estados,
+      ).catch(console.error);
+    }
+  },
+  restaurarTreinoPadrao: () => {
+    const s = get();
+    if (!s.mundoClube || !s.clubeRealId) return;
+    const formacaoId = formacaoIdDeEsquema(s.esquemaAtual);
+    const programacaoTreino = criarProgramacaoTreino(s.clubeRealId, formacaoId);
+    const estadosTreino = garantirEstadosTreino(
+      s.jogadoresReais,
+      s.clubeRealId,
+      undefined,
+    );
+    set({
+      mundoClube: { ...s.mundoClube, programacaoTreino, estadosTreino },
+      avisoSalvo: 'Treino padrão restaurado (Equilibrado).',
+    });
+    void persistirTreinosDexie(s.clubeRealId, programacaoTreino, estadosTreino).catch(
+      console.error,
+    );
+  },
+  garantirTreinoPadraoRodada: () => {
+    const s = get();
+    if (!s.clubeRealId || !s.mundoClube || !s.brasileirao || !s.dbTreinos) return;
+    const rodada = s.brasileirao.rodadaAtual;
+    if (s.mundoClube.ultimoTreino?.rodadaAplicada === rodada) return;
+    if (!s.mundoClube.programacaoTreino) {
+      const formacaoId = formacaoIdDeEsquema(s.esquemaAtual);
+      set({
+        mundoClube: {
+          ...s.mundoClube,
+          programacaoTreino: criarProgramacaoTreino(s.clubeRealId, formacaoId),
+        },
+      });
+    }
+    get().aplicarTreinoSemana();
   },
   aplicarTreinoSemana: () => {
     const s = get();

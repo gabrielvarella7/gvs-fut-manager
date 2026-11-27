@@ -7,6 +7,7 @@ export function FictionalTeamPickScreen() {
   const times = useGameStore((s) => s.timesFicticios);
   const sortear = useGameStore((s) => s.sortearTimesFicticios);
   const escolher = useGameStore((s) => s.escolherTimeFicticio);
+  const pularTorneio = useGameStore((s) => s.pularTorneioReceberPropostas);
   const irPara = useGameStore((s) => s.irPara);
 
   useEffect(() => {
@@ -15,17 +16,27 @@ export function FictionalTeamPickScreen() {
 
   return (
     <CmShell
-      titulo="Torneio pré-contrato"
-      subtitulo={`${perfil?.nome ?? 'Técnico'} — escolha uma das propostas amadoras para mostrar seu trabalho e chamar a atenção de clubes profissionais`}
+      titulo="Início de carreira"
+      subtitulo={`${perfil?.nome ?? 'Técnico'} — escolha disputar o torneio amador ou receber propostas diretas`}
       rodape={
         <CmBtn variant="ghost" onClick={() => irPara('criar_tecnico')}>
           Voltar
         </CmBtn>
       }
     >
+      <CmPanel className="mb-4 border-sky-800/50 bg-sky-950/20">
+        <p className="text-sm font-medium text-sky-100">Opção A — sem torneio</p>
+        <p className="mt-1 text-sm text-zinc-400">
+          Pule o torneio pré-contrato e receba propostas apenas dos piores clubes do campeonato.
+        </p>
+        <div className="mt-3">
+          <CmBtn onClick={pularTorneio}>Pular torneio e ver propostas</CmBtn>
+        </div>
+      </CmPanel>
+
       <p className="mb-3 text-sm text-zinc-400">
-        Você disputará <strong>3 partidas</strong> neste torneio. Depois, clubes reais enviam propostas
-        conforme seu desempenho.
+        <strong className="text-zinc-200">Opção B — torneio:</strong> escolha um time amador, dispute{' '}
+        <strong>3 partidas</strong> e depois clubes reais enviam propostas conforme seu desempenho.
       </p>
       <ul className="grid gap-2 sm:grid-cols-2">
         {times.map((t) => (

@@ -165,7 +165,12 @@ function jogadorAptoEscalacao(j: Jogador): boolean {
 
 export function montarEscalacao(elenco: Jogador[], esquema: EsquemaTatico): JogadorEmCampo[] {
   const slots = SLOTS_POR_ESQUEMA[esquemaOuPadrao(esquema)];
-  const ordenado = [...elenco].filter(jogadorAptoEscalacao).sort((a, b) => b.overall - a.overall);
+  const aptos = [...elenco].filter(jogadorAptoEscalacao).sort((a, b) => b.overall - a.overall);
+  /** Lesionados só entram se não houver 11 aptos (evita crash mid-season / rodada ~19). */
+  const lesionados = [...elenco]
+    .filter((j) => !jogadorAptoEscalacao(j))
+    .sort((a, b) => b.overall - a.overall);
+  const ordenado = [...aptos, ...lesionados];
   const usados = new Set<number>();
   const escalacao: JogadorEmCampo[] = [];
 
@@ -174,7 +179,11 @@ export function montarEscalacao(elenco: Jogador[], esquema: EsquemaTatico): Joga
     const improvisado =
       titularMesmaPos ??
       ordenado.find((j) => !usados.has(j.id) && j.status_escalacao === 'TITULAR');
-    const fallback = improvisado ?? ordenado.find((j) => !usados.has(j.id));
+    let fallback = improvisado ?? ordenado.find((j) => !usados.has(j.id));
+    if (!fallback && elenco.length > 0) {
+      // Último recurso: reutiliza o mais forte já listado (nunca lança — evita trava na rodada).
+      fallback = [...elenco].sort((a, b) => b.overall - a.overall)[0]!;
+    }
     if (!fallback) {
       throw new Error(`Elenco insuficiente para preencher posição ${slot}.`);
     }

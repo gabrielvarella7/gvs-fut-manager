@@ -110,4 +110,6 @@ export interface EstadoMundoClube {
   treinoBonusRodada?: number;
   /** Mês civil do último treino processado (regressão de veteranos). */
   mesUltimoTreino?: number;
+  /** Contagem de partidas disputadas na temporada (progressão de overall no fim). */
+  participacoesTemporada?: Record<number, number>;
 }

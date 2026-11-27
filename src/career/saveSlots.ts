@@ -57,6 +57,7 @@ function corpoSalvavel(estado: EstadoCarreira): EstadoCarreira {
     alinhamento11: estado.alinhamento11 ?? null,
     usoTaticaPersonalizada: estado.usoTaticaPersonalizada ?? false,
     gradeTatica11: estado.gradeTatica11 ?? null,
+    configTatica: estado.configTatica,
     jogos: estado.jogos,
     desempenho: estado.desempenho,
     propostas: estado.propostas,
@@ -66,7 +67,8 @@ function corpoSalvavel(estado: EstadoCarreira): EstadoCarreira {
     partidaJogoEmCurso: null,
     clubeRealId: estado.clubeRealId,
     propostaSelecionadaId: estado.propostaSelecionadaId,
-    noticias: estado.noticias,
+    noticias: (estado.noticias ?? []).slice(0, 80),
+    noticiasVistasIds: estado.noticiasVistasIds ?? [],
     brasileirao: estado.brasileirao ?? null,
     partidaRetornoTatica: estado.partidaRetornoTatica ?? false,
     financas: estado.financas ?? null,
@@ -101,7 +103,18 @@ export function gravarSlot(
   const id = `save_${Date.now()}`;
   const meta: SaveSlotMeta = { id, nomeTecnico: nomeTecnico.trim(), salvoEm };
   const payload = corpoSalvavel(estado);
-  localStorage.setItem(id, JSON.stringify(payload));
+  try {
+    localStorage.setItem(id, JSON.stringify(payload));
+  } catch (err) {
+    // Quota: tenta payload ainda menor (só elenco do usuário já filtrado no store).
+    const enxuto = {
+      ...payload,
+      noticias: (payload.noticias ?? []).slice(0, 40),
+      elencoPersistido: (payload.elencoPersistido ?? []).slice(0, 80),
+    };
+    localStorage.setItem(id, JSON.stringify(enxuto));
+    console.warn('Save enxuto por limite de armazenamento', err);
+  }
 
   const lista = listaAtual.filter(
     (s) => chaveTecnico(s.nomeTecnico) !== chave && s.id !== id,

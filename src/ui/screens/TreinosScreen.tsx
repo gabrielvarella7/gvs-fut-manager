@@ -24,6 +24,7 @@ export function TreinosScreen() {
   const aplicar = useGameStore((s) => s.aplicarTreinoSemana);
   const atualizarProgramacao = useGameStore((s) => s.atualizarProgramacaoTreino);
   const definirPlano = useGameStore((s) => s.definirPlanoIndividualTreino);
+  const restaurarPadrao = useGameStore((s) => s.restaurarTreinoPadrao);
 
   const [feedback, setFeedback] = useState<string | null>(null);
 
@@ -155,6 +156,26 @@ export function TreinosScreen() {
         </table>
       </CmPanel>
 
+      <CmPanel className="mb-4 border-sky-900/40 bg-sky-950/15">
+        <p className="text-sm text-zinc-300">
+          Edite regime e sessões à vontade. Se você não processar a semana, o{' '}
+          <strong className="text-sky-100">treino padrão</strong> (Equilibrado) é aplicado
+          automaticamente antes do jogo.
+        </p>
+        <div className="mt-2">
+          <CmBtn
+            variant="ghost"
+            onClick={() => {
+              restaurarPadrao();
+              setFeedback('Treino padrão restaurado.');
+              window.setTimeout(() => setFeedback(null), 4000);
+            }}
+          >
+            Restaurar treino padrão
+          </CmBtn>
+        </div>
+      </CmPanel>
+
       {jaTreinou && (
         <CmPanel className="mb-4 border-amber-800/60">
           <p className="text-sm text-amber-100">
@@ -166,7 +187,7 @@ export function TreinosScreen() {
 
       <CmPanel className="mb-4">
         <h2 className="mb-2 text-sm font-semibold text-emerald-400">Regime de intensidade</h2>
-        <motionRegimes
+        <MotionRegimes
           regimes={dbTreinos.regimes_intensidade}
           selecionado={prog.regime_id}
           onChange={(id) => atualizarProgramacao({ regime_id: id as RegimeIntensidadeId })}
@@ -204,13 +225,13 @@ export function TreinosScreen() {
             const plano = est?.plano_individual_id ?? 'MAESTRO_DISTRIBUICAO';
             const lesao = j.lesao && j.lesao.diasRestantes > 0;
             return (
-              <motionLinhaPlano
+              <MotionLinhaPlano
                 key={j.id}
                 nome={j.nome}
                 pos={j.posicao}
                 ovr={j.overall}
                 energia={Math.round(j.energia)}
-                lesao={lesao}
+                lesao={!!lesao}
                 plano={plano}
                 planos={dbTreinos.planos_individuais}
                 poliv={est?.progresso_polivalencia ?? 0}
@@ -228,7 +249,7 @@ export function TreinosScreen() {
   );
 }
 
-function motionRegimes({
+function MotionRegimes({
   regimes,
   selecionado,
   onChange,
@@ -282,7 +303,7 @@ function SessaoSelect({
   );
 }
 
-function motionLinhaPlano({
+function MotionLinhaPlano({
   nome,
   pos,
   ovr,

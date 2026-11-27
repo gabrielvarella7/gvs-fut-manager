@@ -54,8 +54,16 @@ function MiniJogador({
     <button
       type="button"
       onClick={onClick}
-      onPointerDown={onArrastar}
+      onPointerDown={(e) => {
+        try {
+          e.currentTarget.setPointerCapture(e.pointerId);
+        } catch {
+          /* ignore */
+        }
+        onArrastar?.(e);
+      }}
       onPointerUp={onSoltar}
+      style={{ touchAction: 'none' }}
       className={`flex w-full cursor-grab items-center gap-2 rounded-lg border px-2 py-1.5 text-left transition-colors active:cursor-grabbing ${
         alvoSubstituicao
           ? 'border-yellow-400 bg-yellow-950/50 ring-1 ring-yellow-500/60'

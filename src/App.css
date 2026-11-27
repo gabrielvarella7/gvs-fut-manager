@@ -1,6 +1,23 @@
 .cm-app {
-  background: linear-gradient(180deg, #0a0f0c 0%, #121816 40%, #0d1110 100%);
+  background:
+    linear-gradient(180deg, rgba(116, 172, 223, 0.08) 0%, transparent 28%),
+    linear-gradient(180deg, #061628 0%, #0a2748 42%, #07182c 100%);
   min-height: 100vh;
+}
+
+.cm-header {
+  background: linear-gradient(90deg, rgba(11, 58, 110, 0.55), rgba(6, 22, 40, 0.2));
+  border-color: rgba(116, 172, 223, 0.35) !important;
+}
+
+.cm-brand {
+  color: #74acdf;
+  letter-spacing: 0.16em;
+}
+
+.cm-footer {
+  background: rgba(6, 22, 40, 0.92) !important;
+  border-color: rgba(116, 172, 223, 0.25) !important;
 }
 
 #root {
