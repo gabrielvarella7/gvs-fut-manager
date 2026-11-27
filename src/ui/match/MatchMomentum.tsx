@@ -1,3 +1,4 @@
+import { momentoAteMinuto } from '../../engine/matchMomentum';
 import type { MomentoAtaque } from '../../engine/matchStats';
 
 type Props = {
@@ -7,8 +8,13 @@ type Props = {
   visitanteNome: string;
 };
 
+/**
+ * Placeholder chart — final Sofascore-style attack/defense oscillation UI
+ * is paused until Gabriel’s reference lands. Data already updates live via
+ * `momentoAteMinuto` + continuous engine series.
+ */
 export function MatchMomentum({ momento, minutoAtual, mandanteNome, visitanteNome }: Props) {
-  const visivel = momento.filter((m) => m.minuto <= minutoAtual);
+  const visivel = momentoAteMinuto(momento, minutoAtual);
   const max = Math.max(...visivel.map((m) => Math.abs(m.valor)), 1);
 
   return (
