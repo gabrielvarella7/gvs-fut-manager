@@ -30,7 +30,9 @@ import {
 } from './genetica';
 import { gerarContratoLeiPele, calcularValorMercado } from './mercadoTransferencias';
 import { nivelDiretorBase } from './staffEfeitos';
-import type { NoticiaCarreira } from './types';
+import type { AcaoNoticia, NoticiaCarreira } from './types';
+import { acoesProspectoBase } from './noticiasAcoes';
+import { marcarJogador } from './noticiasMarkup';
 import type { EstadoComercial } from '../types/commercial';
 
 /** Teto do plantel profissional (titulares + reservas + não relacionados). */
@@ -409,8 +411,15 @@ function noticiaBase(
   id: string,
   titulo: string,
   texto: string,
+  acoes?: AcaoNoticia[],
 ): NoticiaCarreira {
-  return { id, data: new Date().toISOString(), titulo, texto };
+  return {
+    id,
+    data: new Date().toISOString(),
+    titulo,
+    texto,
+    ...(acoes?.length ? { acoes } : {}),
+  };
 }
 
 /** Safra anual: 4–7 jovens 16–19 no Sub-20 (virada / pós-Copinha). */
@@ -529,13 +538,15 @@ export function gerarGotejamentoTrimestral(params: {
   sub20 = [...sub20, ...novos];
 
   for (const j of novos) {
+    const nomeLink = marcarJogador(j.id, j.nome);
     noticias.push(
       noticiaBase(
         `gotejo_${params.rodada}_${j.id}`,
         'Indicação da base',
-        `Diretor da base indica ${j.nome} (${j.idade} anos, ${j.posicao}) — tier ${rotuloTierBase(j.tier)}, OVR ${j.overall}, teto ~${j.potencialOvr}.${
+        `Diretor da base indica ${nomeLink} (${j.idade} anos, ${j.posicao}) — tier ${rotuloTierBase(j.tier)}, OVR ${j.overall}, teto ~${j.potencialOvr}.${
           j.diamanteBruto ? ' Avaliado como diamante bruto.' : ''
         }${j.precoceEstagnado ? ' Atenção: perfil de precoce com teto limitado.' : ''}`,
+        acoesProspectoBase(j.id),
       ),
     );
   }
@@ -634,7 +645,7 @@ export function processarPromocoesESugestoes(params: {
       jovemId: j.id,
       posicao: j.posicao,
       motivo: 'CRISE' as const,
-      mensagem: `Plantel curto (${disponiveis} disponíveis). Diretor da base sugere ${j.nome} (${j.posicao}, OVR ${j.overall}).`,
+      mensagem: `Plantel curto (${disponiveis} disponíveis). Diretor da base sugere ${marcarJogador(j.id, j.nome)} (${j.posicao}, OVR ${j.overall}).`,
       rodada: params.rodada,
     }));
     mundo = {
@@ -642,7 +653,14 @@ export function processarPromocoesESugestoes(params: {
       base: { ...mundo.base, sugestoesPromocao: sugestoes },
     };
     for (const s of sugestoes) {
-      noticias.push(noticiaBase(`crise_base_${params.rodada}_${s.jovemId}`, 'Alerta · plantel curto', s.mensagem));
+      noticias.push(
+        noticiaBase(
+          `crise_base_${params.rodada}_${s.jovemId}`,
+          'Alerta · plantel curto',
+          s.mensagem,
+          acoesProspectoBase(s.jovemId),
+        ),
+      );
     }
   }
 

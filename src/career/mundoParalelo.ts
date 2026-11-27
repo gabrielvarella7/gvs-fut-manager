@@ -55,6 +55,8 @@ import type {
   RumorOfertaMercado,
 } from '../types/mundoClube';
 import type { NoticiaCarreira } from './types';
+import { acoesLesaoCampo } from './noticiasAcoes';
+import { marcarJogador } from './noticiasMarkup';
 import type { EstadoComercial } from '../types/commercial';
 import {
   classificarJanelaCalendario,
@@ -313,11 +315,13 @@ export function aplicarLesoesEmCampo(
             ...(info.sequelaPendente != null ? { sequelaPendente: info.sequelaPendente } : {}),
           },
         );
+    const nomeLink = marcarJogador(j.id, j.nome);
     noticias.push({
       id: `lesao_campo_${j.id}_${Date.now()}`,
       data: new Date().toISOString(),
-      titulo: `Lesão em campo: ${j.nome}`,
-      texto: `${j.nome}: ${info.descricao} (${info.gravidade.toLowerCase()}). Previsão de ${lesao.diasRestantes} dias.`,
+      titulo: `Lesão em campo: ${nomeLink}`,
+      texto: `${nomeLink} saiu com ${info.descricao} (${info.gravidade.toLowerCase()}). Previsão de ${lesao.diasRestantes} dias fora.`,
+      acoes: acoesLesaoCampo(j.id),
     });
     return { ...j, lesao, energia: Math.min(j.energia, 38) };
   });

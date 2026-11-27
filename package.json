@@ -30,6 +30,7 @@
     "smoke:elenco-sort": "npx --yes tsx scripts/smoke-elenco-sort.mjs",
     "smoke:fora-lista": "npx --yes tsx scripts/smoke-fora-da-lista-8.mjs",
     "smoke:noticias-encerramento": "npx --yes tsx scripts/smoke-noticias-encerramento.mjs",
+    "smoke:noticias-acoes": "node scripts/smoke-noticias-acoes.mjs",
     "sync": "powershell -NoProfile -ExecutionPolicy Bypass -File ./scripts/sync-nuvem.ps1"
   },
   "dependencies": {
