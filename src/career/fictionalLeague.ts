@@ -3,7 +3,8 @@ import { embaralharNomesVarzea } from '../data/jogadoresVarzea';
 import { LISTA_ESQUEMAS } from '../data/esquemasTaticos';
 import { gerarAtributosNovos, overallDeAtributos } from './atributosJogador';
 import { gerarGeneticaAtleta } from './genetica';
-import type { Jogador, Posicao } from '../types/schema';
+import { SLOTS_PLANTEL_30, statusEscalacaoPorSlot } from './plantelEstrutura';
+import type { Jogador } from '../types/schema';
 import type { TimeFicticio, JogoTorneio, DesempenhoTorneio } from './types';
 import { criarRng } from '../engine/matchEngine';
 
@@ -30,26 +31,8 @@ export function proximoJogoTorneioAmador(jogos: JogoTorneio[]): JogoTorneio | nu
   );
 }
 
-const SQUAD: Posicao[] = [
-  'GOL',
-  'GOL',
-  'ZAG',
-  'ZAG',
-  'ZAG',
-  'LAT',
-  'LAT',
-  'VOL',
-  'VOL',
-  'MEI',
-  'MEI',
-  'MEI',
-  'ATA',
-  'ATA',
-  'ATA',
-  'ATA',
-  'ATA',
-  'MEI',
-];
+/** 11 titulares + 11 reservas + 8 fora da lista (= 30). */
+const SQUAD = SLOTS_PLANTEL_30;
 
 export function gerarTimesFicticios(seed: number, qtd = 8): TimeFicticio[] {
   const rnd = criarRng(seed);
@@ -85,7 +68,7 @@ export function gerarTimesFicticios(seed: number, qtd = 8): TimeFicticio[] {
         atributos,
         overall,
         energia: 100,
-        status_escalacao: idx < 11 ? 'TITULAR' : idx < 16 ? 'RESERVA' : 'NAO_RELACIONADO',
+        status_escalacao: statusEscalacaoPorSlot(idx),
         valor_mercado: overall * overall * 800,
         salario_mensal: Math.round(overall * 450 + rnd() * 2000),
         nacionalidade: 'Brasil',

@@ -1,5 +1,6 @@
 /**
- * Regenera jogadores.json a partir de public/database/times.json (22 atletas por clube).
+ * Regenera jogadores.json a partir de public/database/times.json
+ * (30 atletas por clube: 11 titulares + 11 reservas + 8 fora da lista).
  * Não sobrescreve campeonato.json nem times.json se já existirem.
  * Rodar: npm run db:seed
  */
@@ -11,13 +12,16 @@ const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const outDir = join(root, 'public', 'database');
 mkdirSync(outDir, { recursive: true });
 
+const TITULARES = 11;
+const RESERVAS = 11;
+/** 11+11+8 = 30 */
 const SQUAD_TEMPLATE = [
-  ['GOL', 2],
-  ['ZAG', 4],
-  ['LAT', 4],
-  ['VOL', 3],
-  ['MEI', 5],
-  ['ATA', 4],
+  ['GOL', 3],
+  ['ZAG', 5],
+  ['LAT', 5],
+  ['VOL', 4],
+  ['MEI', 7],
+  ['ATA', 6],
 ];
 
 const timesPath = join(outDir, 'times.json');
@@ -121,8 +125,8 @@ for (const time of times) {
       nextId += 1;
       slot += 1;
       let status = 'NAO_RELACIONADO';
-      if (slot <= 11) status = 'TITULAR';
-      else if (slot <= 18) status = 'RESERVA';
+      if (slot <= TITULARES) status = 'TITULAR';
+      else if (slot <= TITULARES + RESERVAS) status = 'RESERVA';
       const idade = 18 + Math.floor(rnd() * 20);
       const atributos = attrFor(pos, forca, rnd, nextId, idade);
       jogadores.push({

@@ -4,7 +4,8 @@ import {
   rotuloBloqueioLesaoEnergia,
 } from '../../career/aptidaoEscalacao';
 import { corClasseEnergia, rotuloEnergiaCurto } from '../../career/energia';
-import { RESERVAS_PARTIDA } from '../../career/lineup';
+import { FORA_DA_LISTA_ALVO, RESERVAS_PARTIDA } from '../../career/lineup';
+import { alvoForaDaLista } from '../../career/plantelEstrutura';
 import { rotuloPosicao } from '../../career/perfilJogador';
 import { rotuloPosicaoCampinho } from '../../data/gradeCampinho';
 import type { CelulaGrade } from '../../data/gradeCampinho';
@@ -195,6 +196,7 @@ export function TacticSquadPanel({
     [elenco, titularesIds, bancoSet],
   );
   const bancoCompleto = reservas.length >= RESERVAS_PARTIDA;
+  const alvoFora = alvoForaDaLista(elenco.length);
 
   const [foraPos, setForaPos] = useState<Posicao | 'TODAS'>('TODAS');
   const [foraSort, setForaSort] = useState('ovr');
@@ -215,7 +217,8 @@ export function TacticSquadPanel({
       className={`flex flex-col gap-3 ${compact ? 'max-h-[min(64vh,480px)]' : ''} overflow-hidden`}
     >
       <p className="text-[10px] uppercase tracking-wide text-zinc-500">
-        Relacione 11 titulares + 11 reservas. Toque em “fora da lista” para incluir no banco.
+        Relacione 11 titulares + 11 reservas (+{FORA_DA_LISTA_ALVO} fora da lista). Toque em
+        “fora da lista” para incluir no banco.
       </p>
 
       <section className="min-h-0 flex-1 overflow-y-auto">
@@ -319,8 +322,11 @@ export function TacticSquadPanel({
 
       <section className="min-h-0 flex-1 overflow-y-auto border-t border-zinc-800 pt-2">
         <h3 className="mb-1.5 text-xs font-semibold text-zinc-400">
-          Fora da lista ({foraFiltrado.length}
-          {foraFiltrado.length !== foraDaLista.length ? `/${foraDaLista.length}` : ''})
+          Fora da lista (
+          {foraFiltrado.length !== foraDaLista.length
+            ? `${foraFiltrado.length} de ${foraDaLista.length}`
+            : foraDaLista.length}
+          {alvoFora > 0 ? `/${alvoFora}` : ''})
         </h3>
         {foraDaLista.length > 0 && (
           <div className="mb-1.5 flex flex-wrap gap-1">
