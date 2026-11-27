@@ -33,7 +33,10 @@ import type { NoticiaCarreira } from './types';
 import type { EstadoComercial } from '../types/commercial';
 
 /** Teto do plantel profissional (titulares + reservas + não relacionados). */
-export const TETO_PLANTEL_PROFISSIONAL = 32;
+export const TETO_PLANTEL_PROFISSIONAL = 30;
+
+export const MSG_PLANTEL_CHEIO =
+  'Plantel cheio, para subir um atleta precisa vender ou dispensar alguém.';
 
 /** 1º contrato profissional: 36 meses, R$15–35k/mês, 100% direitos. */
 export const PRIMEIRO_CONTRATO_MESES = 36;
@@ -533,11 +536,7 @@ export function promoverJovemPorId(params: {
       jogadores: params.jogadores,
       mundo: params.mundo,
       noticias: [
-        noticiaBase(
-          `plantel_cheio_${params.rodada}`,
-          'Plantel no limite',
-          `Não é possível promover da base: plantel já tem ${plantel}/${TETO_PLANTEL_PROFISSIONAL} atletas.`,
-        ),
+        noticiaBase(`plantel_cheio_${params.rodada}`, 'Plantel cheio', MSG_PLANTEL_CHEIO),
       ],
       promovido: null,
     };

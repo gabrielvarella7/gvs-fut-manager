@@ -6,6 +6,7 @@ import {
 import { nivelDiretorBase } from '../../career/staffEfeitos';
 import {
   ctBaseNivel5,
+  MSG_PLANTEL_CHEIO,
   pesosTierBase,
   plantelProfissionalCount,
   rotuloTierBase,
@@ -50,6 +51,7 @@ export function BaseScreen() {
   const definir = useGameStore((s) => s.definirInvestimentoBase);
   const definirFoco = useGameStore((s) => s.definirFocoBase);
   const promover = useGameStore((s) => s.promoverJovemDaBase);
+  const irPara = useGameStore((s) => s.irPara);
   const base = mundo?.base;
   const chance = base ? Math.round(chancePromocaoBase(mundo!) * 100) : 0;
   const diretor = mundo ? nivelDiretorBase(mundo) : 10;
@@ -77,6 +79,15 @@ export function BaseScreen() {
               Diretor da base nível {diretor}/20 · plantel {plantel}/{TETO_PLANTEL_PROFISSIONAL}
               {base.identidadeBaseAtiva && ' · identidade da base ativa na torcida'}
             </p>
+            <p className="mt-1 text-xs text-zinc-500">
+              Sub-20 alimenta a formação; o Sub-23 disputa o Campeonato de Aspirantes (IA).
+              {plantel >= TETO_PLANTEL_PROFISSIONAL ? ` ${MSG_PLANTEL_CHEIO}` : ''}
+            </p>
+            <div className="mt-2">
+              <CmBtn variant="ghost" onClick={() => irPara('sub23')}>
+                Abrir Sub-23 / Aspirantes
+              </CmBtn>
+            </div>
             <p className="mt-1 text-xs text-zinc-500">
               Safra anual (4–7) + gotejamento a cada 12–13 rodadas · chance de fluxo ~{chance}%
             </p>
