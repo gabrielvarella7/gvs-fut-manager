@@ -32,18 +32,94 @@ import type { EstadoAspirantesS23 } from '../types/aspirantesS23';
 const IDADE_MIN = 19;
 const IDADE_MAX = 23;
 
-const TIER_RANGES: Record<
-  TierCategoriaBase,
-  { ovrMin: number; ovrMax: number; tetoMin: number; tetoMax: number }
-> = {
-  FRACO: { ovrMin: 56, ovrMax: 62, tetoMin: 63, tetoMax: 68 },
-  MEDIO: { ovrMin: 62, ovrMax: 67, tetoMin: 70, tetoMax: 76 },
-  BOM: { ovrMin: 67, ovrMax: 72, tetoMin: 78, tetoMax: 85 },
-  CRAQUE: { ovrMin: 72, ovrMax: 77, tetoMin: 86, tetoMax: 94 },
+/**
+ * Na geração/aparecimento: ~5% no nível da média dos top 11 do profissional;
+ * ~95% no teto da média do restante do plantel (excluindo esses top 11).
+ * Depois disso a evolução segue a dinâmica normal — não rebalancear.
+ */
+export const CHANCE_OVR_NIVEL_TITULARES = 0.05;
+
+/** Fallback se o clube ainda não tem plantel profissional. */
+const FALLBACK_MEDIA_TOP11 = 72;
+const FALLBACK_MEDIA_RESTO = 64;
+
+/** Tetos de potencial por tier (OVR atual é calibrado vs plantel, não por estes ranges). */
+const TIER_TETO: Record<TierCategoriaBase, { tetoMin: number; tetoMax: number }> = {
+  FRACO: { tetoMin: 63, tetoMax: 68 },
+  MEDIO: { tetoMin: 70, tetoMax: 76 },
+  BOM: { tetoMin: 78, tetoMax: 85 },
+  CRAQUE: { tetoMin: 86, tetoMax: 94 },
 };
 
 function randInt(rnd: () => number, min: number, max: number): number {
-  return min + Math.floor(rnd() * (max - min + 1));
+  const lo = Math.min(min, max);
+  const hi = Math.max(min, max);
+  return lo + Math.floor(rnd() * (hi - lo + 1));
+}
+
+/** Médias OVR: top 11 (titulares-quality) vs resto do plantel profissional. */
+export function referenciasOvrPlantelPro(
+  elencoPro: ReadonlyArray<{ overall: number }>,
+): { mediaTop11: number; mediaResto: number } {
+  if (elencoPro.length === 0) {
+    return { mediaTop11: FALLBACK_MEDIA_TOP11, mediaResto: FALLBACK_MEDIA_RESTO };
+  }
+  const sorted = [...elencoPro].map((j) => j.overall).sort((a, b) => b - a);
+  const nTop = Math.min(11, sorted.length);
+  const top = sorted.slice(0, nTop);
+  const resto = sorted.slice(nTop);
+  const mediaTop11 = top.reduce((s, v) => s + v, 0) / top.length;
+  const mediaResto =
+    resto.length > 0 ?
+      resto.reduce((s, v) => s + v, 0) / resto.length
+    : Math.max(48, mediaTop11 - 7);
+  return { mediaTop11, mediaResto };
+}
+
+/**
+ * Sorteia OVR-alvo na aparição: 5% ≈ média top 11; 95% ≤ média do resto.
+ * Tier / precoce / diamante só colorém a faixa — nunca estouram o teto do grupo.
+ */
+export function sortearOvrAlvoVsPlantel(params: {
+  mediaTop11: number;
+  mediaResto: number;
+  tier: TierCategoriaBase;
+  precoceEstagnado: boolean;
+  diamanteBruto: boolean;
+  rnd: () => number;
+}): { ovrAlvo: number; nivelTitulares: boolean; capOvr: number } {
+  const { mediaTop11, mediaResto, tier, precoceEstagnado, diamanteBruto, rnd } = params;
+  const nivelTitulares = rnd() < CHANCE_OVR_NIVEL_TITULARES;
+
+  if (nivelTitulares) {
+    const centro = Math.round(mediaTop11);
+    let ovrAlvo = randInt(rnd, centro - 1, centro + 1);
+    if (precoceEstagnado) {
+      ovrAlvo = Math.min(centro + 2, ovrAlvo + randInt(rnd, 0, 2));
+    }
+    if (diamanteBruto) {
+      ovrAlvo = Math.max(centro - 3, ovrAlvo - randInt(rnd, 1, 3));
+    }
+    const capOvr = Math.ceil(mediaTop11 + 2);
+    return { ovrAlvo, nivelTitulares: true, capOvr };
+  }
+
+  const teto = Math.floor(mediaResto);
+  const span =
+    tier === 'CRAQUE' ? 3
+    : tier === 'BOM' ? 6
+    : tier === 'MEDIO' ? 9
+    : 12;
+  const piso = Math.max(48, teto - span);
+  let ovrAlvo = randInt(rnd, piso, teto);
+  if (diamanteBruto) {
+    ovrAlvo = Math.max(piso, ovrAlvo - randInt(rnd, 2, 4));
+  }
+  if (precoceEstagnado) {
+    // Precoce sobe um pouco, mas permanece ≤ média do resto.
+    ovrAlvo = Math.min(teto, ovrAlvo + randInt(rnd, 1, 3));
+  }
+  return { ovrAlvo, nivelTitulares: false, capOvr: teto };
 }
 
 function pesosTier(qualidade: number, diretor: number): Record<TierCategoriaBase, number> {
@@ -105,6 +181,28 @@ export function proximoIdGlobal(
   return max + 1;
 }
 
+function aplicarBonusAtributosSub23(
+  atributos: ReturnType<typeof gerarAtributosNovos>,
+  bonus: number,
+  rnd: () => number,
+): ReturnType<typeof gerarAtributosNovos> {
+  if (bonus <= 0) return atributos;
+  const clone = {
+    tecnicos: { ...atributos.tecnicos },
+    mentais: { ...atributos.mentais },
+    fisicos: { ...atributos.fisicos },
+  };
+  const grupos = ['tecnicos', 'mentais', 'fisicos'] as const;
+  for (let i = 0; i < bonus; i++) {
+    const g = grupos[i % grupos.length]!;
+    const reg = clone[g] as unknown as Record<string, number>;
+    const keys = Object.keys(reg);
+    const k = keys[Math.floor(rnd() * keys.length)]!;
+    reg[k] = Math.min(20, (reg[k] ?? 10) + 1);
+  }
+  return clone;
+}
+
 export function gerarAtletaSub23(params: {
   id: number;
   timeId: string;
@@ -115,10 +213,14 @@ export function gerarAtletaSub23(params: {
   rodada: number;
   seed: number;
   rnd: () => number;
+  /** Plantel profissional do clube — ancora OVR na aparição (5%/95%). */
+  elencoPro?: ReadonlyArray<{ overall: number }>;
+  mediaTop11?: number;
+  mediaResto?: number;
 }): AtletaSub23 {
   const { id, timeId, nome, posicao, qualidade, diretor, rodada, rnd } = params;
   const tier = sortearTier(pesosTier(qualidade, diretor), rnd);
-  const range = TIER_RANGES[tier];
+  const tetoRange = TIER_TETO[tier];
   const idade = randInt(rnd, IDADE_MIN, IDADE_MAX);
 
   const roll = rnd();
@@ -126,36 +228,52 @@ export function gerarAtletaSub23(params: {
   const diamanteBruto =
     !precoceEstagnado && roll >= 0.18 && roll < 0.32 && (tier === 'FRACO' || tier === 'MEDIO');
 
-  let ovrAlvo = randInt(rnd, range.ovrMin, range.ovrMax);
-  let tetoAlvo = randInt(rnd, range.tetoMin, range.tetoMax);
+  const refs =
+    params.mediaTop11 != null && params.mediaResto != null ?
+      { mediaTop11: params.mediaTop11, mediaResto: params.mediaResto }
+    : referenciasOvrPlantelPro(params.elencoPro ?? []);
+
+  const { ovrAlvo, capOvr } = sortearOvrAlvoVsPlantel({
+    mediaTop11: refs.mediaTop11,
+    mediaResto: refs.mediaResto,
+    tier,
+    precoceEstagnado,
+    diamanteBruto,
+    rnd,
+  });
+
+  let tetoAlvo = randInt(rnd, tetoRange.tetoMin, tetoRange.tetoMax);
   if (precoceEstagnado) {
-    ovrAlvo = Math.min(78, ovrAlvo + randInt(rnd, 2, 5));
     tetoAlvo = Math.min(tetoAlvo, ovrAlvo + randInt(rnd, 1, 3));
   }
   if (diamanteBruto) {
-    ovrAlvo = Math.max(54, ovrAlvo - randInt(rnd, 2, 4));
     tetoAlvo = Math.min(94, Math.max(tetoAlvo, ovrAlvo + randInt(rnd, 14, 20)));
   }
 
   const bonus = qualidade >= 16 && diretor >= 18 ? randInt(rnd, 3, 5) : 0;
   let atributos = gerarAtributosNovos(posicao, ovrAlvo, id, idade, rnd);
-  if (bonus > 0) {
-    const clone = {
-      tecnicos: { ...atributos.tecnicos },
-      mentais: { ...atributos.mentais },
-      fisicos: { ...atributos.fisicos },
-    };
-    const grupos = ['tecnicos', 'mentais', 'fisicos'] as const;
-    for (let i = 0; i < bonus; i++) {
-      const g = grupos[i % grupos.length]!;
-      const reg = clone[g] as unknown as Record<string, number>;
-      const keys = Object.keys(reg);
-      const k = keys[Math.floor(rnd() * keys.length)]!;
-      reg[k] = Math.min(20, (reg[k] ?? 10) + 1);
+  atributos = aplicarBonusAtributosSub23(atributos, bonus, rnd);
+  let overall = overallDeAtributos(posicao, atributos);
+
+  // Ajuste fino: overall final respeita o teto do grupo (titulares vs resto).
+  let alvo = ovrAlvo;
+  for (let tentativa = 0; tentativa < 6 && (overall > capOvr || Math.abs(overall - ovrAlvo) > 4); tentativa++) {
+    if (overall > capOvr) {
+      alvo = Math.max(48, Math.min(alvo, capOvr) - 2 - tentativa);
+    } else {
+      alvo = ovrAlvo + (ovrAlvo - overall) * 0.5;
     }
-    atributos = clone;
+    // Após estouro, não reaplica bonus elite (evita empurrar de novo acima do cap).
+    atributos = gerarAtributosNovos(posicao, alvo, id + 17 * (tentativa + 1), idade, rnd);
+    if (tentativa === 0 && overall <= capOvr) {
+      atributos = aplicarBonusAtributosSub23(atributos, bonus, rnd);
+    }
+    overall = overallDeAtributos(posicao, atributos);
   }
-  const overall = overallDeAtributos(posicao, atributos);
+  if (overall > capOvr) {
+    overall = capOvr;
+  }
+
   const potencialOvr = Math.max(overall + 1, tetoAlvo);
   const genetica = gerarGeneticaBase({
     overall,
@@ -192,9 +310,12 @@ export function gerarElencoSub23Clube(params: {
   seed: number;
   idInicio: number;
   rodada?: number;
+  /** Plantel profissional do clube (ancora 5%/95% na geração). */
+  elencoPro?: ReadonlyArray<{ overall: number }>;
 }): { elenco: AtletaSub23[]; proximoId: number } {
   const rnd = criarRng(params.seed);
   const nomes = embaralharNomesVarzea(params.seed);
+  const refs = referenciasOvrPlantelPro(params.elencoPro ?? []);
   const elenco: AtletaSub23[] = [];
   let id = params.idInicio;
   for (let i = 0; i < TAMANHO_ELENCO_SUB23; i++) {
@@ -209,6 +330,8 @@ export function gerarElencoSub23Clube(params: {
       rodada: params.rodada ?? 0,
       seed: params.seed + i * 17,
       rnd,
+      mediaTop11: refs.mediaTop11,
+      mediaResto: refs.mediaResto,
     });
     elenco.push(atleta);
     id += 1;
@@ -325,6 +448,7 @@ export function promoverSub23ParaPro(params: {
     elencos: { ...params.aspirantes.elencos, [params.clubeId]: elenco },
   });
   const nomes = embaralharNomesVarzea(params.seed ^ novoId);
+  const elencoPro = params.jogadores.filter((j) => j.time_id === params.clubeId);
   const reposicao = gerarAtletaSub23({
     id: novoId,
     timeId: params.clubeId,
@@ -335,6 +459,7 @@ export function promoverSub23ParaPro(params: {
     rodada: params.rodada,
     seed: params.seed + novoId,
     rnd,
+    elencoPro,
   });
   elenco.push(reposicao);
 

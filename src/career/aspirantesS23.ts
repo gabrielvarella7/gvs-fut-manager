@@ -126,6 +126,7 @@ export function criarEstadoAspirantesS23(params: {
       params.clubeUsuarioId === time.id ?
         nivelDiretorBase(params.mundoUsuario)
       : Math.max(8, Math.min(16, Math.round((time.prestigio ?? 70) / 7)));
+    const elencoPro = params.jogadores.filter((j) => j.time_id === time.id);
     const { elenco, proximoId } = gerarElencoSub23Clube({
       time,
       qualidade,
@@ -133,6 +134,7 @@ export function criarEstadoAspirantesS23(params: {
       seed: params.seed ^ (time.id.charCodeAt(0) * 997 + time.id.length * 31),
       idInicio: nextId,
       rodada: 0,
+      elencoPro,
     });
     elencos[time.id] = elenco;
     nextId = proximoId;
@@ -175,12 +177,14 @@ export function normalizarAspirantesS23(
       const qualidade = mundo && clubeId === time.id ? mundo.base.qualidade : 12;
       const diretor = mundo && clubeId === time.id ? nivelDiretorBase(mundo) : 10;
       const falta = TAMANHO_ELENCO_SUB23 - elenco.length;
+      const elencoPro = jogadores.filter((j) => j.time_id === time.id);
       const gerado = gerarElencoSub23Clube({
         time,
         qualidade,
         diretor,
         seed: nextId * 13,
         idInicio: nextId,
+        elencoPro,
       });
       elenco = [...elenco, ...gerado.elenco.slice(0, falta)];
       nextId = gerado.proximoId;
