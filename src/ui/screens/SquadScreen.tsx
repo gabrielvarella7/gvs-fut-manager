@@ -106,8 +106,15 @@ function SquadTable({
                 </>
               )}
               <td className="text-zinc-500">
-                {j.lesao && j.lesao.diasRestantes > 0 ?
-                  <span className="text-rose-400" title={j.lesao.descricao}>
+                {j.lesao && j.lesao.diasRestantes > 0 && j.energia < 60 ?
+                  <span
+                    className="text-rose-400"
+                    title={`${j.lesao.descricao} · energia ${Math.round(j.energia)}% — não pode jogar`}
+                  >
+                    FORA
+                  </span>
+                : j.lesao && j.lesao.diasRestantes > 0 ?
+                  <span className="text-amber-400" title={j.lesao.descricao}>
                     LES {j.lesao.diasRestantes}d
                   </span>
                 : j.status_escalacao.slice(0, 3)}

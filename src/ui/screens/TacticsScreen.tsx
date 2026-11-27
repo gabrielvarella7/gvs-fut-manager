@@ -1,5 +1,10 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { getTimeFicticio } from '../../career/fictionalLeague';
+import {
+  bloqueadoPorLesaoComEnergiaBaixa,
+  mensagemBloqueioLesaoEnergia,
+  sanitizarAlinhamento11,
+} from '../../career/aptidaoEscalacao';
 import { escalacaoAssistenteMelhorOverall } from '../../career/assistenteTecnico';
 import { idsEscalacaoPadrao } from '../../career/lineup';
 import { ordenarElenco } from '../../career/ordenarElenco';
@@ -201,6 +206,12 @@ export function TacticsScreen() {
   };
 
   const aplicarSubstituicao = (slot: number, jogadorId: number) => {
+    const entrando = elenco.find((j) => j.id === jogadorId);
+    if (entrando && bloqueadoPorLesaoComEnergiaBaixa(entrando)) {
+      const msg = mensagemBloqueioLesaoEnergia(entrando);
+      if (msg) useGameStore.setState({ avisoSalvo: msg });
+      return;
+    }
     const next = [...slotIds];
     const outroSlot = next.indexOf(jogadorId);
     const saida = next[slot];
@@ -290,9 +301,18 @@ export function TacticsScreen() {
   const salvarEscolha = () => {
     const personalizado = selecao === 'PERSONALIZADO';
     const esq = personalizado ? esquemaBase : (selecao as EsquemaTatico);
+    const { ids: alinhamentoLimpo, trocas } = sanitizarAlinhamento11(elenco, slotIds);
+    if (trocas.length > 0) {
+      useGameStore.setState({
+        avisoSalvo: trocas
+          .map((t) => `${t.saiu} → ${t.entrou}: ${t.motivo}`)
+          .join(' '),
+      });
+      setSlotIds(alinhamentoLimpo);
+    }
     commitEscolha({
       esquema: esq,
-      alinhamento11: slotIds,
+      alinhamento11: alinhamentoLimpo,
       gradeTatica11: personalizado ? grade11 : null,
       personalizado,
       configTatica: configParaEsquema(esq, configLocal),
@@ -484,7 +504,7 @@ export function TacticsScreen() {
             Assistente escolhe os melhores
           </CmBtn>
           <span className="self-center text-xs text-zinc-500">
-            Maior OVR em cada posição do esquema {rotuloCampo} (exclui lesionados).
+            Maior OVR por posição (exclui lesão com energia &lt;60%).
           </span>
         </div>
       )}

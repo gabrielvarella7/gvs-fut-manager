@@ -1,5 +1,6 @@
 import type { ConfiguracaoTaticaClube, EstiloJogoId, RitmoJogo } from '../types/tactics';
 import type { GravidadeLesao, Jogador, Posicao } from '../types/schema';
+import { jogadorPodeJogar } from './aptidaoEscalacao';
 import { getGeneticaSegura } from './genetica';
 import {
   multiplicadorFadigaPartida,
@@ -393,7 +394,7 @@ export function escolherReservaParaSub(
     (j) =>
       !idsEmCampo.has(j.id) &&
       !idsJaUsados.has(j.id) &&
-      (!j.lesao || j.lesao.diasRestantes <= 0) &&
+      jogadorPodeJogar(j) &&
       j.energia >= 35,
   );
   if (candidatos.length === 0) return null;

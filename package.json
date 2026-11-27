@@ -8,6 +8,7 @@
     "db:seed": "node scripts/generate-test-database.mjs",
     "db:seed-genetica": "node scripts/seed-genetica-jogadores.mjs",
     "smoke:medico": "node scripts/smoke-medico-energia.mjs",
+    "smoke:lesao-energia": "node scripts/smoke-lesao-energia-lockout.mjs",
     "db:migrate-atributos": "node scripts/migrate-atributos-jogadores.mjs",
     "dev": "vite",
     "build": "vite build",

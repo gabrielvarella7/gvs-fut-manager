@@ -135,6 +135,12 @@ export function PlayerProfileScreen() {
               {jogador.lesao.overallReferencia != null && (
                 <> · OVR pré-lesão {jogador.lesao.overallReferencia}</>
               )}
+              {jogador.energia < 60 && (
+                <span className="mt-1 block font-medium text-rose-200">
+                  Energia {Math.round(jogador.energia)}% — não pode jogar (lesão + energia &lt;60%).
+                  Substitua ou deixe fora da escalação.
+                </span>
+              )}
             </p>
           )}
           {profissional && (

@@ -1,4 +1,8 @@
 import type { PointerEvent as ReactPointerEvent } from 'react';
+import {
+  bloqueadoPorLesaoComEnergiaBaixa,
+  rotuloBloqueioLesaoEnergia,
+} from '../../career/aptidaoEscalacao';
 import { corClasseEnergia, rotuloEnergiaCurto } from '../../career/energia';
 import { rotuloPosicao } from '../../career/perfilJogador';
 import { rotuloPosicaoCampinho } from '../../data/gradeCampinho';
@@ -40,6 +44,8 @@ function MiniJogador({
   onSoltar,
   arrastando,
   alvoSubstituicao,
+  bloqueado,
+  titleBloqueio,
 }: {
   nome: string;
   detalhe: string;
@@ -52,13 +58,21 @@ function MiniJogador({
   onSoltar?: () => void;
   arrastando?: boolean;
   alvoSubstituicao?: boolean;
+  bloqueado?: boolean;
+  titleBloqueio?: string | null;
 }) {
   const energiaBaixa = energia != null && energia < 70;
   return (
     <button
       type="button"
-      onClick={onClick}
+      disabled={bloqueado && !titular}
+      title={titleBloqueio ?? undefined}
+      onClick={() => {
+        if (bloqueado && !titular) return;
+        onClick();
+      }}
       onPointerDown={(e) => {
+        if (bloqueado) return;
         try {
           e.currentTarget.setPointerCapture(e.pointerId);
         } catch {
@@ -68,18 +82,24 @@ function MiniJogador({
       }}
       onPointerUp={onSoltar}
       style={{ touchAction: 'none' }}
-      className={`flex w-full cursor-grab items-center gap-2 rounded-lg border px-2 py-1.5 text-left transition-colors active:cursor-grabbing ${
-        alvoSubstituicao
-          ? 'border-yellow-400 bg-yellow-950/50 ring-1 ring-yellow-500/60'
-          : arrastando
-            ? 'border-amber-500 bg-amber-950/60 opacity-90'
-            : ativo
-              ? 'border-emerald-500 bg-emerald-950/80'
-              : energiaBaixa
-                ? 'border-amber-800/80 bg-zinc-900/70 hover:border-amber-600'
-                : titular
-                  ? 'border-zinc-600 bg-zinc-800/90 hover:border-zinc-500'
-                  : 'border-zinc-700 bg-zinc-900/60 hover:border-zinc-600'
+      className={`flex w-full items-center gap-2 rounded-lg border px-2 py-1.5 text-left transition-colors ${
+        bloqueado
+          ? 'cursor-not-allowed border-rose-800/80 bg-rose-950/40 opacity-70'
+          : 'cursor-grab active:cursor-grabbing'
+      } ${
+        bloqueado
+          ? ''
+          : alvoSubstituicao
+            ? 'border-yellow-400 bg-yellow-950/50 ring-1 ring-yellow-500/60'
+            : arrastando
+              ? 'border-amber-500 bg-amber-950/60 opacity-90'
+              : ativo
+                ? 'border-emerald-500 bg-emerald-950/80'
+                : energiaBaixa
+                  ? 'border-amber-800/80 bg-zinc-900/70 hover:border-amber-600'
+                  : titular
+                    ? 'border-zinc-600 bg-zinc-800/90 hover:border-zinc-500'
+                    : 'border-zinc-700 bg-zinc-900/60 hover:border-zinc-600'
       }`}
     >
       <span
@@ -142,18 +162,26 @@ export function TacticSquadPanel({
             const sigla =
               cel != null ? rotuloPosicaoCampinho(cel) : (slots[i] ?? j?.posicao ?? '—').slice(0, 3);
             const pos = j ? rotuloPosicao(j.posicao) : '—';
+            const bloqueado = j != null && bloqueadoPorLesaoComEnergiaBaixa(j);
+            const aviso = j ? rotuloBloqueioLesaoEnergia(j) : null;
             return (
               <li key={`slot-${i}`}>
                 <MiniJogador
                   nome={j ? nomeCurto(j.nome) : '—'}
-                  detalhe={`${sigla} · ${pos}`}
+                  detalhe={
+                    bloqueado
+                      ? `⚠ ${aviso ?? 'Indisponível'}`
+                      : `${sigla} · ${pos}`
+                  }
                   ovr={j?.overall ?? 0}
                   energia={j?.energia}
                   ativo={slotAtivo === i}
                   titular
+                  bloqueado={bloqueado}
+                  titleBloqueio={aviso}
                   arrastando={j != null && arrastandoJogadorId === j.id}
                   onArrastar={(e) => {
-                    if (j == null) return;
+                    if (j == null || bloqueado) return;
                     e.preventDefault();
                     onArrastarJogador?.(j.id);
                   }}
@@ -173,25 +201,40 @@ export function TacticSquadPanel({
           {reservas.length === 0 ? (
             <li className="text-xs text-zinc-500">Todos no time</li>
           ) : (
-            reservas.map((j) => (
-              <li key={j.id}>
-                <MiniJogador
-                  nome={nomeCurto(j.nome)}
-                  detalhe={rotuloPosicao(j.posicao)}
-                  ovr={j.overall}
-                  energia={j.energia}
-                  ativo={reservaAtiva === j.id}
-                  arrastando={arrastandoJogadorId === j.id}
-                  alvoSubstituicao={slotAguardandoReserva != null}
-                  onArrastar={(e) => {
-                    e.preventDefault();
-                    onArrastarJogador?.(j.id);
-                  }}
-                  onSoltar={() => onSoltarReservaComCampo?.(j.id)}
-                  onClick={() => onReservaClick(j.id)}
-                />
-              </li>
-            ))
+            reservas.map((j) => {
+              const bloqueado = bloqueadoPorLesaoComEnergiaBaixa(j);
+              const aviso = rotuloBloqueioLesaoEnergia(j);
+              return (
+                <li key={j.id}>
+                  <MiniJogador
+                    nome={nomeCurto(j.nome)}
+                    detalhe={
+                      bloqueado
+                        ? `⚠ ${aviso ?? 'Não pode jogar'}`
+                        : rotuloPosicao(j.posicao)
+                    }
+                    ovr={j.overall}
+                    energia={j.energia}
+                    ativo={reservaAtiva === j.id}
+                    bloqueado={bloqueado}
+                    titleBloqueio={aviso}
+                    arrastando={arrastandoJogadorId === j.id}
+                    alvoSubstituicao={slotAguardandoReserva != null && !bloqueado}
+                    onArrastar={(e) => {
+                      if (bloqueado) return;
+                      e.preventDefault();
+                      onArrastarJogador?.(j.id);
+                    }}
+                    onSoltar={() => {
+                      if (!bloqueado) onSoltarReservaComCampo?.(j.id);
+                    }}
+                    onClick={() => {
+                      if (!bloqueado) onReservaClick(j.id);
+                    }}
+                  />
+                </li>
+              );
+            })
           )}
         </ul>
       </section>
