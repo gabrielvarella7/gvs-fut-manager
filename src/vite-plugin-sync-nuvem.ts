@@ -5,7 +5,7 @@ import type { Plugin } from 'vite';
 
 const execFileAsync = promisify(execFile);
 
-const SITE_PUBLICO = 'https://gabrielvarella7.github.io/gvs-manager/';
+const SITE_PUBLICO = 'https://gabrielvarella7.github.io/gvs-fut-manager/';
 
 function gitBin(): string {
   const candidates = [

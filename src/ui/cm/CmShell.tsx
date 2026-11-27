@@ -11,7 +11,7 @@ export function CmShell({ titulo, subtitulo, children, rodape }: Props) {
   return (
     <div className="cm-app mx-auto flex min-h-screen max-w-4xl flex-col font-sans text-zinc-100">
       <header className="cm-header border-b border-emerald-900 px-4 py-3">
-        <p className="text-xs uppercase tracking-widest text-emerald-500">GVS Manager</p>
+        <p className="text-xs uppercase tracking-widest text-emerald-500">GVS FUT Manager</p>
         <h1 className="text-xl font-semibold text-emerald-100">{titulo}</h1>
         {subtitulo && <p className="text-sm text-zinc-400">{subtitulo}</p>}
       </header>

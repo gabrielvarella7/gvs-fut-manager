@@ -16,13 +16,13 @@ if (-not $git) {
 $status = & $git status --porcelain
 if (-not $status) {
   Write-Host 'Nada novo para enviar — nuvem já está em dia.'
-  & $git push origin gvs-manager 2>$null
+  & $git push origin main 2>$null
   exit 0
 }
 
 $msg = if ($args[0]) { $args[0] } else { "Sync $(Get-Date -Format 'yyyy-MM-dd HH:mm')" }
 & $git add -A
 & $git commit -m $msg
-& $git push origin HEAD:gvs-manager
+& $git push origin main
 Write-Host 'Enviado! O site atualiza em 1-2 min:'
-Write-Host 'https://gabrielvarella7.github.io/gvs-manager/'
+Write-Host 'https://gabrielvarella7.github.io/gvs-fut-manager/'

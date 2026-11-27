@@ -15,8 +15,9 @@ export function SettingsScreen() {
   const [mensagem, setMensagem] = useState<string | null>(null);
   const [syncing, setSyncing] = useState(false);
 
-  const SITE_NUVEM = 'https://gabrielvarella7.github.io/gvs-manager/';
-  const REPO_GITHUB = 'https://github.com/gabrielvarella7/gvs-manager';
+  const SITE_NUVEM = 'https://gabrielvarella7.github.io/gvs-fut-manager/';
+  const REPO_GITHUB = 'https://github.com/gabrielvarella7/gvs-fut-manager';
+  const REPO_CREMERJ = 'https://github.com/gabrielvarella7/gvs-manager';
   const emDev = import.meta.env.DEV;
 
   const syncNuvem = async () => {
@@ -104,8 +105,12 @@ export function SettingsScreen() {
           <strong className="text-zinc-100">Editar o jogo pelo celular:</strong> abra o repositório no app GitHub ou
           no navegador, edite arquivos (ex. <code className="text-zinc-400">public/database/</code>, telas em{' '}
           <code className="text-zinc-400">src/</code>) e faça commit na branch{' '}
-          <code className="text-zinc-400">gvs-manager</code> (não use main — é outro projeto). O site
-          atualiza em 1–2 min após o commit.
+          <code className="text-zinc-400">main</code> neste repositório ({REPO_GITHUB.replace('https://github.com/', '')}).
+          O projeto CREMERJ fica em{' '}
+          <a href={REPO_CREMERJ} target="_blank" rel="noreferrer" className="text-emerald-400 underline">
+            gvs-manager
+          </a>
+          . Deploy do jogo em 1–2 min após o commit.
         </p>
         <a
           href={REPO_GITHUB}

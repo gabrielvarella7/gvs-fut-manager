@@ -8,9 +8,9 @@ export function MainMenuScreen() {
 
   return (
     <CmShell
-      titulo="GVS Manager"
+      titulo="GVS FUT Manager"
       subtitulo={campeonato?.nome ?? 'Modo carreira'}
-      rodape={<span className="text-xs text-zinc-600">GVS Manager</span>}
+      rodape={<span className="text-xs text-zinc-600">GVS FUT Manager</span>}
     >
       <CmMenuList
         items={[
