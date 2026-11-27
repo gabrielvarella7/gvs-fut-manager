@@ -37,6 +37,7 @@ export function TransfersScreen() {
   const modoSub23 = useGameStore((s) => s.modoSub23);
   const iniciarCompra = useGameStore((s) => s.iniciarNegociacaoCompra);
   const iniciarVenda = useGameStore((s) => s.iniciarNegociacaoVenda);
+  const abrirPerfil = useGameStore((s) => s.abrirPerfilJogador);
   const atualizarOferta = useGameStore((s) => s.atualizarOfertaNegociacao);
   const enviarOferta = useGameStore((s) => s.enviarOfertaTransferencia);
   const aceitarContra = useGameStore((s) => s.aceitarContraproposta);
@@ -204,6 +205,7 @@ export function TransfersScreen() {
           <ListaMercado
             jogadores={mercadoVisivel}
             timesReais={timesReais}
+            onPerfil={abrirPerfil}
             onComprar={(id) => {
               const nid = iniciarCompra(id);
               if (nid) {
@@ -237,6 +239,7 @@ export function TransfersScreen() {
           />
           <ListaVenda
             elenco={elencoVendaVisivel}
+            onPerfil={abrirPerfil}
             onVender={(id, valor) => {
               const nid = iniciarVenda(id, valor);
               if (nid) {
@@ -290,6 +293,7 @@ export function TransfersScreen() {
               jogadores={jogadoresReais}
               times={timesReais}
               caixa={financas.saldo_caixa}
+              onPerfil={abrirPerfil}
               onAtualizar={(patch) => atualizarOferta(negAtiva.id, patch)}
               onEnviar={() => enviarOferta(negAtiva.id)}
               onAceitar={() => aceitarContra(negAtiva.id)}
@@ -323,10 +327,12 @@ function rotuloNegociacao(
 function ListaMercado({
   jogadores,
   timesReais,
+  onPerfil,
   onComprar,
 }: {
   jogadores: Jogador[];
   timesReais: { id: string; nome: string }[];
+  onPerfil: (id: number) => void;
   onComprar: (id: number) => void;
 }) {
   if (jogadores.length === 0) {
@@ -341,15 +347,22 @@ function ListaMercado({
         const tier = tierPropensao(g.propensao_lesao);
         return (
           <li key={j.id} className="flex flex-wrap items-center justify-between gap-2 px-3 py-2 text-sm">
-            <div>
-              <p className="font-medium text-zinc-100">{j.nome}</p>
+            <button
+              type="button"
+              onClick={() => onPerfil(j.id)}
+              className="min-w-0 flex-1 text-left hover:bg-zinc-900/60"
+            >
+              <p className="font-medium text-emerald-100 underline-offset-2 hover:underline">
+                {j.nome}
+              </p>
               <p className="text-xs text-zinc-500">
-                {time?.nome} · {j.posicao} · OVR {j.overall} · {formatarDinheiro(valorMercado(j))}
+                {time?.nome} · {j.posicao} · {j.idade} anos · OVR {j.overall} ·{' '}
+                {formatarDinheiro(valorMercado(j))}
                 {tier === 'DE_VIDRO' ? ' · risco físico' : ''}
                 {j.idade <= 22 && g.potencial_maximo - j.overall >= 8 ? ' · teto alto' : ''}
               </p>
               {risco && <p className="text-[10px] text-amber-500/90">{risco}</p>}
-            </div>
+            </button>
             <CmBtn variant="primary" onClick={() => onComprar(j.id)}>
               Negociar
             </CmBtn>
@@ -362,9 +375,11 @@ function ListaMercado({
 
 function ListaVenda({
   elenco,
+  onPerfil,
   onVender,
 }: {
   elenco: Jogador[];
+  onPerfil: (id: number) => void;
   onVender: (id: number, valor: number) => void;
 }) {
   const [valores, setValores] = useState<Record<number, string>>({});
@@ -375,12 +390,19 @@ function ListaVenda({
         const bruto = valores[j.id] ?? formatarDinheiroExtenso(sugerido);
         return (
           <li key={j.id} className="flex flex-col gap-2 px-3 py-3 sm:flex-row sm:items-center sm:justify-between">
-            <div className="text-sm">
-              <p className="font-medium text-zinc-100">{j.nome}</p>
-              <p className="text-xs text-zinc-500">
-                {j.posicao} · OVR {j.overall} · Mercado {formatarDinheiroExtenso(valorMercado(j))}
+            <button
+              type="button"
+              onClick={() => onPerfil(j.id)}
+              className="min-w-0 flex-1 text-left text-sm hover:bg-zinc-900/60"
+            >
+              <p className="font-medium text-emerald-100 underline-offset-2 hover:underline">
+                {j.nome}
               </p>
-            </div>
+              <p className="text-xs text-zinc-500">
+                {j.posicao} · {j.idade} anos · OVR {j.overall} · Mercado{' '}
+                {formatarDinheiroExtenso(valorMercado(j))}
+              </p>
+            </button>
             <div className="flex flex-wrap items-center gap-2">
               <label className="text-xs text-zinc-500">
                 Valor mínimo
@@ -423,7 +445,8 @@ function PainelNegociacao({
   neg,
   jogadores,
   times,
-  caixa,
+  caixa: _caixa,
+  onPerfil,
   onAtualizar,
   onEnviar,
   onAceitar,
@@ -434,6 +457,7 @@ function PainelNegociacao({
   jogadores: Jogador[];
   times: { id: string; nome: string }[];
   caixa: number;
+  onPerfil: (id: number) => void;
   onAtualizar: (p: Partial<NegociacaoTransferencia['ofertaAtual']>) => void;
   onEnviar: () => void;
   onAceitar: () => void;
@@ -459,7 +483,13 @@ function PainelNegociacao({
 
   return (
     <CmPanel>
-      <h2 className="text-lg font-semibold text-emerald-100">{j.nome}</h2>
+      <button
+        type="button"
+        onClick={() => onPerfil(j.id)}
+        className="text-left text-lg font-semibold text-emerald-100 underline-offset-2 hover:underline"
+      >
+        {j.nome}
+      </button>
       {rivalidade !== 'NENHUMA' && (
         <p className="mt-1 text-xs text-amber-300/90">{rotuloRival[rivalidade]}</p>
       )}
@@ -469,8 +499,8 @@ function PainelNegociacao({
         </p>
       )}
       <p className="mt-1 text-sm text-zinc-400">
-        {neg.tipo === 'compra' ? `Clube: ${vendedor?.nome ?? '—'}` : `Comprador: ${comprador?.nome ?? 'a definir'}`} · OVR{' '}
-        {j.overall}
+        {neg.tipo === 'compra' ? `Clube: ${vendedor?.nome ?? '—'}` : `Comprador: ${comprador?.nome ?? 'a definir'}`} ·{' '}
+        {j.idade} anos · OVR {j.overall}
         {j.suscetibilidade && (
           <>
             {' '}

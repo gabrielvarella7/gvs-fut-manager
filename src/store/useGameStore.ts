@@ -171,6 +171,8 @@ interface GameStore extends EstadoCarreira {
   partidaJogoId: number | null;
   avisoSalvo: string | null;
   jogadorPerfilId: number | null;
+  /** Tela para voltar ao fechar o perfil (elenco, transferências, etc.). */
+  perfilRetornoTela: TelaJogo;
   saveSlotId: string | null;
   setDatabase: (p: {
     campeonato: CampeonatoConfig;
@@ -292,6 +294,7 @@ const estadoInicial = (): EstadoCarreira & {
   partidaJogoId: number | null;
   avisoSalvo: string | null;
   jogadorPerfilId: number | null;
+  perfilRetornoTela: TelaJogo;
   saveSlotId: string | null;
   dbTaticas: DatabaseTaticas | null;
   dbTreinos: DatabaseTreinos | null;
@@ -305,6 +308,7 @@ const estadoInicial = (): EstadoCarreira & {
   partidaJogoEmCurso: null,
   avisoSalvo: null,
   jogadorPerfilId: null,
+  perfilRetornoTela: 'elenco',
   saveSlotId: null,
   dbTaticas: null,
   dbTreinos: null,
@@ -1420,8 +1424,18 @@ export const useGameStore = create<GameStore>((set, get) => ({
       partidaJogoId: null,
       jogadorPerfilId: null,
     }),
-  abrirPerfilJogador: (id) => set({ jogadorPerfilId: id, tela: 'perfil_jogador' }),
-  fecharPerfilJogador: () => set({ jogadorPerfilId: null, tela: 'elenco' }),
+  abrirPerfilJogador: (id) =>
+    set((s) => ({
+      jogadorPerfilId: id,
+      perfilRetornoTela: s.tela === 'perfil_jogador' ? s.perfilRetornoTela : s.tela,
+      tela: 'perfil_jogador',
+    })),
+  fecharPerfilJogador: () =>
+    set((s) => ({
+      jogadorPerfilId: null,
+      tela: s.perfilRetornoTela || 'elenco',
+      perfilRetornoTela: 'elenco',
+    })),
   registrarResultadoPartida: (jogoId, result) => {
     const s = get();
     const alvo = s.jogos.find((j) => j.id === jogoId);

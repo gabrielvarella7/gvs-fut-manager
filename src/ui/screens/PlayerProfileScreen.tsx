@@ -26,10 +26,17 @@ export function PlayerProfileScreen() {
   const jogadoresReais = useGameStore((s) => s.jogadoresReais);
   const timesFicticios = useGameStore((s) => s.timesFicticios);
   const clubeRealId = useGameStore((s) => s.clubeRealId);
-  const voltarElenco = useGameStore((s) => s.fecharPerfilJogador);
+  const voltarPerfil = useGameStore((s) => s.fecharPerfilJogador);
+  const perfilRetornoTela = useGameStore((s) => s.perfilRetornoTela);
   const iniciarCompra = useGameStore((s) => s.iniciarNegociacaoCompra);
   const iniciarVenda = useGameStore((s) => s.iniciarNegociacaoVenda);
   const irPara = useGameStore((s) => s.irPara);
+  const rotuloVoltar =
+    perfilRetornoTela === 'transferencias'
+      ? 'Voltar às transferências'
+      : perfilRetornoTela === 'elenco'
+        ? 'Voltar ao elenco'
+        : 'Voltar';
 
   const jogador =
     jogadoresReais.find((j) => j.id === jogadorId) ??
@@ -40,8 +47,8 @@ export function PlayerProfileScreen() {
       <CmCareerShell
         titulo="Jogador"
         acoesExtras={
-          <CmBtn variant="ghost" onClick={voltarElenco}>
-            Voltar ao elenco
+          <CmBtn variant="ghost" onClick={voltarPerfil}>
+            {rotuloVoltar}
           </CmBtn>
         }
       >
@@ -86,8 +93,8 @@ export function PlayerProfileScreen() {
               Colocar à venda
             </CmBtn>
           )}
-          <CmBtn variant="ghost" onClick={voltarElenco}>
-            Voltar ao elenco
+          <CmBtn variant="ghost" onClick={voltarPerfil}>
+            {rotuloVoltar}
           </CmBtn>
         </>
       }
