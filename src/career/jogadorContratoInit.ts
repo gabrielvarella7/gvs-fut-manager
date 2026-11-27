@@ -1,7 +1,9 @@
 import { garantirAtributosJogador } from './atributosJogador';
+import { garantirGeneticaJogador } from './genetica';
 import type { Jogador } from '../types/schema';
 import {
   calcularSuscetibilidadeJogador,
+  calcularValorMercado,
   inicializarContratoPadrao,
   adaptarTimeMercado,
   type TimeMercado,
@@ -9,20 +11,31 @@ import {
 import type { Time } from '../types/schema';
 
 export function enriquecerJogadorComContrato(j: Jogador): Jogador {
-  if (j.contrato && j.suscetibilidade && j.valor_mercado) return j;
-  const { valor_mercado, contrato } = inicializarContratoPadrao(
-    j.overall,
-    j.idade,
-    j.posicao,
-    j.id,
+  const comGenetica = garantirGeneticaJogador(garantirAtributosJogador(j));
+  if (comGenetica.contrato && comGenetica.suscetibilidade && comGenetica.valor_mercado) {
+    return comGenetica;
+  }
+  const { contrato } = inicializarContratoPadrao(
+    comGenetica.overall,
+    comGenetica.idade,
+    comGenetica.posicao,
+    comGenetica.id,
   );
   const salario = contrato.salario_clt_mensal + contrato.direito_imagem_mensal;
+  const valor =
+    comGenetica.valor_mercado ??
+    calcularValorMercado(
+      comGenetica.overall,
+      comGenetica.idade,
+      comGenetica.posicao,
+      comGenetica,
+    );
   return {
-    ...j,
-    valor_mercado: j.valor_mercado ?? valor_mercado,
+    ...comGenetica,
+    valor_mercado: valor,
     salario_mensal: salario,
-    contrato,
-    suscetibilidade: j.suscetibilidade ?? {
+    contrato: comGenetica.contrato ?? contrato,
+    suscetibilidade: comGenetica.suscetibilidade ?? {
       indice: 45,
       camada: 'ABERTO_A_PROPOSTAS',
       motivo_principal: 'Avalia oportunidades de carreira.',
@@ -31,7 +44,7 @@ export function enriquecerJogadorComContrato(j: Jogador): Jogador {
 }
 
 export function enriquecerElenco(jogadores: Jogador[]): Jogador[] {
-  return jogadores.map((j) => enriquecerJogadorComContrato(garantirAtributosJogador(j)));
+  return jogadores.map((j) => enriquecerJogadorComContrato(j));
 }
 
 export function atualizarSuscetibilidadeElenco(

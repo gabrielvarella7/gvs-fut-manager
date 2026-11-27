@@ -3,6 +3,7 @@ import {
   multDuracaoFisioterapeuta,
   multFadigaPreparadorFisico,
   nivelStaff,
+  preservacaoAtributosMedico,
 } from './staffEfeitos';
 import type { EstadoMundoClube } from '../types/mundoClube';
 import type { ProfissionalCorpoTecnico } from '../types/training';
@@ -51,7 +52,7 @@ export function corpoTecnicoDeMundo(mundo: EstadoMundoClube): ProfissionalCorpoT
         multiplicador_fadiga_jogo: 1,
         multiplicador_chance_lesao: 1,
         multiplicador_tempo_fora: 1,
-        preservacao_atributos_pct: Math.max(55, Math.min(98, 52 + med * 2.4)),
+        preservacao_atributos_pct: Math.round(preservacaoAtributosMedico(med) * 100),
       },
     },
   ];

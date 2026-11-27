@@ -143,10 +143,10 @@ export function MatchScreen() {
             isClassico: neutro,
           })
         : undefined;
+      const nivelPrepUser =
+        clubeRealId && mundoClube ? nivelStaff(mundoClube, 'PREPARADOR_FISICO') : undefined;
       const fadigaUser =
-        clubeRealId && mundoClube ?
-          multFadigaPreparadorFisico(nivelStaff(mundoClube, 'PREPARADOR_FISICO'))
-        : undefined;
+        nivelPrepUser != null ? multFadigaPreparadorFisico(nivelPrepUser) : undefined;
       const improvisacaoPorJogador: Record<number, number> = {};
       if (mundoClube?.estadosTreino) {
         for (const est of mundoClube.estadosTreino) {
@@ -169,6 +169,9 @@ export function MatchScreen() {
           forcaInstitucional: mandanteLiga.prestigio ?? mandanteLiga.forca_geral,
           ...(mandanteLiga.id === clubeRealId && escalacaoUser ? { escalacao: escalacaoUser } : {}),
           ...(mandanteLiga.id === clubeRealId && fadigaUser ? { fadigaPorMinutoMult: fadigaUser } : {}),
+          ...(mandanteLiga.id === clubeRealId && nivelPrepUser != null
+            ? { nivelPreparador: nivelPrepUser }
+            : {}),
           tatica:
             mandanteLiga.id === clubeRealId
               ? taticaUsuario
@@ -183,6 +186,9 @@ export function MatchScreen() {
           forcaInstitucional: visitanteLiga.prestigio ?? visitanteLiga.forca_geral,
           ...(visitanteLiga.id === clubeRealId && escalacaoUser ? { escalacao: escalacaoUser } : {}),
           ...(visitanteLiga.id === clubeRealId && fadigaUser ? { fadigaPorMinutoMult: fadigaUser } : {}),
+          ...(visitanteLiga.id === clubeRealId && nivelPrepUser != null
+            ? { nivelPreparador: nivelPrepUser }
+            : {}),
           tatica:
             visitanteLiga.id === clubeRealId
               ? taticaUsuario

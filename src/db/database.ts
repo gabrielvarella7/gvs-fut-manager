@@ -1,5 +1,6 @@
 import Dexie, { type Table } from 'dexie';
 import { garantirAtributosJogador } from '../career/atributosJogador';
+import { garantirGeneticaJogador } from '../career/genetica';
 import { enriquecerElenco } from '../career/jogadorContratoInit';
 import type {
   CampeonatoConfig,
@@ -73,13 +74,15 @@ function normalizarJogadores(jogadores: Jogador[], times: Time[]): Jogador[] {
     const time_id = bruto
       ? (porSlugOuId.get(bruto) ?? porSlugOuId.get(bruto.toLowerCase()) ?? bruto)
       : '';
-    return garantirAtributosJogador({
-      ...j,
-      time_id,
-      valor_mercado: j.valor_mercado ?? Math.round(j.overall * j.overall * 1200),
-      salario_mensal: j.salario_mensal ?? Math.round(j.overall * 520),
-      nacionalidade: j.nacionalidade ?? 'Brasil',
-    });
+    return garantirGeneticaJogador(
+      garantirAtributosJogador({
+        ...j,
+        time_id,
+        valor_mercado: j.valor_mercado ?? Math.round(j.overall * j.overall * 1200),
+        salario_mensal: j.salario_mensal ?? Math.round(j.overall * 520),
+        nacionalidade: j.nacionalidade ?? 'Brasil',
+      }),
+    );
   });
 }
 

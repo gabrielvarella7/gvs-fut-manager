@@ -13,14 +13,17 @@ import {
   chanceLesaoPorFadiga,
   escolherReservaParaSub,
   energiaInicialPartida,
-  fadigaPorMinutoPorIdade,
+  fadigaPorMinutoCompleta,
+  multiplicadorDrainGeneticaNoMinuto,
   MAX_SUBSTITUICOES_PARTIDA,
   recuperacaoDiariaEnergia,
   sortearGravidadeLesaoFadiga,
   diasBaseLesaoFadiga,
   descricaoLesaoFadiga,
   timeEmWO,
+  vetoresTaticosDeConfig,
 } from '../career/energia';
+import { getGeneticaSegura } from '../career/genetica';
 import type { EsquemaTatico, GravidadeLesao, Jogador, Posicao } from '../types/schema';
 import { type ContextoDinamicoPartida, modificadoresUrgencia } from './matchContext';
 import {
@@ -88,6 +91,8 @@ export interface MatchTeamInput {
   forcaInstitucional?: number;
   /** Multiplicador de fadiga por minuto (preparador físico). */
   fadigaPorMinutoMult?: number;
+  /** Nível do preparador (1–20) — reduz drain nos 90'. */
+  nivelPreparador?: number;
   /** Estilo + instruções (formação derivada do esquema se omitida). */
   tatica?: ConfiguracaoTaticaClube;
   bonusTreino?: Record<string, number>;
@@ -653,29 +658,52 @@ export function simularPartida(input: MatchSimInput): MatchSimResult {
   const momento: MomentoAtaque[] = [];
 
   const fadigaPorJogador = new Map<number, number>();
+  const tudoOuNada =
+    ctx?.necessidadeMandante === 'DECISIVO_TITULO' ||
+    ctx?.necessidadeVisitante === 'DECISIVO_TITULO';
+  const vetoresM = vetoresTaticosDeConfig(input.mandante.tatica);
+  const vetoresV = vetoresTaticosDeConfig(input.visitante.tatica);
   const registrarFadiga = (
     jogador: Jogador,
+    posicaoEscalada: Posicao,
     multEquipe: number,
     desgasteTatico: number,
+    vetores: ReturnType<typeof vetoresTaticosDeConfig>,
+    nivelPrep: number,
   ) => {
-    const baseIdade = fadigaPorMinutoPorIdade(jogador.idade, rnd);
-    fadigaPorJogador.set(
-      jogador.id,
-      baseIdade * multEquipe * desgasteTatico,
-    );
+    const prop = getGeneticaSegura(jogador).propensao_lesao;
+    const paso = fadigaPorMinutoCompleta({
+      idade: jogador.idade,
+      posicao: posicaoEscalada,
+      propensaoLesao: prop,
+      rnd,
+      multEquipe,
+      desgasteTatico,
+      ...vetores,
+      isClassico,
+      tudoOuNada,
+      nivelPreparador: nivelPrep,
+    });
+    fadigaPorJogador.set(jogador.id, paso);
   };
-  for (const { jogador } of mandanteEsc) {
+  for (const slot of mandanteEsc) {
     registrarFadiga(
-      jogador,
+      slot.jogador,
+      slot.posicaoEscalada,
       input.mandante.fadigaPorMinutoMult ?? 1,
       modsM.desgaste_fisico,
+      vetoresM,
+      input.mandante.nivelPreparador ?? 10,
     );
   }
-  for (const { jogador } of visitanteEsc) {
+  for (const slot of visitanteEsc) {
     registrarFadiga(
-      jogador,
+      slot.jogador,
+      slot.posicaoEscalada,
       input.visitante.fadigaPorMinutoMult ?? 1,
       modsV.desgaste_fisico,
+      vetoresV,
+      input.visitante.nivelPreparador ?? 10,
     );
   }
 
@@ -724,11 +752,9 @@ export function simularPartida(input: MatchSimInput): MatchSimResult {
       if (fora.has(j.id)) continue;
       const eAgora = energia.get(j.id) ?? j.energia;
       if (
-        !chanceLesaoPorFadiga(
-          eAgora,
-          j.atributos.fisicos.fora_por_lesao,
-          rnd,
-        )
+        !chanceLesaoPorFadiga(eAgora, j.atributos.fisicos.fora_por_lesao, rnd, {
+          propensaoLesao: getGeneticaSegura(j).propensao_lesao,
+        })
       ) {
         continue;
       }
@@ -776,10 +802,13 @@ export function simularPartida(input: MatchSimInput): MatchSimResult {
         );
         registrarFadiga(
           reserva,
+          slot.posicaoEscalada,
           (casa
             ? input.mandante.fadigaPorMinutoMult
             : input.visitante.fadigaPorMinutoMult) ?? 1,
           casa ? modsM.desgaste_fisico : modsV.desgaste_fisico,
+          casa ? vetoresM : vetoresV,
+          (casa ? input.mandante.nivelPreparador : input.visitante.nivelPreparador) ?? 10,
         );
         fadigaPorJogador.delete(j.id);
         subsRestantes -= 1;
@@ -839,20 +868,28 @@ export function simularPartida(input: MatchSimInput): MatchSimResult {
 
   let minutoFinal = 90;
   for (let minuto = 1; minuto <= 90; minuto++) {
+    const aHomemMenosM = foraMandante.size > 0;
+    const aHomemMenosV = foraVisitante.size > 0;
     // Só quem está em campo gasta energia.
     for (const slot of mandanteEsc) {
       if (foraMandante.has(slot.jogador.id)) continue;
       const id = slot.jogador.id;
       const e = energia.get(id) ?? slot.jogador.energia;
-      const paso = fadigaPorJogador.get(id) ?? cfg.fadigaPorMinuto;
-      energia.set(id, Math.max(0, e - paso));
+      const basePaso = fadigaPorJogador.get(id) ?? cfg.fadigaPorMinuto;
+      const prop = getGeneticaSegura(slot.jogador).propensao_lesao;
+      const multMin = multiplicadorDrainGeneticaNoMinuto(prop, minuto);
+      const multHomem = aHomemMenosM ? 1.18 : 1;
+      energia.set(id, Math.max(0, e - basePaso * multMin * multHomem));
     }
     for (const slot of visitanteEsc) {
       if (foraVisitante.has(slot.jogador.id)) continue;
       const id = slot.jogador.id;
       const e = energia.get(id) ?? slot.jogador.energia;
-      const paso = fadigaPorJogador.get(id) ?? cfg.fadigaPorMinuto;
-      energia.set(id, Math.max(0, e - paso));
+      const basePaso = fadigaPorJogador.get(id) ?? cfg.fadigaPorMinuto;
+      const prop = getGeneticaSegura(slot.jogador).propensao_lesao;
+      const multMin = multiplicadorDrainGeneticaNoMinuto(prop, minuto);
+      const multHomem = aHomemMenosV ? 1.18 : 1;
+      energia.set(id, Math.max(0, e - basePaso * multMin * multHomem));
     }
 
     if (processarLesaoFadiga(minuto, true) || processarLesaoFadiga(minuto, false)) {
