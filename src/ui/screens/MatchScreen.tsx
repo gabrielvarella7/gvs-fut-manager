@@ -637,6 +637,18 @@ export function MatchScreen() {
               setSkipToEndNonce((n) => n + 1);
             }}
             onFinalizarJogo={voltarHub}
+            classificacao={
+              modoLiga && brasileirao && campeonato && partidaLiga
+                ? {
+                    estado: brasileirao,
+                    campeonato,
+                    times: timesReais,
+                    partidaAoVivoId: partidaLiga.id,
+                    mandanteId: partidaLiga.mandanteId,
+                    visitanteId: partidaLiga.visitanteId,
+                  }
+                : null
+            }
           />
         </>
       )}
