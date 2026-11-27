@@ -39,6 +39,8 @@ import {
 } from './matchStats';
 import { gerarGraficoMomentum } from './matchMomentum';
 import { prepararPartidaComFaixa } from './matchProbabilidades';
+import { rosterFromEscalacao } from './highlights/synthesizeFrames';
+import type { HighlightLanceMeta, HighlightRoster } from './highlights/types';
 import {
   indicePartidaDeveSerAlucinado,
   lambdasGolsDeDiff,
@@ -149,6 +151,8 @@ export interface Lancamento {
   texto: string;
   /** Cartão amarelo que virou expulsão (2º amarelo ou vermelho direto). */
   expulsao?: boolean;
+  /** CM04 2D highlight gate (xG, on-target, woodwork, hard save, red). */
+  highlight?: HighlightLanceMeta;
 }
 
 export interface LesaoEmCampo {
@@ -200,6 +204,8 @@ export interface MatchSimResult {
   woTimeId?: string;
   /** Jogadores que terminaram fora da posição natural (insatisfação / contagem). */
   idsImprovisados?: number[];
+  /** Escalações iniciais para replay 2D CM04. */
+  highlightRoster?: HighlightRoster;
 }
 
 export function criarRng(seed: number): () => number {
@@ -709,6 +715,7 @@ export function simularPartida(input: MatchSimInput): MatchSimResult {
       jogadorNome: autor.nome,
       ...(temAssist ? { assistenteNome: parceiro.nome } : {}),
       texto: escolherLegenda(cat, rnd, vars),
+      highlight: { xg: 0.35 + rnd() * 0.45, onTarget: true },
     });
   }
   for (const minuto of minutosGolV) {
@@ -736,6 +743,7 @@ export function simularPartida(input: MatchSimInput): MatchSimResult {
       jogadorNome: autor.nome,
       ...(temAssist ? { assistenteNome: parceiro.nome } : {}),
       texto: escolherLegenda(cat, rnd, vars),
+      highlight: { xg: 0.35 + rnd() * 0.45, onTarget: true },
     });
   }
 
@@ -1164,7 +1172,7 @@ export function simularPartida(input: MatchSimInput): MatchSimResult {
         autor.id,
         rnd,
       );
-      const { defendido } = probChanceMandante(modsM, modsV, rnd);
+      const { defendido, xgTransicao } = probChanceMandante(modsM, modsV, rnd);
       const goleiro = nomeGoleiro(escalacaoAtiva(visitanteEsc, foraVisitante));
       const vars = varsAtaque(
         varsBase(input, minutosGolM, minutosGolV, minuto),
@@ -1174,19 +1182,28 @@ export function simularPartida(input: MatchSimInput): MatchSimResult {
         assistNome,
         goleiro,
       );
+      const woodwork = !defendido && rnd() < 0.12;
       const cat = defendido
         ? 'defesa'
-        : rnd() < 0.12
+        : woodwork
           ? 'trave'
           : rnd() < 0.45
             ? 'posse'
             : 'perigo';
+      const xg = Math.min(0.55, 0.08 + rnd() * 0.28 * xgTransicao);
+      const hardSave = defendido && xg >= 0.18;
       corpo.push({
         minuto,
         tipo: defendido ? 'defesa' : 'chance',
         timeId: defendido ? input.visitante.timeId : input.mandante.timeId,
         jogadorId: autor.id,
         texto: escolherLegenda(cat, rnd, vars),
+        highlight: {
+          xg,
+          onTarget: defendido || (!woodwork && rnd() < 0.55),
+          woodwork,
+          hardSave,
+        },
       });
       minutosOcupados.add(minuto);
     } else if (rnd() < pressaoV) {
@@ -1196,7 +1213,7 @@ export function simularPartida(input: MatchSimInput): MatchSimResult {
         autor.id,
         rnd,
       );
-      const { defendido } = probChanceMandante(modsV, modsM, rnd);
+      const { defendido, xgTransicao } = probChanceMandante(modsV, modsM, rnd);
       const goleiro = nomeGoleiro(escalacaoAtiva(mandanteEsc, foraMandante));
       const vars = varsAtaque(
         varsBase(input, minutosGolM, minutosGolV, minuto),
@@ -1206,19 +1223,28 @@ export function simularPartida(input: MatchSimInput): MatchSimResult {
         assistNome,
         goleiro,
       );
+      const woodwork = !defendido && rnd() < 0.12;
       const cat = defendido
         ? 'defesa'
-        : rnd() < 0.12
+        : woodwork
           ? 'trave'
           : rnd() < 0.45
             ? 'posse'
             : 'perigo';
+      const xg = Math.min(0.55, 0.08 + rnd() * 0.28 * xgTransicao);
+      const hardSave = defendido && xg >= 0.18;
       corpo.push({
         minuto,
         tipo: defendido ? 'defesa' : 'chance',
         timeId: defendido ? input.mandante.timeId : input.visitante.timeId,
         jogadorId: autor.id,
         texto: escolherLegenda(cat, rnd, vars),
+        highlight: {
+          xg,
+          onTarget: defendido || (!woodwork && rnd() < 0.55),
+          woodwork,
+          hardSave,
+        },
       });
       minutosOcupados.add(minuto);
     } else if (
@@ -1274,6 +1300,7 @@ export function simularPartida(input: MatchSimInput): MatchSimResult {
         texto: expulso
           ? `${escolherLegenda('cartao', rnd, vars)} Expulsão — time volta a jogar com um a menos.`
           : escolherLegenda('cartao', rnd, vars),
+        ...(expulso ? { highlight: { redCard: true } } : {}),
       });
       minutosOcupados.add(minuto);
 
@@ -1422,6 +1449,19 @@ export function simularPartida(input: MatchSimInput): MatchSimResult {
     cruzamento: faixaPrep.cruzamento,
   };
 
+  const highlightRoster = rosterFromEscalacao(
+    mandanteEsc.map((e) => ({
+      id: e.jogador.id,
+      nome: e.jogador.nome,
+      posicao: e.posicaoEscalada,
+    })),
+    visitanteEsc.map((e) => ({
+      id: e.jogador.id,
+      nome: e.jogador.nome,
+      posicao: e.posicaoEscalada,
+    })),
+  );
+
   return {
     mandanteId: input.mandante.timeId,
     visitanteId: input.visitante.timeId,
@@ -1435,6 +1475,7 @@ export function simularPartida(input: MatchSimInput): MatchSimResult {
     preJogo,
     simSeed: input.seed,
     impactoTatico: { mandante: impactoM, visitante: impactoV },
+    highlightRoster,
     ...(lesoesEmCampo.length > 0 ? { lesoesEmCampo } : {}),
     ...(woTimeId ? { woTimeId } : {}),
     ...(idsImprovisados.size > 0 ? { idsImprovisados: [...idsImprovisados] } : {}),

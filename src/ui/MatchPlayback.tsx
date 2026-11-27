@@ -33,6 +33,8 @@ type Props = {
   onIntervalo?: () => void;
   /** Increment to jump playback to the final whistle without leaving the screen. */
   skipToEndNonce?: number;
+  /** Fired once when a lance is consumed into the feed (for CM04 highlights). */
+  onLanceConsumido?: (l: Lancamento) => void;
 };
 
 function delayMs(atual: Lancamento, anterior: Lancamento | null, velocidade: number): number {
@@ -67,6 +69,7 @@ export function MatchPlayback({
   playbackKey,
   onIntervalo,
   skipToEndNonce = 0,
+  onLanceConsumido,
 }: Props) {
   const [idx, setIdx] = useState(resumeFrom?.idx ?? 0);
   const [placar, setPlacar] = useState({ m: resumeFrom?.golsM ?? 0, v: resumeFrom?.golsV ?? 0 });
@@ -78,11 +81,13 @@ export function MatchPlayback({
   const onMinutoRef = useRef(onMinuto);
   const onProgressRef = useRef(onProgress);
   const onIntervaloRef = useRef(onIntervalo);
+  const onLanceConsumidoRef = useRef(onLanceConsumido);
   useEffect(() => {
     skipToEndNonceRef.current = skipToEndNonce;
     onMinutoRef.current = onMinuto;
     onProgressRef.current = onProgress;
     onIntervaloRef.current = onIntervalo;
+    onLanceConsumidoRef.current = onLanceConsumido;
   });
   const lanc = result.lancamentos;
 
@@ -126,6 +131,7 @@ export function MatchPlayback({
             : { ...p, v: p.v + 1 },
         );
       }
+      onLanceConsumidoRef.current?.(atual);
       setIdx((i) => i + 1);
       if (atual.tipo === 'intervalo' && !intervaloDisparadoRef.current) {
         intervaloDisparadoRef.current = true;
