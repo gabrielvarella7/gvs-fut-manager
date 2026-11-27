@@ -13,6 +13,24 @@ import {
 export const TITULARES_PARTIDA = 11;
 export const RESERVAS_PARTIDA = 11;
 
+/**
+ * Alterna id entre banco relacionado e fora da lista.
+ * Remoção é sempre permitida (mesmo lesionado); entrada respeita `podeEntrar`.
+ */
+export function alternarIdNoBanco(
+  bancoIds: number[],
+  jogadorId: number,
+  podeEntrar: boolean,
+  max = RESERVAS_PARTIDA,
+): { banco: number[]; recusado?: 'bloqueado' | 'cheio' } {
+  if (bancoIds.includes(jogadorId)) {
+    return { banco: bancoIds.filter((id) => id !== jogadorId) };
+  }
+  if (!podeEntrar) return { banco: bancoIds, recusado: 'bloqueado' };
+  if (bancoIds.length >= max) return { banco: bancoIds, recusado: 'cheio' };
+  return { banco: [...bancoIds, jogadorId] };
+}
+
 /** Recalcula nativas/adaptadas da matriz (Gabriel) no elenco. */
 export function enriquecerElencoAfinidade(elenco: Jogador[]): Jogador[] {
   return PositionRecalculator.processarElenco(elenco);

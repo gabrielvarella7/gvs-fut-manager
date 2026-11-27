@@ -138,5 +138,24 @@ const banco = idsBancoPadrao(elenco, xi);
 assert.ok(!banco.includes(2) && !banco.includes(3) && !banco.includes(5), 'banco sem lesionados');
 assert.ok(banco.every((id) => jogadorAptoAssistente(elenco.find((j) => j.id === id))));
 
+/** Espelha alternarIdNoBanco (lineup.ts): saída do banco sempre ok. */
+function alternarIdNoBanco(bancoIds, jogadorId, podeEntrar, max = 11) {
+  if (bancoIds.includes(jogadorId)) {
+    return { banco: bancoIds.filter((id) => id !== jogadorId) };
+  }
+  if (!podeEntrar) return { banco: bancoIds, recusado: 'bloqueado' };
+  if (bancoIds.length >= max) return { banco: bancoIds, recusado: 'cheio' };
+  return { banco: [...bancoIds, jogadorId] };
+}
+
+const bancoComLesionado = [...banco.slice(0, 10), 3]; // id 3 = lesão+energia baixa
+const saiu = alternarIdNoBanco(bancoComLesionado, 3, false);
+assert.ok(!saiu.banco.includes(3), 'lesionado no banco pode ir para fora da lista');
+assert.equal(saiu.recusado, undefined);
+const recusaEntrada = alternarIdNoBanco(saiu.banco, 3, false);
+assert.equal(recusaEntrada.recusado, 'bloqueado', 'lesionado não reentra no banco');
+const cheio = alternarIdNoBanco(Array.from({ length: 11 }, (_, i) => i + 100), 999, true);
+assert.equal(cheio.recusado, 'cheio');
+
 console.log('smoke-lesao-energia-lockout: OK');
 void createRequire;
