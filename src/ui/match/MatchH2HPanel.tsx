@@ -340,7 +340,7 @@ export function MatchH2HPanel({ dados }: Props) {
           {dados.sequencias.length === 0 ? (
             <p className="py-4 text-center text-sm text-zinc-500">Sem dados de sequência ainda.</p>
           ) : (
-            <ul className="max-h-72 space-y-1.5 overflow-y-auto pr-1">
+            <ul className="space-y-1.5 pr-1">
               {dados.sequencias.map((s, i) => {
                 const time =
                   s.timeId === dados.mandante.id ? dados.mandante : dados.visitante;
