@@ -53,7 +53,7 @@ export function criarLesaoComReabilitacao(
   descricao: string,
   jogador: Jogador,
   nivelFisioterapeuta: number,
-  extras?: Partial<Pick<EstadoLesao, 'tipo' | 'rodadasForaBase'>>,
+  extras?: Partial<Pick<EstadoLesao, 'tipo' | 'rodadasForaBase' | 'lesaoId' | 'sequelaPendente'>>,
 ): EstadoLesao {
   const dias = Math.max(1, Math.round(diasBase * multDuracaoFisio(nivelFisioterapeuta)));
   return {
@@ -76,8 +76,17 @@ export function aplicarAltaMedica(j: Jogador, nivelMedico: number): Jogador {
   // Médico elite preserva 100%; DM precário → sequela física (esp. velocidade).
   const preservacao = preservacaoAtributosMedico(nivelMedico);
   const gravidade = lesao.gravidade;
-  const maxPerda = gravidade === 'GRAVE' ? 5 : gravidade === 'MODERADA' ? 3 : 2;
-  const perda = Math.round((1 - preservacao) * maxPerda);
+  const maxPerdaCatalogo =
+    lesao.sequelaPendente != null
+      ? lesao.sequelaPendente
+      : gravidade === 'GRAVE'
+        ? 5
+        : gravidade === 'SERIA'
+          ? 4
+          : gravidade === 'MODERADA'
+            ? 3
+            : 2;
+  const perda = Math.round((1 - preservacao) * maxPerdaCatalogo);
 
   let atributos = cloneAtributos(lesao.atributosReferencia);
   const overallRef = lesao.overallReferencia ?? overallDeAtributos(j.posicao, atributos);

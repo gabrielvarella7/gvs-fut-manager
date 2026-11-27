@@ -264,6 +264,9 @@ export function MatchScreen() {
         contexto,
         indicePartidaTemporada: brasileirao ? indiceProximaPartida(brasileirao) : undefined,
         dataPartidaISO: partidaLiga.dataISO ?? brasileirao?.dataAtualISO,
+        ...(mundoClube
+          ? { nivelFisioterapeuta: nivelStaff(mundoClube, 'FISIOTERAPEUTA') }
+          : {}),
       };
     }
     if (jogo && mandanteFic && visitanteFic && timeUsuarioId) {

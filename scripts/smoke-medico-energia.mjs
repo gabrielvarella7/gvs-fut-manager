@@ -21,7 +21,7 @@ function multChanceLesaoFisiologista(n) {
   return Math.max(0.3, 1 - (n - 10) * 0.07);
 }
 function multDuracaoFisioterapeuta(n) {
-  return Math.max(0.6, 1 - (n - 10) * 0.04);
+  return Math.max(0.55, 1 - (n - 10) * 0.04);
 }
 function multiplicadorXpPorTeto(ovr, pot) {
   const gap = pot - ovr;
