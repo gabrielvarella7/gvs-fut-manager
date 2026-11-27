@@ -222,6 +222,11 @@ interface GameStore extends EstadoCarreira {
   marcarNoticiasComoLidas: () => void;
   /** Pula torneio amador e recebe propostas só dos piores clubes. */
   pularTorneioReceberPropostas: () => void;
+  /**
+   * Volta da tela de propostas: hub do torneio se já escolheu time amador;
+   * senão (pulou o torneio) retorna à escolha de time do torneio.
+   */
+  voltarDePropostas: () => void;
   partidaModoAuxiliar: boolean;
   jogarComAuxiliar: () => void;
   limparPartidaModoAuxiliar: () => void;
@@ -1147,6 +1152,21 @@ export const useGameStore = create<GameStore>((set, get) => ({
       ]),
       tela: 'propostas',
     });
+  },
+  voltarDePropostas: () => {
+    const s = get();
+    // Sem time amador = veio de “Pular torneio”; volta à escolha do torneio.
+    if (!s.timeUsuarioId) {
+      set({
+        tela: 'escolher_time_ficticio',
+        torneioConcluido: false,
+        propostas: [],
+        propostaSelecionadaId: null,
+        partidaJogoEmCurso: null,
+      });
+      return;
+    }
+    set({ tela: 'hub_torneio', partidaJogoEmCurso: null });
   },
   marcarNoticiasComoLidas: () => {
     const s = get();

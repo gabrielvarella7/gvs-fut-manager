@@ -7,9 +7,12 @@ export function OffersScreen() {
   const propostas = useGameStore((s) => s.propostas);
   const desempenho = useGameStore((s) => s.desempenho);
   const perfil = useGameStore((s) => s.perfil);
+  const timeUsuarioId = useGameStore((s) => s.timeUsuarioId);
   const propostaSelecionadaId = useGameStore((s) => s.propostaSelecionadaId);
   const assumir = useGameStore((s) => s.assumirClubeContratado);
-  const irPara = useGameStore((s) => s.irPara);
+  const voltarDePropostas = useGameStore((s) => s.voltarDePropostas);
+
+  const pulouTorneio = !timeUsuarioId;
 
   const [selecionadoId, setSelecionadoId] = useState<string | null>(
     propostaSelecionadaId ?? propostas[0]?.timeId ?? null,
@@ -27,8 +30,8 @@ export function OffersScreen() {
       mostrarNav={false}
       acoesExtras={
         <>
-          <CmBtn variant="ghost" onClick={() => irPara('hub_torneio')}>
-            Voltar ao torneio
+          <CmBtn variant="ghost" onClick={voltarDePropostas}>
+            {pulouTorneio ? 'Voltar' : 'Voltar ao torneio'}
           </CmBtn>
           <CmBtn onClick={assumirTime} disabled={!selecionadoId}>
             Assumir o time
