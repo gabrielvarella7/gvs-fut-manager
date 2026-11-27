@@ -5,6 +5,7 @@ import {
   overallEfetivoPorEnergia,
 } from '../../career/energia';
 import {
+  listagemPosicoesAfinidade,
   particularidadesJogador,
   resumoFinanceiro,
   rotuloPosicao,
@@ -51,6 +52,7 @@ export function PlayerProfileScreen() {
 
   const fin = resumoFinanceiro(jogador);
   const partes = particularidadesJogador(jogador);
+  const posicoesAf = listagemPosicoesAfinidade(jogador);
   const profissional = !!clubeRealId;
   const visao = visaoGeralAtributos(jogador);
   const refVisao = visaoGeralReferencia(jogador);
@@ -110,6 +112,39 @@ export function PlayerProfileScreen() {
         <CmPanel>
           <p className="mb-2 text-xs text-zinc-500">Escala 1–20 em técnicos, mentais e físicos.</p>
           <AtributosDetalhe atributos={jogador.atributos} compacto />
+          <div className="mt-3">
+            <p className="mb-1.5 text-xs font-medium uppercase tracking-wide text-zinc-500">
+              Posições
+            </p>
+            {posicoesAf.length === 0 ? (
+              <p className="text-sm text-zinc-400">{rotuloPosicao(jogador.posicao)}</p>
+            ) : (
+              <ul className="flex flex-wrap gap-1.5">
+                {posicoesAf.map((p) => (
+                  <li key={p.posicao}>
+                    <span
+                      className={`inline-flex items-center gap-1 rounded-md border px-2 py-0.5 text-xs font-medium ${
+                        p.faixa === 'nativa'
+                          ? 'border-green-500/40 bg-green-950/40 text-green-300'
+                          : 'border-pink-500/40 bg-pink-950/35 text-pink-300'
+                      }`}
+                      title={
+                        p.faixa === 'nativa'
+                          ? 'Posição nativa — 100% OVR'
+                          : 'Adaptada — perda leve de OVR'
+                      }
+                    >
+                      {p.rotulo}
+                      <span className="tabular-nums opacity-90">{p.overall}</span>
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            )}
+            <p className="mt-1 text-[10px] text-zinc-600">
+              Verde = OVR cheio · Rosa = adaptada (perda leve) · Improviso severo oculto
+            </p>
+          </div>
           <p className="mt-3 text-sm text-zinc-400">
             Status: <strong className="text-zinc-200">{rotuloStatus(jogador.status_escalacao)}</strong>
           </p>

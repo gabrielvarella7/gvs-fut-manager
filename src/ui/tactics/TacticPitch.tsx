@@ -14,6 +14,7 @@ import {
 } from '../../data/gradeCampinho';
 import { SLOTS_POR_ESQUEMA, esquemaOuPadrao } from '../../data/esquemasTaticos';
 import { overallEfetivoPorEnergia } from '../../career/energia';
+import { PositionRecalculator } from '../../career/positionRecalculator';
 import {
   grauDesvioPosicao,
   overallEfetivoEmCampo,
@@ -70,6 +71,27 @@ export function TacticPitch({
   const slots = SLOTS_POR_ESQUEMA[esquemaKey];
   const coords = coordsDeGrade(grade11);
   const porId = new Map(elenco.map((j) => [j.id, j]));
+
+  /** Jogador sob arraste (elenco ou slot) — dots verdes = 100% OVR nativo. */
+  const jogadorArrasto: Jogador | undefined =
+    arrastandoJogadorId != null
+      ? porId.get(arrastandoJogadorId)
+      : arrastando != null && slotIds[arrastando] != null
+        ? porId.get(slotIds[arrastando]!)
+        : undefined;
+
+  const slotEhNativo100 = (i: number): boolean => {
+    if (!jogadorArrasto) return false;
+    const cel = grade11[i];
+    const pos =
+      cel != null
+        ? posicaoNaCelula(cel)
+        : (slots[i] ?? jogadorArrasto.posicao);
+    const r = PositionRecalculator.multiplicadorNaPosicaoSchema(jogadorArrasto, pos, {
+      col: cel?.col,
+    });
+    return r.nativa === true;
+  };
 
   const slotJogador = (i: number) => {
     const id = slotIds[i];
@@ -324,6 +346,7 @@ export function TacticPitch({
               (arrastandoJogadorId != null && hoverSlotExterno === i);
             const alvoReserva = arrastandoJogadorId != null && hoverSlotExterno === i;
             const fantasmaAtivo = arrastando === i && dragPos != null;
+            const nativoHint = jogadorArrasto != null && slotEhNativo100(i);
             return (
               <div
                 key={`slot-${i}-${slotIds[i]}`}
@@ -335,23 +358,32 @@ export function TacticPitch({
                   opacity: fantasmaAtivo ? 0.35 : 1,
                 }}
               >
+                {nativoHint && (
+                  <span
+                    aria-hidden
+                    className="pointer-events-none absolute -top-1 left-1/2 z-0 h-3.5 w-3.5 -translate-x-1/2 rounded-full bg-green-400/55 ring-2 ring-green-300/40 shadow-[0_0_10px_rgba(74,222,128,0.45)]"
+                    title="100% OVR nesta posição"
+                  />
+                )}
                 <button
                   type="button"
                   onPointerDown={(e) => onPointerDownSlot(i, e)}
                   onClick={() => onClickSlot(i)}
                   style={{ touchAction: 'none' }}
-                  className={`flex h-11 w-11 cursor-pointer items-center justify-center rounded-full border-2 bg-zinc-900 text-[10px] font-bold shadow-md ${
+                  className={`relative z-[1] flex h-11 w-11 cursor-pointer items-center justify-center rounded-full border-2 bg-zinc-900 text-[10px] font-bold shadow-md ${
                     ativo
                       ? 'scale-110 border-amber-400 text-amber-100'
                       : alvoReserva
                         ? 'scale-110 border-yellow-400 bg-yellow-950/40 text-yellow-100'
-                        : alvo
-                          ? 'scale-105 border-sky-400 text-sky-100'
-                          : j.energiaBaixa
-                            ? 'border-amber-500 text-amber-100 hover:border-amber-400'
-                            : 'border-emerald-400 text-emerald-100 hover:border-emerald-300'
+                        : nativoHint
+                          ? 'border-green-400/80 text-green-50 ring-2 ring-green-400/25'
+                          : alvo
+                            ? 'scale-105 border-sky-400 text-sky-100'
+                            : j.energiaBaixa
+                              ? 'border-amber-500 text-amber-100 hover:border-amber-400'
+                              : 'border-emerald-400 text-emerald-100 hover:border-emerald-300'
                   }`}
-                  title={`${j.nome} (${j.rotulo})${j.dicaDesvio ? ` · ${j.dicaDesvio}` : ''} — arraste do elenco, outra posição ou clique em dois`}
+                  title={`${j.nome} (${j.rotulo})${j.dicaDesvio ? ` · ${j.dicaDesvio}` : ''}${nativoHint ? ' · 100% OVR' : ''} — arraste do elenco, outra posição ou clique em dois`}
                 >
                   {j.rotulo}
                 </button>
