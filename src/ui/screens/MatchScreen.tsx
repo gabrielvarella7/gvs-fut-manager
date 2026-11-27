@@ -3,6 +3,7 @@ import { getTimeFicticio } from '../../career/fictionalLeague';
 import { escalacaoDeIds } from '../../career/lineup';
 import { esquemaOuPadrao } from '../../data/esquemasTaticos';
 import type { MatchSimInput } from '../../engine/matchEngine';
+import type { TimeNotasInput } from '../../engine/matchNotas';
 import { indiceProximaPartida } from '../../career/brasileirao';
 import { detectarClassico, montarContextoPartidaSync } from '../../engine/matchContext';
 import {
@@ -28,6 +29,21 @@ import { CmBtn, CmPanel, CmShell } from '../cm/CmShell';
 
 function elencoTime(jogadores: Jogador[], timeId: string): Jogador[] {
   return jogadores.filter((j) => j.time_id === timeId);
+}
+
+const CORES_FIC_FALLBACK: Record<string, { primaria: string; secundaria: string }> = {
+  FIC_01: { primaria: '#1d4ed8', secundaria: '#f8fafc' },
+  FIC_02: { primaria: '#b91c1c', secundaria: '#111827' },
+  FIC_03: { primaria: '#15803d', secundaria: '#fef08a' },
+  FIC_04: { primaria: '#6d28d9', secundaria: '#e2e8f0' },
+  FIC_05: { primaria: '#0f766e', secundaria: '#f97316' },
+  FIC_06: { primaria: '#1e3a8a', secundaria: '#dc2626' },
+  FIC_07: { primaria: '#334155', secundaria: '#38bdf8' },
+  FIC_08: { primaria: '#9a3412', secundaria: '#fef3c7' },
+};
+
+function coresTimeFicticio(timeId: string): { primaria: string; secundaria: string } {
+  return CORES_FIC_FALLBACK[timeId] ?? { primaria: '#0a2748', secundaria: '#74acdf' };
 }
 
 export function MatchScreen() {
@@ -271,6 +287,60 @@ export function MatchScreen() {
     dbTaticas,
     taticaUsuario,
   ]);
+
+  const notasTimes = useMemo((): {
+    mandante: TimeNotasInput;
+    visitante: TimeNotasInput;
+  } | null => {
+    if (!simInput) return null;
+    if (modoLiga && mandanteLiga && visitanteLiga) {
+      return {
+        mandante: {
+          timeId: simInput.mandante.timeId,
+          nome: mandanteLiga.nome,
+          esquema: simInput.mandante.esquema,
+          corPrimaria: mandanteLiga.cor_primaria,
+          corSecundaria: mandanteLiga.cor_secundaria,
+          elenco: simInput.mandante.elenco,
+          escalacao: simInput.mandante.escalacao,
+        },
+        visitante: {
+          timeId: simInput.visitante.timeId,
+          nome: visitanteLiga.nome,
+          esquema: simInput.visitante.esquema,
+          corPrimaria: visitanteLiga.cor_primaria,
+          corSecundaria: visitanteLiga.cor_secundaria,
+          elenco: simInput.visitante.elenco,
+          escalacao: simInput.visitante.escalacao,
+        },
+      };
+    }
+    if (mandanteFic && visitanteFic) {
+      const cM = coresTimeFicticio(mandanteFic.id);
+      const cV = coresTimeFicticio(visitanteFic.id);
+      return {
+        mandante: {
+          timeId: simInput.mandante.timeId,
+          nome: mandanteFic.nome,
+          esquema: simInput.mandante.esquema,
+          corPrimaria: cM.primaria,
+          corSecundaria: cM.secundaria,
+          elenco: simInput.mandante.elenco,
+          escalacao: simInput.mandante.escalacao,
+        },
+        visitante: {
+          timeId: simInput.visitante.timeId,
+          nome: visitanteFic.nome,
+          esquema: simInput.visitante.esquema,
+          corPrimaria: cV.primaria,
+          corSecundaria: cV.secundaria,
+          elenco: simInput.visitante.elenco,
+          escalacao: simInput.visitante.escalacao,
+        },
+      };
+    }
+    return null;
+  }, [simInput, modoLiga, mandanteLiga, visitanteLiga, mandanteFic, visitanteFic]);
 
   const preJogo = useMemo(
     () => (simInput ? previsaoPreJogo(simInput) : null),
@@ -604,6 +674,8 @@ export function MatchScreen() {
             mandanteNome={mandanteNome ?? ''}
             visitanteNome={visitanteNome ?? ''}
             estadio={estadio}
+            notasMandante={notasTimes?.mandante}
+            notasVisitante={notasTimes?.visitante}
             velocidade={velocidade}
             onVelocidade={setVelocidade}
             pausado={pausado}

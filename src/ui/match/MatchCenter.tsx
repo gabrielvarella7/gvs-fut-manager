@@ -1,7 +1,9 @@
 import { useState } from 'react';
 import { estatisticasParciais } from '../../engine/matchStats';
 import type { MatchSimResult } from '../../engine/matchEngine';
+import type { TimeNotasInput } from '../../engine/matchNotas';
 import { MatchMomentum } from './MatchMomentum';
+import { MatchNotasPitch } from './MatchNotasPitch';
 import { MatchPreGame } from './MatchPreGame';
 import { MatchStatsPanel } from './MatchStatsPanel';
 import {
@@ -11,13 +13,16 @@ import {
 } from '../MatchPlayback';
 import { CmBtn } from '../cm/CmShell';
 
-type Aba = 'comentario' | 'estatisticas' | 'prejogo' | 'detalhes';
+type Aba = 'comentario' | 'estatisticas' | 'prejogo' | 'detalhes' | 'notas';
 
 type Props = {
   result: MatchSimResult;
   mandanteNome: string;
   visitanteNome: string;
   estadio?: string;
+  /** Dados de escalação/cores para a aba Notas. */
+  notasMandante?: TimeNotasInput;
+  notasVisitante?: TimeNotasInput;
   velocidade: VelocidadePlayback;
   onVelocidade: (v: VelocidadePlayback) => void;
   pausado: boolean;
@@ -41,6 +46,8 @@ export function MatchCenter({
   mandanteNome,
   visitanteNome,
   estadio,
+  notasMandante,
+  notasVisitante,
   velocidade,
   onVelocidade,
   pausado,
@@ -68,6 +75,7 @@ export function MatchCenter({
     { id: 'detalhes', label: 'Detalhes' },
     { id: 'estatisticas', label: 'Estatísticas' },
     { id: 'comentario', label: 'Comentário' },
+    { id: 'notas', label: 'Notas' },
     { id: 'prejogo', label: 'Pré-jogo' },
   ];
 
@@ -136,6 +144,15 @@ export function MatchCenter({
           visitanteNome={visitanteNome}
           estadio={estadio}
           preJogo={result.preJogo}
+        />
+      )}
+
+      {aba === 'notas' && notasMandante && notasVisitante && (
+        <MatchNotasPitch
+          result={result}
+          minuto={minuto}
+          mandante={notasMandante}
+          visitante={notasVisitante}
         />
       )}
 
