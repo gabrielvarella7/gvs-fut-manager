@@ -510,6 +510,11 @@ export function MatchScreen() {
       subtitulo={`${mandanteNome ?? ''} x ${visitanteNome ?? ''}`}
       rodape={
         <div className="flex flex-wrap gap-2">
+          {emTransmissao && !partidaModoAuxiliar && minuto >= 90 && (
+            <CmBtn variant="primary" onClick={voltarHub}>
+              Finalizar jogo
+            </CmBtn>
+          )}
           <CmBtn variant="ghost" onClick={voltarHub} disabled={busy && !emTransmissao}>
             Voltar
           </CmBtn>
@@ -642,8 +647,22 @@ export function MatchScreen() {
             skipToEndNonce={skipToEndNonce}
             onIrProFimDoJogo={() => {
               setAguardandoSegundoTempo(false);
+              setMinuto(90);
               setSkipToEndNonce((n) => n + 1);
             }}
+            onFinalizarJogo={voltarHub}
+            classificacao={
+              modoLiga && brasileirao && campeonato && partidaLiga
+                ? {
+                    estado: brasileirao,
+                    campeonato,
+                    times: timesReais,
+                    partidaAoVivoId: partidaLiga.id,
+                    mandanteId: partidaLiga.mandanteId,
+                    visitanteId: partidaLiga.visitanteId,
+                  }
+                : null
+            }
           />
         </>
       )}

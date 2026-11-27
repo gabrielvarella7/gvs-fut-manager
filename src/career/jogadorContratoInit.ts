@@ -1,5 +1,6 @@
 import { garantirAtributosJogador } from './atributosJogador';
 import { garantirGeneticaJogador } from './genetica';
+import { PositionRecalculator } from './positionRecalculator';
 import type { Jogador } from '../types/schema';
 import {
   calcularSuscetibilidadeJogador,
@@ -12,38 +13,43 @@ import type { Time } from '../types/schema';
 
 export function enriquecerJogadorComContrato(j: Jogador): Jogador {
   const comGenetica = garantirGeneticaJogador(garantirAtributosJogador(j));
+  let base: Jogador;
   if (comGenetica.contrato && comGenetica.suscetibilidade && comGenetica.valor_mercado) {
-    return comGenetica;
-  }
-  const { contrato } = inicializarContratoPadrao(
-    comGenetica.overall,
-    comGenetica.idade,
-    comGenetica.posicao,
-    comGenetica.id,
-  );
-  const salario = contrato.salario_clt_mensal + contrato.direito_imagem_mensal;
-  const valor =
-    comGenetica.valor_mercado ??
-    calcularValorMercado(
+    base = comGenetica;
+  } else {
+    const { contrato } = inicializarContratoPadrao(
       comGenetica.overall,
       comGenetica.idade,
       comGenetica.posicao,
-      comGenetica,
+      comGenetica.id,
     );
-  return {
-    ...comGenetica,
-    valor_mercado: valor,
-    salario_mensal: salario,
-    contrato: comGenetica.contrato ?? contrato,
-    suscetibilidade: comGenetica.suscetibilidade ?? {
-      indice: 45,
-      camada: 'ABERTO_A_PROPOSTAS',
-      motivo_principal: 'Avalia oportunidades de carreira.',
-    },
-  };
+    const salario = contrato.salario_clt_mensal + contrato.direito_imagem_mensal;
+    const valor =
+      comGenetica.valor_mercado ??
+      calcularValorMercado(
+        comGenetica.overall,
+        comGenetica.idade,
+        comGenetica.posicao,
+        comGenetica,
+      );
+    base = {
+      ...comGenetica,
+      valor_mercado: valor,
+      salario_mensal: salario,
+      contrato: comGenetica.contrato ?? contrato,
+      suscetibilidade: comGenetica.suscetibilidade ?? {
+        indice: 45,
+        camada: 'ABERTO_A_PROPOSTAS',
+        motivo_principal: 'Avalia oportunidades de carreira.',
+      },
+    };
+  }
+  // Matriz atributo→posição (Gabriel) no load do elenco.
+  return PositionRecalculator.recalcularPosicoesJogador(base);
 }
 
 export function enriquecerElenco(jogadores: Jogador[]): Jogador[] {
+  // enriquecerJogadorComContrato já aplica PositionRecalculator.
   return jogadores.map((j) => enriquecerJogadorComContrato(j));
 }
 

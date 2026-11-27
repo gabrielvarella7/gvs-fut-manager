@@ -65,4 +65,21 @@ const ney = db.find((j) => j.nome === 'Neymar');
 assert.equal(ney.genetica.propensao_lesao, 1.95);
 assert.equal(ney.genetica.potencial_maximo, 94);
 
+const treinos = JSON.parse(
+  fs.readFileSync(
+    path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../public/database/treinos.json'),
+    'utf-8',
+  ),
+);
+const planoPrev = treinos.planos_individuais.find((p) => p.id === 'PREVENCAO_MUSCULAR');
+assert.ok(planoPrev, 'plano PREVENCAO_MUSCULAR deve existir');
+assert.equal(planoPrev.nome, 'Prevenção Muscular');
+const sessaoPrev = treinos.sessoes_coletivas.find((s) => s.id === 'PREVENCAO_LESOES');
+assert.ok(sessaoPrev, 'sessão PREVENCAO_LESOES deve existir');
+assert.equal(sessaoPrev.nome, 'Prevenção Muscular');
+assert.ok(sessaoPrev.multiplicador_risco_lesao <= 0.5);
+const regen = treinos.regimes_intensidade.find((r) => r.id === 'REGENERATIVO');
+assert.ok(regen, 'regime REGENERATIVO deve existir');
+assert.match(regen.nome, /Regenerativo/);
+
 console.log('smoke-medico-energia: OK');
