@@ -1,10 +1,12 @@
 import { useState } from 'react';
 import type { EstadoTemporada } from '../../career/brasileirao';
+import type { DadosH2H } from '../../career/h2hMatch';
 import { estatisticasParciais } from '../../engine/matchStats';
 import type { MatchSimResult } from '../../engine/matchEngine';
 import type { InfoJogadorPartida } from '../../engine/jogadorDaPartida';
 import type { CampeonatoConfig, Time } from '../../types/schema';
 import { MatchEventTimeline } from './MatchEventTimeline';
+import { MatchH2HPanel } from './MatchH2HPanel';
 import { MatchMomentum } from './MatchMomentum';
 import { MatchPreGame } from './MatchPreGame';
 import { MatchStatsPanel } from './MatchStatsPanel';
@@ -16,7 +18,7 @@ import {
 } from '../MatchPlayback';
 import { CmBtn } from '../cm/CmShell';
 
-type Aba = 'comentario' | 'estatisticas' | 'classificacao' | 'prejogo' | 'detalhes';
+type Aba = 'comentario' | 'estatisticas' | 'classificacao' | 'prejogo' | 'detalhes' | 'h2h';
 
 type Props = {
   result: MatchSimResult;
@@ -51,6 +53,8 @@ type Props = {
     mandanteId: string;
     visitanteId: string;
   } | null;
+  /** Head-to-head panel data (liga ou torneio). */
+  h2h?: DadosH2H | null;
 };
 
 export function MatchCenter({
@@ -76,6 +80,7 @@ export function MatchCenter({
   onIrProFimDoJogo,
   onFinalizarJogo,
   classificacao = null,
+  h2h = null,
 }: Props) {
   const [aba, setAba] = useState<Aba>('comentario');
   const [minuto, setMinuto] = useState(resumePlayback?.minuto ?? 0);
@@ -102,6 +107,7 @@ export function MatchCenter({
     ...(classificacao ? [{ id: 'classificacao' as const, label: 'Classificação' }] : []),
     { id: 'comentario', label: 'Comentário' },
     { id: 'prejogo', label: 'Pré-jogo' },
+    ...(h2h ? [{ id: 'h2h' as const, label: 'H2H' }] : []),
   ];
 
   const mostrarPlayback = aba === 'comentario' || aba === 'detalhes';
@@ -195,6 +201,8 @@ export function MatchCenter({
           preJogo={result.preJogo}
         />
       )}
+
+      {aba === 'h2h' && h2h && <MatchH2HPanel dados={h2h} />}
 
       {aba === 'detalhes' && stats && (
         <MatchStatsPanel
