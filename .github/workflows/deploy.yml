@@ -2,7 +2,7 @@ name: Deploy site
 
 on:
   push:
-    branches: [main, master]
+    branches: [gvs-manager]
   workflow_dispatch:
 
 permissions:

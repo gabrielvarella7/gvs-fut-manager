@@ -104,7 +104,8 @@ export function SettingsScreen() {
           <strong className="text-zinc-100">Editar o jogo pelo celular:</strong> abra o repositório no app GitHub ou
           no navegador, edite arquivos (ex. <code className="text-zinc-400">public/database/</code>, telas em{' '}
           <code className="text-zinc-400">src/</code>) e faça commit na branch{' '}
-          <code className="text-zinc-400">main</code>. Em 1–2 min o site atualiza sozinho.
+          <code className="text-zinc-400">gvs-manager</code> (não use main — é outro projeto). O site
+          atualiza em 1–2 min após o commit.
         </p>
         <a
           href={REPO_GITHUB}
