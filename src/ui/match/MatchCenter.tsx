@@ -1,11 +1,14 @@
 import { useState } from 'react';
 import type { EstadoTemporada } from '../../career/brasileirao';
+import type { DadosH2H } from '../../career/h2hMatch';
 import { estatisticasParciais } from '../../engine/matchStats';
 import type { MatchSimResult } from '../../engine/matchEngine';
+import type { InfoJogadorPartida } from '../../engine/jogadorDaPartida';
 import type { CampeonatoConfig, Time } from '../../types/schema';
 import type { InfoPartidaPreJogo } from '../../career/infoPartidaPreJogo';
 import type { PacotePreJogoEquipes } from '../../career/preJogoEquipeStats';
 import { MatchEventTimeline } from './MatchEventTimeline';
+import { MatchH2HPanel } from './MatchH2HPanel';
 import { MatchMomentum } from './MatchMomentum';
 import { MatchPreGame } from './MatchPreGame';
 import { MatchStatsPanel } from './MatchStatsPanel';
@@ -17,13 +20,14 @@ import {
 } from '../MatchPlayback';
 import { CmBtn } from '../cm/CmShell';
 
-type Aba = 'comentario' | 'estatisticas' | 'classificacao' | 'prejogo' | 'detalhes';
+type Aba = 'comentario' | 'estatisticas' | 'classificacao' | 'prejogo' | 'detalhes' | 'h2h';
 
 type Props = {
   result: MatchSimResult;
   mandanteNome: string;
   visitanteNome: string;
   estadio?: string;
+  jogadoresInfo?: ReadonlyMap<number, InfoJogadorPartida> | Readonly<Record<number, InfoJogadorPartida>>;
   velocidade: VelocidadePlayback;
   onVelocidade: (v: VelocidadePlayback) => void;
   pausado: boolean;
@@ -54,6 +58,8 @@ type Props = {
   /** Stats de temporada para a aba Pré-jogo (ambos os times). */
   equipesPreJogo?: PacotePreJogoEquipes | null;
   infoPartida?: InfoPartidaPreJogo | null;
+  /** Head-to-head panel data (liga ou torneio). */
+  h2h?: DadosH2H | null;
 };
 
 export function MatchCenter({
@@ -61,6 +67,7 @@ export function MatchCenter({
   mandanteNome,
   visitanteNome,
   estadio,
+  jogadoresInfo,
   velocidade,
   onVelocidade,
   pausado,
@@ -80,6 +87,7 @@ export function MatchCenter({
   classificacao = null,
   equipesPreJogo = null,
   infoPartida = null,
+  h2h = null,
 }: Props) {
   const [aba, setAba] = useState<Aba>('comentario');
   const [minuto, setMinuto] = useState(resumePlayback?.minuto ?? 0);
@@ -106,6 +114,7 @@ export function MatchCenter({
     ...(classificacao ? [{ id: 'classificacao' as const, label: 'Classificação' }] : []),
     { id: 'comentario', label: 'Comentário' },
     { id: 'prejogo', label: 'Pré-jogo' },
+    ...(h2h ? [{ id: 'h2h' as const, label: 'H2H' }] : []),
   ];
 
   const mostrarPlayback = aba === 'comentario' || aba === 'detalhes';
@@ -143,6 +152,7 @@ export function MatchCenter({
           result={result}
           mandanteNome={mandanteNome}
           visitanteNome={visitanteNome}
+          jogadoresInfo={jogadoresInfo}
           velocidade={velocidade}
           pausado={pausado}
           onPausado={onPausado}
@@ -200,6 +210,8 @@ export function MatchCenter({
           infoPartida={infoPartida}
         />
       )}
+
+      {aba === 'h2h' && h2h && <MatchH2HPanel dados={h2h} />}
 
       {aba === 'detalhes' && stats && (
         <MatchStatsPanel

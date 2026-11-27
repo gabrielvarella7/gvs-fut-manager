@@ -1,6 +1,11 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { tocarComemoracaoTorcidaGol } from '../audio/torcidaGol';
 import type { Lancamento, MatchSimResult } from '../engine/matchEngine';
+import {
+  calcularJogadorDaPartida,
+  type InfoJogadorPartida,
+} from '../engine/jogadorDaPartida';
+import { JogadorDaPartidaPanel } from './match/JogadorDaPartidaPanel';
 
 export type VelocidadePlayback = 0.5 | 1 | 2 | 4;
 
@@ -15,6 +20,8 @@ type Props = {
   result: MatchSimResult;
   mandanteNome: string;
   visitanteNome: string;
+  /** Catálogo id → nome/time para o painel Jogador da partida (pós-FT). */
+  jogadoresInfo?: ReadonlyMap<number, InfoJogadorPartida> | Readonly<Record<number, InfoJogadorPartida>>;
   velocidade?: VelocidadePlayback;
   pausado?: boolean;
   onPausado?: (p: boolean) => void;
@@ -51,6 +58,7 @@ export function MatchPlayback({
   result,
   mandanteNome,
   visitanteNome,
+  jogadoresInfo,
   velocidade = 1,
   pausado = false,
   onMinuto,
@@ -134,6 +142,12 @@ export function MatchPlayback({
 
   const visiveis = lanc.slice(0, idx);
   const relogio = visiveis.length ? visiveis[visiveis.length - 1].minuto : 0;
+  const partidaEncerrada = !aoVivo && idx >= lanc.length;
+
+  const dadosMotm = useMemo(() => {
+    if (!partidaEncerrada || !jogadoresInfo) return null;
+    return calcularJogadorDaPartida(result, jogadoresInfo, mandanteNome, visitanteNome);
+  }, [partidaEncerrada, jogadoresInfo, result, mandanteNome, visitanteNome]);
 
   useEffect(() => {
     onMinutoRef.current?.(relogio);
@@ -146,47 +160,58 @@ export function MatchPlayback({
   }, [idx]);
 
   return (
-    <div className="rounded-lg border border-zinc-700 bg-zinc-900/80 p-4 text-left">
-      <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-        <div className="text-lg font-medium text-zinc-100">
-          {mandanteNome}{' '}
-          <span className="tabular-nums text-emerald-400">
-            {placar.m} × {placar.v}
-          </span>{' '}
-          {visitanteNome}
+    <div className="space-y-3 text-left">
+      {/* Resumo / placar */}
+      <div className="rounded-lg border border-zinc-700 bg-zinc-900/80 p-4">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div className="text-lg font-medium text-zinc-100">
+            {mandanteNome}{' '}
+            <span className="tabular-nums text-emerald-400">
+              {placar.m} × {placar.v}
+            </span>{' '}
+            {visitanteNome}
+          </div>
+          <div className="text-sm text-zinc-500">
+            {aoVivo ? `${relogio}'` : '90′ · Final'}
+            {aoVivo && !pausado && (
+              <span className="ml-2 animate-pulse text-red-400">● Ao vivo</span>
+            )}
+            {pausado && <span className="ml-2 text-amber-400">‖ Pausado</span>}
+          </div>
         </div>
-        <div className="text-sm text-zinc-500">
-          {aoVivo ? `${relogio}'` : '90′ · Final'}
-          {aoVivo && !pausado && (
-            <span className="ml-2 animate-pulse text-red-400">● Ao vivo</span>
-          )}
-          {pausado && <span className="ml-2 text-amber-400">‖ Pausado</span>}
-        </div>
+        {partidaEncerrada && (
+          <p className="mt-2 text-xs text-zinc-500">
+            Resultado final: {result.golsMandante} × {result.golsVisitante}
+          </p>
+        )}
       </div>
 
-      <ul
-        ref={listaRef}
-        className="max-h-56 space-y-2 overflow-y-auto pr-1 text-sm"
-        aria-live="polite"
-      >
-        {visiveis.map((l, i) => (
-          <li
-            key={`${i}-${l.minuto}-${l.tipo}`}
-            className={`border-l-2 border-zinc-700 pl-3 ${tipoClasse[l.tipo]}`}
-          >
-            {l.texto}
-          </li>
-        ))}
-        {aoVivo && !pausado && idx < lanc.length && (
-          <li className="pl-3 text-xs text-zinc-600">Aguardando próximo lance…</li>
-        )}
-      </ul>
+      {/* Entre resumo e comentários — só após o apito final */}
+      {partidaEncerrada && dadosMotm && <JogadorDaPartidaPanel dados={dadosMotm} />}
 
-      {!aoVivo && idx >= lanc.length && (
-        <p className="mt-2 text-xs text-zinc-500">
-          Resultado final: {result.golsMandante} × {result.golsVisitante}
+      {/* Comentários / narração */}
+      <div className="rounded-lg border border-zinc-700 bg-zinc-900/80 p-4">
+        <p className="mb-2 text-[10px] font-semibold uppercase tracking-wider text-zinc-500">
+          Comentários
         </p>
-      )}
+        <ul
+          ref={listaRef}
+          className="max-h-56 space-y-2 overflow-y-auto pr-1 text-sm"
+          aria-live="polite"
+        >
+          {visiveis.map((l, i) => (
+            <li
+              key={`${i}-${l.minuto}-${l.tipo}`}
+              className={`border-l-2 border-zinc-700 pl-3 ${tipoClasse[l.tipo]}`}
+            >
+              {l.texto}
+            </li>
+          ))}
+          {aoVivo && !pausado && idx < lanc.length && (
+            <li className="pl-3 text-xs text-zinc-600">Aguardando próximo lance…</li>
+          )}
+        </ul>
+      </div>
     </div>
   );
 }

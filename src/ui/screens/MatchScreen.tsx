@@ -20,6 +20,7 @@ import { MatchCenter } from '../match/MatchCenter';
 import { gerarRelatorioPreJogo } from '../../career/relatorioPreJogo';
 import { montarInfoPartidaPreJogo } from '../../career/infoPartidaPreJogo';
 import { montarPacotePreJogoEquipes } from '../../career/preJogoEquipeStats';
+import { montarH2HLiga, montarH2HTorneio } from '../../career/h2hMatch';
 import { multFadigaPreparadorFisico, nivelStaff } from '../../career/staffEfeitos';
 import { formacaoIdDeEsquema, taticaCpuAutomatica } from '../../engine/tacticsEngine';
 import { tryGetDatabaseTaticas } from '../../db/tacticsDatabase';
@@ -67,6 +68,7 @@ export function MatchScreen() {
   const timesReais = useGameStore((s) => s.timesReais);
   const jogadoresReais = useGameStore((s) => s.jogadoresReais);
   const mundoClube = useGameStore((s) => s.mundoClube);
+  const perfil = useGameStore((s) => s.perfil);
 
   const [busy, setBusy] = useState(false);
   const [velocidade, setVelocidade] = useState<VelocidadePlayback>(1);
@@ -302,6 +304,19 @@ export function MatchScreen() {
     });
   }, [modoLiga, partidaLiga, mandanteLiga, campeonato, timesReais]);
 
+  /** Catálogo para o painel Jogador da partida (nomes sem fotos). */
+  const jogadoresInfo = useMemo(() => {
+    const mapa = new Map<number, { id: number; nome: string; timeId: string }>();
+    const add = (j: { id: number; nome: string; time_id: string }) => {
+      mapa.set(j.id, { id: j.id, nome: j.nome, timeId: j.time_id });
+    };
+    for (const j of jogadoresReais) add(j);
+    for (const t of times) {
+      for (const j of t.jogadores) add(j);
+    }
+    return mapa;
+  }, [jogadoresReais, times]);
+
   const gradePartida =
     taticaPersonalizada && gradeTatica11?.length === 11 ? gradeTatica11 : null;
 
@@ -338,6 +353,48 @@ export function MatchScreen() {
 
   const idPartida = modoLiga ? partidaLiga?.id : jogo?.id;
   const emTransmissao = !!partidaAtual && partidaJogoId === idPartida;
+
+  const dadosH2H = useMemo(() => {
+    if (modoLiga && brasileirao && partidaLiga && campeonato) {
+      return montarH2HLiga({
+        estado: brasileirao,
+        times: timesReais,
+        mandanteId: partidaLiga.mandanteId,
+        visitanteId: partidaLiga.visitanteId,
+        competicao: campeonato.nome,
+        nomeTecnicoUsuario: perfil?.nome ?? null,
+        usuarioTimeId: clubeRealId,
+        partidaAtual: emTransmissao ? partidaAtual : null,
+      });
+    }
+    if (faseTorneioAmador && jogo) {
+      return montarH2HTorneio({
+        jogos,
+        times,
+        mandanteId: jogo.mandanteId,
+        visitanteId: jogo.visitanteId,
+        nomeTecnicoUsuario: perfil?.nome ?? null,
+        usuarioTimeId: timeUsuarioId,
+        partidaAtual: emTransmissao ? partidaAtual : null,
+      });
+    }
+    return null;
+  }, [
+    modoLiga,
+    brasileirao,
+    partidaLiga,
+    campeonato,
+    timesReais,
+    perfil?.nome,
+    clubeRealId,
+    emTransmissao,
+    partidaAtual,
+    faseTorneioAmador,
+    jogo,
+    jogos,
+    times,
+    timeUsuarioId,
+  ]);
 
   const encerrarAuxiliar = useCallback(() => {
     limparPartidaModoAuxiliar();
@@ -636,6 +693,7 @@ export function MatchScreen() {
             mandanteNome={mandanteNome ?? ''}
             visitanteNome={visitanteNome ?? ''}
             estadio={estadio}
+            jogadoresInfo={jogadoresInfo}
             velocidade={velocidade}
             onVelocidade={setVelocidade}
             pausado={pausado}
@@ -678,6 +736,7 @@ export function MatchScreen() {
             }
             equipesPreJogo={equipesPreJogo}
             infoPartida={infoPartidaPreJogo}
+            h2h={dadosH2H}
           />
         </>
       )}
