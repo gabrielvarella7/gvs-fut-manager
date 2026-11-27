@@ -163,6 +163,19 @@ export interface ProbabilidadesResultado {
   vitoriaVisitante: number;
 }
 
+/** Snapshot tático para a aba Notas (formação / slots por trecho da partida). */
+export interface SegmentoTaticoNotas {
+  /** Primeiro minuto de jogo (1–90) neste setup; 0 = desde o apito inicial. */
+  deMinuto: number;
+  esquema: EsquemaTatico;
+  escalacao: { jogadorId: number; posicaoEscalada: Posicao }[];
+}
+
+export interface HistoricoTaticoNotas {
+  mandante: SegmentoTaticoNotas[];
+  visitante: SegmentoTaticoNotas[];
+}
+
 export interface MatchSimResult {
   mandanteId: string;
   visitanteId: string;
@@ -183,6 +196,8 @@ export interface MatchSimResult {
   woTimeId?: string;
   /** Jogadores que terminaram fora da posição natural (insatisfação / contagem). */
   idsImprovisados?: number[];
+  /** Trechos de formação/escalação (Notas: maioria de minutos). */
+  historicoTatico?: HistoricoTaticoNotas;
 }
 
 export function criarRng(seed: number): () => number {

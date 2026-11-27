@@ -3,9 +3,12 @@ import { metricasMotorDeAtributos } from '../career/atributosJogador';
 import type { EsquemaTatico, Jogador, Posicao } from '../types/schema';
 import {
   montarEscalacao,
+  type HistoricoTaticoNotas,
   type JogadorEmCampo,
   type Lancamento,
+  type MatchSimInput,
   type MatchSimResult,
+  type SegmentoTaticoNotas,
 } from './matchEngine';
 
 /** Profundidade vertical (GOL atrás → ATA à frente) para o campinho de notas. */
@@ -176,6 +179,100 @@ function clampNota(n: number): number {
   return Math.max(3, Math.min(10, Math.round(n * 10) / 10));
 }
 
+function snapshotEscalacao(esc: JogadorEmCampo[]): SegmentoTaticoNotas['escalacao'] {
+  return esc.map((e) => ({
+    jogadorId: e.jogador.id,
+    posicaoEscalada: e.posicaoEscalada,
+  }));
+}
+
+function resolverEscalacao(
+  elenco: Jogador[],
+  esquema: EsquemaTatico,
+  escalacao?: JogadorEmCampo[],
+): JogadorEmCampo[] {
+  return escalacao?.length === 11
+    ? escalacao.map((e) => ({ ...e }))
+    : montarEscalacao(elenco, esquema);
+}
+
+export function criarHistoricoTaticoInicial(input: MatchSimInput): HistoricoTaticoNotas {
+  const escM = resolverEscalacao(
+    input.mandante.elenco,
+    input.mandante.esquema,
+    input.mandante.escalacao,
+  );
+  const escV = resolverEscalacao(
+    input.visitante.elenco,
+    input.visitante.esquema,
+    input.visitante.escalacao,
+  );
+  return {
+    mandante: [
+      {
+        deMinuto: 0,
+        esquema: input.mandante.esquema,
+        escalacao: snapshotEscalacao(escM),
+      },
+    ],
+    visitante: [
+      {
+        deMinuto: 0,
+        esquema: input.visitante.esquema,
+        escalacao: snapshotEscalacao(escV),
+      },
+    ],
+  };
+}
+
+/**
+ * Após mudança tática no minuto `minutoCheckpoint`, o novo setup vale a partir de minuto+1.
+ */
+export function acrescentarSegmentoTatico(
+  historico: HistoricoTaticoNotas | undefined,
+  lado: 'mandante' | 'visitante',
+  minutoCheckpoint: number,
+  esquema: EsquemaTatico,
+  escalacao: JogadorEmCampo[],
+): HistoricoTaticoNotas {
+  const base: HistoricoTaticoNotas = historico ?? {
+    mandante: [],
+    visitante: [],
+  };
+  const deMinuto = Math.max(0, Math.floor(minutoCheckpoint) + 1);
+  const seg: SegmentoTaticoNotas = {
+    deMinuto,
+    esquema,
+    escalacao: snapshotEscalacao(escalacao),
+  };
+  const lista = [...(base[lado] ?? [])].sort((a, b) => a.deMinuto - b.deMinuto);
+  const last = lista[lista.length - 1];
+  if (
+    last &&
+    last.deMinuto === seg.deMinuto &&
+    last.esquema === seg.esquema &&
+    JSON.stringify(last.escalacao) === JSON.stringify(seg.escalacao)
+  ) {
+    return base;
+  }
+  // Substitui se já houver segmento no mesmo deMinuto
+  const semMesmo = lista.filter((s) => s.deMinuto !== seg.deMinuto);
+  semMesmo.push(seg);
+  semMesmo.sort((a, b) => a.deMinuto - b.deMinuto);
+  return { ...base, [lado]: semMesmo };
+}
+
+function segmentoAtivo(
+  segs: SegmentoTaticoNotas[],
+  minutoT: number,
+): SegmentoTaticoNotas | null {
+  let ativo: SegmentoTaticoNotas | null = null;
+  for (const s of segs) {
+    if (s.deMinuto <= minutoT) ativo = s;
+  }
+  return ativo;
+}
+
 type Acumulado = {
   gols: number;
   assistencias: number;
@@ -185,14 +282,17 @@ type Acumulado = {
   expulso: boolean;
   entrouEm: number | null;
   saiuEm: number | null;
-  posicao: Posicao;
+  /** minutos por chave `${esquema}#${slotIndex}` */
+  minPorSlot: Map<string, number>;
+  /** minutos por Posicao (qualquer esquema) */
+  minPorPos: Map<Posicao, number>;
   overall: number;
   lideranca: number;
   nome: string;
   jogador: Jogador;
 };
 
-function garantir(map: Map<number, Acumulado>, j: Jogador, pos: Posicao): Acumulado {
+function garantir(map: Map<number, Acumulado>, j: Jogador): Acumulado {
   let a = map.get(j.id);
   if (!a) {
     a = {
@@ -204,7 +304,8 @@ function garantir(map: Map<number, Acumulado>, j: Jogador, pos: Posicao): Acumul
       expulso: false,
       entrouEm: null,
       saiuEm: null,
-      posicao: pos,
+      minPorSlot: new Map(),
+      minPorPos: new Map(),
       overall: j.overall,
       lideranca: metricasMotorDeAtributos(j.atributos).lideranca,
       nome: j.nome,
@@ -229,18 +330,28 @@ function encontrarAssistente(
   return null;
 }
 
-function goleiroDoTime(
-  slots: JogadorEmCampo[],
-  fora: Set<number>,
-): Jogador | null {
-  const g = slots.find(
-    (s) => s.posicaoEscalada === 'GOL' && !fora.has(s.jogador.id),
-  );
-  return g?.jogador ?? null;
+function chaveSlot(esquema: EsquemaTatico, slotIndex: number): string {
+  return `${esquema}#${slotIndex}`;
+}
+
+function slotsDeSegmento(
+  seg: SegmentoTaticoNotas,
+  porId: Map<number, Jogador>,
+  elenco: Jogador[],
+  esquemaFallback: EsquemaTatico,
+): JogadorEmCampo[] {
+  const lista: JogadorEmCampo[] = [];
+  for (const s of seg.escalacao) {
+    const j = porId.get(s.jogadorId);
+    if (!j) continue;
+    lista.push({ jogador: j, posicaoEscalada: s.posicaoEscalada });
+  }
+  if (lista.length === 11) return lista;
+  return montarEscalacao(elenco, esquemaFallback);
 }
 
 /**
- * Reconstrói escalação viva e notas até `minuto` a partir dos lançamentos.
+ * Reconstrói notas + posicionamento por maioria de minutos até `minuto`.
  */
 export function calcularNotasPitchLive(opts: {
   result: MatchSimResult;
@@ -251,32 +362,76 @@ export function calcularNotasPitchLive(opts: {
   const minuto = Math.max(0, Math.min(90, Math.floor(opts.minuto)));
   const seed = opts.result.simSeed ?? 1;
 
-  const escM0 =
-    opts.mandante.escalacao?.length === 11
-      ? opts.mandante.escalacao.map((e) => ({ ...e }))
-      : montarEscalacao(opts.mandante.elenco, opts.mandante.esquema);
-  const escV0 =
-    opts.visitante.escalacao?.length === 11
-      ? opts.visitante.escalacao.map((e) => ({ ...e }))
-      : montarEscalacao(opts.visitante.elenco, opts.visitante.esquema);
+  const historico: HistoricoTaticoNotas = opts.result.historicoTatico ?? {
+    mandante: [
+      {
+        deMinuto: 0,
+        esquema: opts.mandante.esquema,
+        escalacao: snapshotEscalacao(
+          resolverEscalacao(
+            opts.mandante.elenco,
+            opts.mandante.esquema,
+            opts.mandante.escalacao,
+          ),
+        ),
+      },
+    ],
+    visitante: [
+      {
+        deMinuto: 0,
+        esquema: opts.visitante.esquema,
+        escalacao: snapshotEscalacao(
+          resolverEscalacao(
+            opts.visitante.elenco,
+            opts.visitante.esquema,
+            opts.visitante.escalacao,
+          ),
+        ),
+      },
+    ],
+  };
 
   const porIdM = new Map(opts.mandante.elenco.map((j) => [j.id, j]));
   const porIdV = new Map(opts.visitante.elenco.map((j) => [j.id, j]));
-
   const acc = new Map<number, Acumulado>();
-  const slotsM = escM0.map((e) => ({ ...e }));
-  const slotsV = escV0.map((e) => ({ ...e }));
+
+  const segsM = [...historico.mandante].sort((a, b) => a.deMinuto - b.deMinuto);
+  const segsV = [...historico.visitante].sort((a, b) => a.deMinuto - b.deMinuto);
+
+  const minEsquemaM = new Map<EsquemaTatico, number>();
+  const minEsquemaV = new Map<EsquemaTatico, number>();
+
+  let slotsM: JogadorEmCampo[] = [];
+  let slotsV: JogadorEmCampo[] = [];
+  let esquemaM = opts.mandante.esquema;
+  let esquemaV = opts.visitante.esquema;
   const foraM = new Set<number>();
   const foraV = new Set<number>();
 
-  for (const e of slotsM) {
-    const a = garantir(acc, e.jogador, e.posicaoEscalada);
-    a.entrouEm = 0;
-  }
-  for (const e of slotsV) {
-    const a = garantir(acc, e.jogador, e.posicaoEscalada);
-    a.entrouEm = 0;
-  }
+  const boot = (lado: 'M' | 'V', t: number) => {
+    if (lado === 'M') {
+      const seg = segmentoAtivo(segsM, t);
+      if (!seg) return;
+      esquemaM = seg.esquema;
+      slotsM = slotsDeSegmento(seg, porIdM, opts.mandante.elenco, seg.esquema);
+      for (const e of slotsM) {
+        const a = garantir(acc, e.jogador);
+        if (a.entrouEm == null) a.entrouEm = Math.max(0, t);
+      }
+    } else {
+      const seg = segmentoAtivo(segsV, t);
+      if (!seg) return;
+      esquemaV = seg.esquema;
+      slotsV = slotsDeSegmento(seg, porIdV, opts.visitante.elenco, seg.esquema);
+      for (const e of slotsV) {
+        const a = garantir(acc, e.jogador);
+        if (a.entrouEm == null) a.entrouEm = Math.max(0, t);
+      }
+    }
+  };
+
+  boot('M', 0);
+  boot('V', 0);
 
   const capitaoM = [...slotsM].sort(
     (a, b) =>
@@ -290,111 +445,225 @@ export function calcularNotasPitchLive(opts: {
   )[0]?.jogador.id;
 
   const lancamentos = opts.result.lancamentos.filter((l) => l.minuto <= minuto);
+  const eventosPorMinuto = new Map<number, Lancamento[]>();
+  for (const l of lancamentos) {
+    const lista = eventosPorMinuto.get(l.minuto) ?? [];
+    lista.push(l);
+    eventosPorMinuto.set(l.minuto, lista);
+  }
 
   const aplicarSub = (
     slots: JogadorEmCampo[],
-    fora: Set<number>,
     porId: Map<number, Jogador>,
     l: Lancamento,
   ) => {
-    if (l.jogadorId == null || l.jogadorIdEntrada == null) return;
+    if (l.jogadorId == null || l.jogadorIdEntrada == null) return slots;
     const idx = slots.findIndex((s) => s.jogador.id === l.jogadorId);
     const reserva = porId.get(l.jogadorIdEntrada);
-    if (idx < 0 || !reserva) return;
+    if (idx < 0 || !reserva) return slots;
     const pos = slots[idx]!.posicaoEscalada;
-    const sai = garantir(acc, slots[idx]!.jogador, pos);
+    const sai = garantir(acc, slots[idx]!.jogador);
     sai.saiuEm = l.minuto;
-    fora.delete(l.jogadorId);
-    slots[idx] = { jogador: reserva, posicaoEscalada: pos };
-    const entra = garantir(acc, reserva, pos);
-    entra.entrouEm = l.minuto;
-    entra.posicao = pos;
+    const next = [...slots];
+    next[idx] = { jogador: reserva, posicaoEscalada: pos };
+    const entra = garantir(acc, reserva);
+    if (entra.entrouEm == null) entra.entrouEm = l.minuto;
+    entra.saiuEm = null;
+    return next;
   };
 
-  for (const l of lancamentos) {
-    const casa = l.timeId === opts.mandante.timeId;
-    const elencoTime = casa ? opts.mandante.elenco : opts.visitante.elenco;
+  const processarEventos = (t: number) => {
+    for (const l of eventosPorMinuto.get(t) ?? []) {
+      const casa = l.timeId === opts.mandante.timeId;
+      const elencoTime = casa ? opts.mandante.elenco : opts.visitante.elenco;
 
-    if (l.tipo === 'substituicao') {
-      if (casa) aplicarSub(slotsM, foraM, porIdM, l);
-      else aplicarSub(slotsV, foraV, porIdV, l);
-      continue;
-    }
+      if (l.tipo === 'substituicao') {
+        if (casa) slotsM = aplicarSub(slotsM, porIdM, l);
+        else slotsV = aplicarSub(slotsV, porIdV, l);
+        continue;
+      }
 
-    if (l.tipo === 'gol' && l.jogadorId != null) {
-      const j =
-        (casa ? porIdM : porIdV).get(l.jogadorId) ??
-        acc.get(l.jogadorId)?.jogador;
-      if (j) {
-        const a = garantir(acc, j, acc.get(j.id)?.posicao ?? j.posicao);
-        a.gols += 1;
-        const assistId = encontrarAssistente(l.texto, j.id, elencoTime);
-        if (assistId != null) {
-          const ja =
-            (casa ? porIdM : porIdV).get(assistId) ??
-            acc.get(assistId)?.jogador;
-          if (ja) {
-            garantir(acc, ja, acc.get(ja.id)?.posicao ?? ja.posicao).assistencias +=
-              1;
+      if (l.tipo === 'gol' && l.jogadorId != null) {
+        const j =
+          (casa ? porIdM : porIdV).get(l.jogadorId) ??
+          acc.get(l.jogadorId)?.jogador;
+        if (j) {
+          garantir(acc, j).gols += 1;
+          const assistId = encontrarAssistente(l.texto, j.id, elencoTime);
+          if (assistId != null) {
+            const ja =
+              (casa ? porIdM : porIdV).get(assistId) ??
+              acc.get(assistId)?.jogador;
+            if (ja) garantir(acc, ja).assistencias += 1;
+          }
+        }
+        continue;
+      }
+
+      if (l.tipo === 'chance' && l.jogadorId != null) {
+        const j =
+          (casa ? porIdM : porIdV).get(l.jogadorId) ??
+          acc.get(l.jogadorId)?.jogador;
+        if (j) garantir(acc, j).chances += 1;
+        continue;
+      }
+
+      if (l.tipo === 'defesa') {
+        const slotsDef = casa ? slotsM : slotsV;
+        const foraDef = casa ? foraM : foraV;
+        const gk = slotsDef.find(
+          (s) => s.posicaoEscalada === 'GOL' && !foraDef.has(s.jogador.id),
+        )?.jogador;
+        if (gk) garantir(acc, gk).defesasGk += 1;
+        if (l.jogadorId != null) {
+          const porAtaque = casa ? porIdV : porIdM;
+          const atac = porAtaque.get(l.jogadorId) ?? acc.get(l.jogadorId)?.jogador;
+          if (atac) garantir(acc, atac).chances += 1;
+        }
+        continue;
+      }
+
+      if (l.tipo === 'cartao_amarelo' && l.jogadorId != null) {
+        const j =
+          (casa ? porIdM : porIdV).get(l.jogadorId) ??
+          acc.get(l.jogadorId)?.jogador;
+        if (j) {
+          const a = garantir(acc, j);
+          a.amarelos += 1;
+          if (/expuls/i.test(l.texto)) {
+            a.expulso = true;
+            a.saiuEm = a.saiuEm ?? l.minuto;
+            if (casa) foraM.add(j.id);
+            else foraV.add(j.id);
           }
         }
       }
-      continue;
     }
+  };
 
-    if (l.tipo === 'chance' && l.jogadorId != null) {
-      const j =
-        (casa ? porIdM : porIdV).get(l.jogadorId) ??
-        acc.get(l.jogadorId)?.jogador;
-      if (j) garantir(acc, j, acc.get(j.id)?.posicao ?? j.posicao).chances += 1;
-      continue;
-    }
-
-    if (l.tipo === 'defesa') {
-      // timeId = defesa; jogadorId = atacante
-      const slotsDef = casa ? slotsM : slotsV;
-      const foraDef = casa ? foraM : foraV;
-      const gk = goleiroDoTime(slotsDef, foraDef);
-      if (gk) garantir(acc, gk, 'GOL').defesasGk += 1;
-      if (l.jogadorId != null) {
-        const porAtaque = casa ? porIdV : porIdM;
-        const atac = porAtaque.get(l.jogadorId) ?? acc.get(l.jogadorId)?.jogador;
-        if (atac) {
-          garantir(acc, atac, acc.get(atac.id)?.posicao ?? atac.posicao).chances +=
-            1;
+  const accrue = (t: number) => {
+    // Troca de segmento no início do minuto t
+    const segM = segmentoAtivo(segsM, t);
+    const segV = segmentoAtivo(segsV, t);
+    if (segM && (segM.esquema !== esquemaM || segM.deMinuto === t)) {
+      // Só reseta XI no instante em que o segmento começa (tática nova)
+      if (segM.deMinuto === t && t > 0) {
+        esquemaM = segM.esquema;
+        const idsAntes = new Set(
+          slotsM.filter((s) => !foraM.has(s.jogador.id)).map((s) => s.jogador.id),
+        );
+        slotsM = slotsDeSegmento(segM, porIdM, opts.mandante.elenco, segM.esquema);
+        for (const e of slotsM) {
+          const a = garantir(acc, e.jogador);
+          if (a.entrouEm == null) a.entrouEm = t;
+          // Quem saiu do XI na troca tática
+          foraM.delete(e.jogador.id);
         }
-      }
-      continue;
-    }
-
-    if (l.tipo === 'cartao_amarelo' && l.jogadorId != null) {
-      const j =
-        (casa ? porIdM : porIdV).get(l.jogadorId) ??
-        acc.get(l.jogadorId)?.jogador;
-      if (j) {
-        const a = garantir(acc, j, acc.get(j.id)?.posicao ?? j.posicao);
-        a.amarelos += 1;
-        if (/expuls/i.test(l.texto)) {
-          a.expulso = true;
-          a.saiuEm = a.saiuEm ?? l.minuto;
-          if (casa) foraM.add(j.id);
-          else foraV.add(j.id);
+        for (const id of idsAntes) {
+          if (!slotsM.some((s) => s.jogador.id === id)) {
+            const j = porIdM.get(id);
+            if (j) {
+              const a = garantir(acc, j);
+              a.saiuEm = a.saiuEm ?? t;
+            }
+          }
         }
+      } else {
+        esquemaM = segM.esquema;
       }
-      continue;
+    }
+    if (segV && (segV.esquema !== esquemaV || segV.deMinuto === t)) {
+      if (segV.deMinuto === t && t > 0) {
+        esquemaV = segV.esquema;
+        const idsAntes = new Set(
+          slotsV.filter((s) => !foraV.has(s.jogador.id)).map((s) => s.jogador.id),
+        );
+        slotsV = slotsDeSegmento(segV, porIdV, opts.visitante.elenco, segV.esquema);
+        for (const e of slotsV) {
+          const a = garantir(acc, e.jogador);
+          if (a.entrouEm == null) a.entrouEm = t;
+          foraV.delete(e.jogador.id);
+        }
+        for (const id of idsAntes) {
+          if (!slotsV.some((s) => s.jogador.id === id)) {
+            const j = porIdV.get(id);
+            if (j) {
+              const a = garantir(acc, j);
+              a.saiuEm = a.saiuEm ?? t;
+            }
+          }
+        }
+      } else {
+        esquemaV = segV.esquema;
+      }
     }
 
-    if (l.tipo === 'lesao' && l.jogadorId != null) {
-      // saída efetiva vem na substituição; se não houver, marca saída
-      continue;
-    }
+    processarEventos(t);
+
+    minEsquemaM.set(esquemaM, (minEsquemaM.get(esquemaM) ?? 0) + 1);
+    minEsquemaV.set(esquemaV, (minEsquemaV.get(esquemaV) ?? 0) + 1);
+
+    slotsM.forEach((e, i) => {
+      if (foraM.has(e.jogador.id)) return;
+      const a = garantir(acc, e.jogador);
+      const k = chaveSlot(esquemaM, i);
+      a.minPorSlot.set(k, (a.minPorSlot.get(k) ?? 0) + 1);
+      a.minPorPos.set(
+        e.posicaoEscalada,
+        (a.minPorPos.get(e.posicaoEscalada) ?? 0) + 1,
+      );
+    });
+    slotsV.forEach((e, i) => {
+      if (foraV.has(e.jogador.id)) return;
+      const a = garantir(acc, e.jogador);
+      const k = chaveSlot(esquemaV, i);
+      a.minPorSlot.set(k, (a.minPorSlot.get(k) ?? 0) + 1);
+      a.minPorPos.set(
+        e.posicaoEscalada,
+        (a.minPorPos.get(e.posicaoEscalada) ?? 0) + 1,
+      );
+    });
+  };
+
+  if (minuto === 0) {
+    processarEventos(0);
+  } else {
+    for (let t = 1; t <= minuto; t++) accrue(t);
   }
+
+  const esquemaMaioria = (
+    mapa: Map<EsquemaTatico, number>,
+    fallback: EsquemaTatico,
+  ): EsquemaTatico => {
+    let best = fallback;
+    let bestN = -1;
+    for (const [e, n] of mapa) {
+      if (n > bestN) {
+        best = e;
+        bestN = n;
+      }
+    }
+    return best;
+  };
+
+  const escMajM = esquemaMaioria(minEsquemaM, opts.mandante.esquema);
+  const escMajV = esquemaMaioria(minEsquemaV, opts.visitante.esquema);
 
   const mediaOvr = (slots: JogadorEmCampo[]) =>
     slots.reduce((s, e) => s + e.jogador.overall, 0) / Math.max(1, slots.length);
 
-  const mediaOvrM = mediaOvr(escM0);
-  const mediaOvrV = mediaOvr(escV0);
+  const escInicialM = resolverEscalacao(
+    opts.mandante.elenco,
+    opts.mandante.esquema,
+    opts.mandante.escalacao,
+  );
+  const escInicialV = resolverEscalacao(
+    opts.visitante.elenco,
+    opts.visitante.esquema,
+    opts.visitante.escalacao,
+  );
+  const mediaOvrM = mediaOvr(escInicialM);
+  const mediaOvrV = mediaOvr(escInicialV);
 
   const notaDe = (id: number, mediaTime: number): number => {
     const a = acc.get(id);
@@ -408,8 +677,6 @@ export function calcularNotasPitchLive(opts: {
     const noise = (hash01(seed, id) - 0.5) * 0.45;
     const forma = (a.overall - mediaTime) * 0.025;
     let nota = 6.05 + forma + noise;
-
-    // Ritmo de jogo — sobe levemente com minutos
     nota += Math.min(0.55, minutos * 0.006);
 
     if (a.gols > 0) nota += 0.85 + (a.gols - 1) * 0.55;
@@ -419,12 +686,104 @@ export function calcularNotasPitchLive(opts: {
     nota -= a.amarelos * 0.35;
     if (a.expulso) nota -= 1.15;
 
-    // Poucos minutos sem ação → nota mais cautelosa
     if (minutos < 10 && a.gols === 0 && a.assistencias === 0 && a.defesasGk === 0) {
       nota = 6 + forma * 0.5 + noise * 0.4;
     }
 
     return clampNota(nota);
+  };
+
+  /**
+   * Slot preferido do jogador na formação majoritária:
+   * 1) slot com mais minutos nessa formação;
+   * 2) senão, posição (Posicao) com mais minutos em qualquer esquema → 1º slot livre da mesma pos;
+   * 3) senão, qualquer slot livre.
+   */
+  const escolherSlotsNaFormacao = (
+    esquema: EsquemaTatico,
+    emCampo: JogadorEmCampo[],
+  ): { jogador: Jogador; slotIndex: number; posicao: Posicao }[] => {
+    const layout = layoutCampinho(esquema);
+    const ocupado = new Set<number>();
+    const resultado: { jogador: Jogador; slotIndex: number; posicao: Posicao }[] =
+      [];
+
+    type Cand = {
+      jogador: Jogador;
+      preferidos: { slotIndex: number; minutos: number }[];
+      posMaioria: Posicao;
+    };
+
+    const cands: Cand[] = emCampo.map((e) => {
+      const a = acc.get(e.jogador.id);
+      const preferidos: { slotIndex: number; minutos: number }[] = [];
+      if (a) {
+        for (const [k, mins] of a.minPorSlot) {
+          const [esq, idxStr] = k.split('#');
+          if (esq !== esquema) continue;
+          const slotIndex = Number(idxStr);
+          if (Number.isFinite(slotIndex)) preferidos.push({ slotIndex, minutos: mins });
+        }
+        preferidos.sort((x, y) => y.minutos - x.minutos);
+      }
+      let posMaioria: Posicao = e.posicaoEscalada;
+      let bestPos = -1;
+      if (a) {
+        for (const [p, mins] of a.minPorPos) {
+          if (mins > bestPos) {
+            bestPos = mins;
+            posMaioria = p;
+          }
+        }
+      }
+      return { jogador: e.jogador, preferidos, posMaioria };
+    });
+
+    // Prioriza quem tem claim mais forte (mais minutos no melhor slot)
+    cands.sort((a, b) => (b.preferidos[0]?.minutos ?? 0) - (a.preferidos[0]?.minutos ?? 0));
+
+    const pegarSlotLivre = (pos: Posicao): number | null => {
+      for (let i = 0; i < layout.length; i++) {
+        if (ocupado.has(i)) continue;
+        if (layout[i]!.pos === pos) return i;
+      }
+      // Linha aproximada
+      const linhaDe = (p: Posicao): LinhaCampinho => {
+        if (p === 'GOL') return 'GOL';
+        if (p === 'ZAG' || p === 'LAT') return 'DEF';
+        if (p === 'VOL') return 'VOL';
+        if (p === 'MEI') return 'MC';
+        return 'ATA';
+      };
+      const alvo = linhaDe(pos);
+      for (let i = 0; i < layout.length; i++) {
+        if (ocupado.has(i)) continue;
+        if (layout[i]!.linha === alvo) return i;
+      }
+      for (let i = 0; i < layout.length; i++) {
+        if (!ocupado.has(i)) return i;
+      }
+      return null;
+    };
+
+    for (const c of cands) {
+      let escolhido: number | null = null;
+      for (const p of c.preferidos) {
+        if (!ocupado.has(p.slotIndex) && p.slotIndex >= 0 && p.slotIndex < layout.length) {
+          escolhido = p.slotIndex;
+          break;
+        }
+      }
+      if (escolhido == null) escolhido = pegarSlotLivre(c.posMaioria);
+      if (escolhido == null) continue;
+      ocupado.add(escolhido);
+      resultado.push({
+        jogador: c.jogador,
+        slotIndex: escolhido,
+        posicao: layout[escolhido]!.pos,
+      });
+    }
+    return resultado;
   };
 
   const montarTime = (
@@ -434,11 +793,11 @@ export function calcularNotasPitchLive(opts: {
     escInicial: JogadorEmCampo[],
     mediaTime: number,
     capitaoId: number | undefined,
+    esquemaExibir: EsquemaTatico,
     lado: 'home' | 'away',
   ): TimeNotasLive => {
-    const coordsVert = coordsNotasVerticais(input.esquema);
+    const coordsVert = coordsNotasVerticais(esquemaExibir);
     const usados = new Set<number>();
-    // Prefere números dos titulares iniciais primeiro
     const numeros = new Map<number, number>();
     for (const e of escInicial) {
       numeros.set(e.jogador.id, numeroCamisaJogador(e.jogador, usados));
@@ -449,21 +808,20 @@ export function calcularNotasPitchLive(opts: {
       }
     }
 
-    const jogadores: JogadorNotaLive[] = [];
-    slotsAgora.forEach((slot, i) => {
-      if (fora.has(slot.jogador.id)) return;
-      const j = slot.jogador;
+    const emCampo = slotsAgora.filter((s) => !fora.has(s.jogador.id));
+    const colocados = escolherSlotsNaFormacao(esquemaExibir, emCampo);
+
+    const jogadores: JogadorNotaLive[] = colocados.map(({ jogador: j, slotIndex, posicao }) => {
       const a = acc.get(j.id);
       const nota = notaDe(j.id, mediaTime);
-      const c = coordsVert[i] ?? { x: 50, y: 50 };
-      // Vertical (ataque ↑) → horizontal (casa ataca → / visitante ←)
+      const c = coordsVert[slotIndex] ?? { x: 50, y: 50 };
       const { x, y } = lado === 'home' ? vertParaHome(c.x, c.y) : vertParaAway(c.x, c.y);
-      jogadores.push({
+      return {
         jogadorId: j.id,
         nome: j.nome,
         nomeCurto: nomeCurtoJogador(j.nome),
         numero: numeros.get(j.id) ?? ((j.id % 98) + 1),
-        posicao: slot.posicaoEscalada,
+        posicao,
         x,
         y,
         nota,
@@ -474,20 +832,18 @@ export function calcularNotasPitchLive(opts: {
         assistencias: a?.assistencias ?? 0,
         motm: false,
         emCampo: true,
-      });
+      };
     });
 
     const media =
       jogadores.length === 0
         ? 6
-        : clampNota(
-            jogadores.reduce((s, j) => s + j.nota, 0) / jogadores.length,
-          );
+        : clampNota(jogadores.reduce((s, j) => s + j.nota, 0) / jogadores.length);
 
     return {
       timeId: input.timeId,
       nome: input.nome,
-      esquema: input.esquema,
+      esquema: esquemaExibir,
       corPrimaria: input.corPrimaria,
       corSecundaria: input.corSecundaria,
       media,
@@ -499,18 +855,20 @@ export function calcularNotasPitchLive(opts: {
     opts.mandante,
     slotsM,
     foraM,
-    escM0,
+    escInicialM,
     mediaOvrM,
     capitaoM,
+    escMajM,
     'home',
   );
   const visitante = montarTime(
     opts.visitante,
     slotsV,
     foraV,
-    escV0,
+    escInicialV,
     mediaOvrV,
     capitaoV,
+    escMajV,
     'away',
   );
 
@@ -518,14 +876,10 @@ export function calcularNotasPitchLive(opts: {
   if (todos.length > 0 && minuto >= 1) {
     let melhor = todos[0]!;
     for (const j of todos) {
-      if (
-        j.nota > melhor.nota ||
-        (j.nota === melhor.nota && j.gols > melhor.gols)
-      ) {
+      if (j.nota > melhor.nota || (j.nota === melhor.nota && j.gols > melhor.gols)) {
         melhor = j;
       }
     }
-    // Só destaca MotM se a nota for claramente boa ou jogo avançou
     if (melhor.nota >= 7.2 || minuto >= 70) {
       melhor.motm = true;
     }

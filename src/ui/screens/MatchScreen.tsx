@@ -3,7 +3,12 @@ import { getTimeFicticio } from '../../career/fictionalLeague';
 import { escalacaoDeIds } from '../../career/lineup';
 import { esquemaOuPadrao } from '../../data/esquemasTaticos';
 import type { MatchSimInput } from '../../engine/matchEngine';
-import type { TimeNotasInput } from '../../engine/matchNotas';
+import {
+  acrescentarSegmentoTatico,
+  criarHistoricoTaticoInicial,
+  type TimeNotasInput,
+} from '../../engine/matchNotas';
+import { montarEscalacao } from '../../engine/matchEngine';
 import { indiceProximaPartida } from '../../career/brasileirao';
 import { detectarClassico, montarContextoPartidaSync } from '../../engine/matchContext';
 import {
@@ -404,7 +409,11 @@ export function MatchScreen() {
         await sincronizarCarreiraDexie({ brasileirao, clubeRealId });
       }
       const seed = (Date.now() ^ Math.floor(Math.random() * 1e9)) >>> 0;
-      const result = await simularPartidaNoWorker({ ...simInput, seed });
+      const bruto = await simularPartidaNoWorker({ ...simInput, seed });
+      const result = {
+        ...bruto,
+        historicoTatico: criarHistoricoTaticoInicial(simInput),
+      };
       salvarCheckpoint(null);
       setResumePlayback(null);
       setPlaybackKey(String(seed));
@@ -488,6 +497,30 @@ export function MatchScreen() {
         const seed = partidaAtual.simSeed ?? (Date.now() >>> 0);
         const nova = await simularPartidaNoWorker({ ...simInput, seed });
         nextResult = mesclarPartidaAposMinuto(cp.minuto, partidaAtual, { ...nova, simSeed: seed });
+        const userTimeId = modoLiga ? clubeRealId : timeUsuarioId;
+        const ladoUser =
+          userTimeId && simInput.mandante.timeId === userTimeId
+            ? 'mandante'
+            : userTimeId && simInput.visitante.timeId === userTimeId
+              ? 'visitante'
+              : null;
+        if (ladoUser) {
+          const timeInput = ladoUser === 'mandante' ? simInput.mandante : simInput.visitante;
+          const escNova =
+            timeInput.escalacao?.length === 11
+              ? timeInput.escalacao
+              : montarEscalacao(timeInput.elenco, timeInput.esquema);
+          nextResult = {
+            ...nextResult,
+            historicoTatico: acrescentarSegmentoTatico(
+              nextResult.historicoTatico ?? partidaAtual.historicoTatico,
+              ladoUser,
+              cp.minuto,
+              timeInput.esquema,
+              escNova,
+            ),
+          };
+        }
         atualizarTransmissao(nextResult);
         setPlaybackKey(`${seed}-${hashTaticaAtual.slice(0, 8)}`);
       }
@@ -512,6 +545,9 @@ export function MatchScreen() {
     hashTaticaAtual,
     atualizarTransmissao,
     limparPendingResume,
+    modoLiga,
+    clubeRealId,
+    timeUsuarioId,
   ]);
 
   const abrirTaticaAoVivo = useCallback(() => {
