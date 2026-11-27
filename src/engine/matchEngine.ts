@@ -34,6 +34,7 @@ import {
   diagnosticarLesaoConfirmada,
   mesDeDataISO,
 } from './injuryEngine';
+import { fatorMoralMedioElenco } from './pressConferenceMoral';
 import { type ContextoDinamicoPartida, modificadoresUrgencia } from './matchContext';
 import {
   construirEstatisticasPartida,
@@ -623,9 +624,12 @@ export function simularPartida(input: MatchSimInput): MatchSimResult {
     isClassico ||
     ctx?.necessidadeVisitante === 'DESESPERO_REBAIXAMENTO' ||
     ctx?.necessidadeVisitante === 'DECISIVO_TITULO';
+  const moralM = fatorMoralMedioElenco(input.mandante.elenco);
+  const moralV = fatorMoralMedioElenco(input.visitante.elenco);
   const opcoesM = (minuto = 45): OpcoesForcaSetores => ({
     multiplicadorMando: mandoMult,
     fatorMotivacao: faixaPrep.motivacaoMandante,
+    fatorMoralTime: moralM,
     multiplicadorDia: faixaPrep.variacaoDiaMandante,
     jogadoresExpulsos: expulsosMandante,
     criseOuDecisivo: criseM,
@@ -635,6 +639,7 @@ export function simularPartida(input: MatchSimInput): MatchSimResult {
   });
   const opcoesV = (minuto = 45): OpcoesForcaSetores => ({
     fatorMotivacao: faixaPrep.motivacaoVisitante,
+    fatorMoralTime: moralV,
     multiplicadorDia: faixaPrep.variacaoDiaVisitante,
     jogadoresExpulsos: expulsosVisitante,
     criseOuDecisivo: criseV,

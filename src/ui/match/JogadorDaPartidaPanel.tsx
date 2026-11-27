@@ -4,6 +4,8 @@ import {
   formatarVotos,
   type JogadorDaPartidaDados,
 } from '../../engine/jogadorDaPartida';
+import { ClubNameLink } from '../components/ClubNameLink';
+import { PlayerNameLink } from '../components/PlayerNameLink';
 
 type Props = {
   dados: JogadorDaPartidaDados;
@@ -21,11 +23,21 @@ function CaixaNota({ nota, destaque }: { nota: number; destaque?: boolean }) {
   );
 }
 
-function LinhaLista({ nome, valor }: { nome: string; valor: ReactNode }) {
+function LinhaLista({
+  jogadorId,
+  nome,
+  valor,
+}: {
+  jogadorId: number;
+  nome: string;
+  valor: ReactNode;
+}) {
   return (
     <li className="flex items-center gap-2 py-1.5 text-sm text-zinc-200">
       <span className="shrink-0">{valor}</span>
-      <span className="min-w-0 truncate font-medium">{nome}</span>
+      <PlayerNameLink jogadorId={jogadorId} className="min-w-0 truncate font-medium text-emerald-100 underline-offset-2 hover:underline">
+        {nome}
+      </PlayerNameLink>
     </li>
   );
 }
@@ -54,8 +66,19 @@ export function JogadorDaPartidaPanel({ dados }: Props) {
           <p className="mb-2 text-[10px] font-semibold uppercase tracking-wider text-[var(--mm-celeste)]">
             Nota
           </p>
-          <p className="truncate text-sm font-semibold text-zinc-50">{destaqueNota.nome}</p>
-          <p className="mb-2 truncate text-[11px] text-zinc-500">{destaqueNota.timeNome}</p>
+          <PlayerNameLink
+            jogadorId={destaqueNota.id}
+            className="truncate text-sm font-semibold text-emerald-100 underline-offset-2 hover:underline"
+          >
+            {destaqueNota.nome}
+          </PlayerNameLink>
+          <p className="mb-2 truncate text-[11px] text-zinc-500">
+            {destaqueNota.timeId ? (
+              <ClubNameLink clubeId={destaqueNota.timeId}>{destaqueNota.timeNome}</ClubNameLink>
+            ) : (
+              destaqueNota.timeNome
+            )}
+          </p>
           <CaixaNota nota={destaqueNota.nota} destaque />
         </div>
 
@@ -63,8 +86,19 @@ export function JogadorDaPartidaPanel({ dados }: Props) {
           <p className="mb-2 text-[10px] font-semibold uppercase tracking-wider text-[var(--mm-celeste)]">
             Escolha dos fãs
           </p>
-          <p className="truncate text-sm font-semibold text-zinc-50">{destaqueFans.nome}</p>
-          <p className="mb-2 truncate text-[11px] text-zinc-500">{destaqueFans.timeNome}</p>
+          <PlayerNameLink
+            jogadorId={destaqueFans.id}
+            className="truncate text-sm font-semibold text-emerald-100 underline-offset-2 hover:underline"
+          >
+            {destaqueFans.nome}
+          </PlayerNameLink>
+          <p className="mb-2 truncate text-[11px] text-zinc-500">
+            {destaqueFans.timeId ? (
+              <ClubNameLink clubeId={destaqueFans.timeId}>{destaqueFans.timeNome}</ClubNameLink>
+            ) : (
+              destaqueFans.timeNome
+            )}
+          </p>
           <span className="inline-flex items-center rounded-full border border-zinc-500/60 bg-zinc-800 px-2.5 py-1 text-sm font-semibold tabular-nums text-zinc-50">
             {destaqueFans.votosPct}%
           </span>
@@ -75,13 +109,19 @@ export function JogadorDaPartidaPanel({ dados }: Props) {
       <div className="mt-4 grid grid-cols-2 gap-3 border-t border-zinc-800 pt-3">
         <ul className="min-w-0 space-y-0.5">
           {listasNota.map((j) => (
-            <LinhaLista key={`n-${j.id}`} nome={j.nome} valor={<CaixaNota nota={j.nota} />} />
+            <LinhaLista
+              key={`n-${j.id}`}
+              jogadorId={j.id}
+              nome={j.nome}
+              valor={<CaixaNota nota={j.nota} />}
+            />
           ))}
         </ul>
         <ul className="min-w-0 space-y-0.5">
           {listasFans.map((j) => (
             <LinhaLista
               key={`f-${j.id}`}
+              jogadorId={j.id}
               nome={j.nome}
               valor={
                 <span className="inline-block min-w-[2.4rem] text-right text-sm font-semibold tabular-nums text-zinc-300">

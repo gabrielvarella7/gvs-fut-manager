@@ -6,6 +6,7 @@ import type {
   TimeH2HBadge,
 } from '../../career/h2hMatch';
 import { INTERVALOS_GOL } from '../../career/h2hMatch';
+import { ClubNameLink } from '../components/ClubNameLink';
 
 type Props = {
   dados: DadosH2H;
@@ -296,7 +297,8 @@ export function MatchH2HPanel({ dados }: Props) {
                       {j.competicao} · {j.dataLabel}
                     </p>
                     <p className="truncate text-zinc-200">
-                      {j.emCasa ? 'vs' : '@'} {j.adversario.nome}
+                      {j.emCasa ? 'vs' : '@'}{' '}
+                      <ClubNameLink clubeId={j.adversario.id}>{j.adversario.nome}</ClubNameLink>
                     </p>
                   </div>
                   <span className="shrink-0 tabular-nums font-semibold text-zinc-50">

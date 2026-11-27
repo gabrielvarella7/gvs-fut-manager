@@ -21,6 +21,7 @@ import type { OfertaDispensa } from '../../types/aspirantesS23';
 import { useGameStore } from '../../store/useGameStore';
 import { CmCareerShell } from '../cm/CmCareerShell';
 import { CmBtn, CmPanel } from '../cm/CmShell';
+import { PlayerNameLink } from '../components/PlayerNameLink';
 import {
   FILTERS_VAZIOS,
   PlayerListToolbar,
@@ -42,7 +43,6 @@ export function SquadScreen() {
   const jogadoresReais = useGameStore((s) => s.jogadoresReais);
   const aspirantes = useGameStore((s) => s.aspirantesS23);
   const modoSub23 = useGameStore((s) => s.modoSub23);
-  const abrirPerfil = useGameStore((s) => s.abrirPerfilJogador);
   const simularOferta = useGameStore((s) => s.simularOfertaDispensa);
   const tentarDispensa = useGameStore((s) => s.tentarDispensa);
   const confirmarIntegral = useGameStore((s) => s.confirmarDispensaIntegral);
@@ -128,13 +128,7 @@ export function SquadScreen() {
               {s23Query.result.map((a) => (
                 <tr key={a.id} className="border-t border-zinc-800 hover:bg-zinc-900">
                   <td className="p-2">
-                    <button
-                      type="button"
-                      onClick={() => abrirPerfil(a.id)}
-                      className="font-medium text-emerald-100 underline-offset-2 hover:text-emerald-50 hover:underline"
-                    >
-                      {a.nome}
-                    </button>
+                    <PlayerNameLink jogadorId={a.id}>{a.nome}</PlayerNameLink>
                   </td>
                   <td>{a.posicao}</td>
                   <td>{a.idade}</td>
@@ -268,7 +262,6 @@ export function SquadScreen() {
         elenco={elenco}
         showFinance={!!clubeRealId || elencoFic.length > 0}
         showDispensa={!!clubeRealId}
-        onJogador={(id) => abrirPerfil(id)}
         onDispensa={(id) => {
           const o = simularOferta(id);
           if (!o) {
@@ -291,13 +284,11 @@ function SquadTable({
   elenco,
   showFinance,
   showDispensa,
-  onJogador,
   onDispensa,
 }: {
   elenco: Jogador[];
   showFinance: boolean;
   showDispensa?: boolean;
-  onJogador: (id: number) => void;
   onDispensa?: (id: number) => void;
 }) {
   const [filters, setFilters] = useState<PlayerListFiltersState>(FILTERS_VAZIOS);
@@ -441,13 +432,7 @@ function SquadTable({
             {ordenados.map((j) => (
               <tr key={j.id} className="border-t border-zinc-800 hover:bg-zinc-900">
                 <td className="p-2">
-                  <button
-                    type="button"
-                    onClick={() => onJogador(j.id)}
-                    className="font-medium text-emerald-100 underline-offset-2 hover:text-emerald-50 hover:underline"
-                  >
-                    {j.nome}
-                  </button>
+                  <PlayerNameLink jogadorId={j.id}>{j.nome}</PlayerNameLink>
                 </td>
                 <td>{j.posicao}</td>
                 <td>{j.idade}</td>

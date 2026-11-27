@@ -423,23 +423,27 @@ export function diasBaseLesaoFadiga(gravidade: GravidadeLesao, rnd: () => number
   return Math.round(randEntre(rnd, 3, 9));
 }
 
+/**
+ * @deprecated Preferir injuryEngine.CATALOGO_30_LESOES / diagnosticarLesaoConfirmada.
+ * Mantido só como fallback de texto — nomes alinhados ao catálogo de 30.
+ */
 export function descricaoLesaoFadiga(gravidade: GravidadeLesao, rnd: () => number): string {
   const leves = [
-    'contusão muscular',
-    'estresse na panturrilha',
-    'cãibra forte',
-    'sobrecarga no ísquiotibial',
+    'fadiga muscular excessiva',
+    'contratura na panturrilha',
+    'contusão óssea no joelho',
+    'cãibras recorrentes',
   ];
   const moderadas = [
-    'lesão muscular na coxa',
-    'estiramento no adutor',
-    'edema no tornozelo',
-    'distensão na virilha',
+    'estiramento na panturrilha',
+    'lesão grau 1 no adutor',
+    'entorse de tornozelo grau 1',
+    'estiramento nos posteriores da coxa',
   ];
   const graves = [
-    'ruptura muscular parcial',
-    'lesão séria no joelho',
-    'trauma muscular grave',
+    'ruptura parcial do LCA',
+    'lesão grau 2 no reto femoral',
+    'fratura por estresse no metatarso',
   ];
   const lista =
     gravidade === 'GRAVE' ? graves : gravidade === 'MODERADA' ? moderadas : leves;

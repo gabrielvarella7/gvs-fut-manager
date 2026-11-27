@@ -56,7 +56,7 @@ import type {
 } from '../types/mundoClube';
 import type { NoticiaCarreira } from './types';
 import { acoesLesaoCampo } from './noticiasAcoes';
-import { marcarJogador } from './noticiasMarkup';
+import { marcarClube, marcarJogador } from './noticiasMarkup';
 import type { EstadoComercial } from '../types/commercial';
 import {
   classificarJanelaCalendario,
@@ -255,11 +255,13 @@ export function aplicarLesoesPosPartida(
     });
     if (!gerado) return j;
     const { lesao, diagnostico } = gerado;
+    const nomeLink = marcarJogador(j.id, j.nome);
     noticias.push({
       id: `lesao_${j.id}_${seed}`,
       data: new Date().toISOString(),
-      titulo: `Lesão: ${j.nome}`,
-      texto: diagnostico.mancheteNoticia,
+      titulo: `Lesão: ${nomeLink}`,
+      texto: `${nomeLink}: ${diagnostico.nome} (${diagnostico.gravidade.toLowerCase()}). Previsão de ${diagnostico.diasRecuperacao} dias.`,
+      acoes: acoesLesaoCampo(j.id),
     });
     return { ...j, lesao, energia: Math.min(j.energia, 42) };
   });
@@ -590,24 +592,31 @@ function textoDesfechoMercado(params: {
   desfecho: DesfechoNegociacaoMercado;
   nomeComp: string;
   nomeVend: string;
+  compradorId?: string | null;
+  vendedorId?: string | null;
   jogador: Jogador;
   valorM: number;
   tipo: TipoNegocioMercado;
   diasCiclo: number;
 }): string {
-  const { desfecho, nomeComp, nomeVend, jogador, valorM, tipo, diasCiclo } = params;
+  const { desfecho, jogador, valorM, tipo, diasCiclo } = params;
   const tipoTxt = rotuloTipoNegocio(tipo).toLowerCase();
+  const j = marcarJogador(jogador.id, jogador.nome);
+  const comp =
+    params.compradorId ? marcarClube(params.compradorId, params.nomeComp) : params.nomeComp;
+  const vend =
+    params.vendedorId ? marcarClube(params.vendedorId, params.nomeVend) : params.nomeVend;
   switch (desfecho) {
     case 'assinada':
-      return `${nomeComp} fechou ${tipoTxt} de ${jogador.nome} (${jogador.overall} OVR) junto ao ${nomeVend} por ~R$ ${valorM}M após ${diasCiclo} dia(s).`;
+      return `${comp} fechou ${tipoTxt} de ${j} (${jogador.overall} OVR) junto ao ${vend} por ~R$ ${valorM}M após ${diasCiclo} dia(s).`;
     case 'recusada_clube':
-      return `${nomeVend} recusou proposta do ${nomeComp} por ${jogador.nome} (~R$ ${valorM}M) — peça-chave ou valor baixo.`;
+      return `${vend} recusou proposta do ${comp} por ${j} (~R$ ${valorM}M) — peça-chave ou valor baixo.`;
     case 'contraproposta':
-      return `${nomeVend} e ${nomeComp} trocam contrapropostas por ${jogador.nome} (${tipoTxt}); divergência de parcelas/% do passe.`;
+      return `${vend} e ${comp} trocam contrapropostas por ${j} (${tipoTxt}); divergência de parcelas/% do passe.`;
     case 'recusada_jogador':
-      return `${jogador.nome} recusou ir ao ${nomeComp} (salário, contrato ou rivalidade) após ${diasCiclo} dia(s) de conversa.`;
+      return `${j} recusou ir ao ${comp} (salário, contrato ou rivalidade) após ${diasCiclo} dia(s) de conversa.`;
     case 'melada':
-      return `Negociação ${tipoTxt} de ${jogador.nome} (${nomeVend} → ${nomeComp}) melou por exames, fair play ou prazo de janela.`;
+      return `Negociação ${tipoTxt} de ${j} (${vend} → ${comp}) melou por exames, fair play ou prazo de janela.`;
   }
 }
 
@@ -667,6 +676,8 @@ export function gerarNoticiasMercadoDia(params: {
         desfecho,
         nomeComp,
         nomeVend,
+        compradorId: comprador,
+        vendedorId: alvo.time_id ? vendedorId : null,
         jogador: alvo,
         valorM,
         tipo,
@@ -754,6 +765,8 @@ export function simularMercadoCpuRodada(
           desfecho,
           nomeComp,
           nomeVend,
+          compradorId: comprador,
+          vendedorId: vendedor,
           jogador: alvo,
           valorM,
           tipo,
@@ -860,13 +873,16 @@ export function tickMundoPorDia(params: TickDiaMundoParams): {
     });
     if (!gerado) continue;
     jogadores = jogadores.map((x) => (x.id === j.id ? { ...x, lesao: gerado.lesao } : x));
+    const nomeLink = marcarJogador(j.id, j.nome);
+    const diag = gerado.diagnostico;
     noticias.push({
       id: `lesao_treino_${j.id}_${params.dataISO}`,
       data: `${params.dataISO}T10:00:00.000Z`,
-      titulo: `Baixa no treino — ${j.nome}`,
-      texto: gerado.diagnostico.mancheteNoticia,
+      titulo: `Baixa no treino — ${nomeLink}`,
+      texto: `${nomeLink}: ${diag.nome} (${diag.gravidade.toLowerCase()}). Previsão de ${diag.diasRecuperacao} dias.`,
+      acoes: acoesLesaoCampo(j.id),
     });
-    if (noticias.length >= 3) break;
+    if (noticias.filter((n) => n.id.startsWith('lesao_treino_')).length >= 3) break;
   }
   if (params.comercialHumor != null) {
     const alvo = Math.round(params.comercialHumor);
