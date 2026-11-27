@@ -55,7 +55,18 @@ export function ehCelulaGol(a: CelulaGrade, b: CelulaGrade): boolean {
   return !!a.gol && !!b.gol;
 }
 
-/** Posição mostrada no campinho conforme a faixa (e coluna na defesa). */
+/** Linha tática a partir da row da grade (0=ATA … 4=DEF). */
+export function linhaDaCelula(c: CelulaGrade): LinhaCampinho {
+  if (c.gol) return 'GOL';
+  const map: LinhaCampinho[] = ['ATA', 'MO', 'MC', 'VOL', 'DEF'];
+  return map[c.row] ?? 'MC';
+}
+
+/**
+ * Posição de schema no campinho (faixa + coluna).
+ * PE/PD têm duas alturas (row 0 ATA e row 1 MO) — ambas ATA.
+ * ST atrás do CA = row 1 col 2 → ATA (não MEI/MC).
+ */
 export function posicaoNaCelula(c: CelulaGrade): Posicao {
   if (c.gol) return 'GOL';
   if (c.row === 4) {
@@ -64,7 +75,10 @@ export function posicaoNaCelula(c: CelulaGrade): Posicao {
   }
   if (c.row === 3) return 'VOL';
   if (c.row === 0) return 'ATA';
-  if (c.row === 1 || c.row === 2) return 'MEI';
+  // Faixa MO (row 1): PE/PD, AE/AD e ST — todos papéis de ataque (schema ATA).
+  // Meia lento em AE/AD NÃO herda OVR cheio só por chute (ver PositionRecalculator).
+  if (c.row === 1) return 'ATA';
+  if (c.row === 2) return 'MEI';
   return 'MEI';
 }
 
@@ -87,7 +101,7 @@ export function rotuloPosicaoCampinho(c: CelulaGrade): string {
   if (c.row === 1 && c.col === 4) return 'PD';
   if (c.row === 1 && c.col === 1) return 'AE';
   if (c.row === 1 && c.col === 3) return 'AD';
-  if (c.row === 1 && c.col === 2) return 'MC';
+  if (c.row === 1 && c.col === 2) return 'ST';
   if (c.row === 1) return 'MO';
   if (c.row === 2 && c.col === 0) return 'AE';
   if (c.row === 2 && c.col === 4) return 'AD';
