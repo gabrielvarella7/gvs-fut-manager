@@ -1,5 +1,10 @@
 import { useState } from 'react';
 import {
+  corClasseEnergia,
+  faixaRecuperacaoLabel,
+  overallEfetivoPorEnergia,
+} from '../../career/energia';
+import {
   particularidadesJogador,
   resumoFinanceiro,
   rotuloPosicao,
@@ -54,7 +59,7 @@ export function PlayerProfileScreen() {
   return (
     <CmCareerShell
       titulo={jogador.nome}
-      subtitulo={`${rotuloPosicao(jogador.posicao)} · ${jogador.idade} anos · OVR ${jogador.overall}`}
+      subtitulo={`${rotuloPosicao(jogador.posicao)} · ${jogador.idade} anos · OVR ${jogador.overall} · Energia ${Math.round(jogador.energia)}%`}
       acoesExtras={
         <>
           {profissional && jogador && clubeRealId && jogador.time_id !== clubeRealId && (
@@ -107,6 +112,21 @@ export function PlayerProfileScreen() {
           <AtributosDetalhe atributos={jogador.atributos} compacto />
           <p className="mt-3 text-sm text-zinc-400">
             Status: <strong className="text-zinc-200">{rotuloStatus(jogador.status_escalacao)}</strong>
+          </p>
+          <p className="mt-2 text-sm text-zinc-400">
+            Energia:{' '}
+            <strong className={corClasseEnergia(jogador.energia)}>
+              {Math.round(jogador.energia)}%
+            </strong>
+            {jogador.energia < 92 && (
+              <>
+                {' '}
+                · OVR em campo ~{overallEfetivoPorEnergia(jogador.overall, jogador.energia)}
+              </>
+            )}
+            <span className="mt-0.5 block text-xs text-zinc-500">
+              {faixaRecuperacaoLabel(jogador.idade)}
+            </span>
           </p>
           {jogador.lesao && jogador.lesao.diasRestantes > 0 && (
             <p className="mt-2 text-sm text-rose-300">

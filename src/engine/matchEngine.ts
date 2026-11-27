@@ -9,7 +9,19 @@ import {
   type VarsNarracao,
 } from './narracao';
 import { metricasMotorDeAtributos } from '../career/atributosJogador';
-import type { EsquemaTatico, Jogador, Posicao } from '../types/schema';
+import {
+  chanceLesaoPorFadiga,
+  escolherReservaParaSub,
+  energiaInicialPartida,
+  fadigaPorMinutoPorIdade,
+  MAX_SUBSTITUICOES_PARTIDA,
+  recuperacaoDiariaEnergia,
+  sortearGravidadeLesaoFadiga,
+  diasBaseLesaoFadiga,
+  descricaoLesaoFadiga,
+  timeEmWO,
+} from '../career/energia';
+import type { EsquemaTatico, GravidadeLesao, Jogador, Posicao } from '../types/schema';
 import { type ContextoDinamicoPartida, modificadoresUrgencia } from './matchContext';
 import {
   construirEstatisticasPartida,
@@ -43,8 +55,10 @@ import { aplicarBonusTreinoModificadores } from './trainingEngine';
 
 export const MOTOR_DEFAULTS = {
   improvisacaoMult: 0.8,
-  energiaLimiteFadiga: 60,
-  fadigaPorMinuto: 0.5,
+  /** Abaixo disto o rendimento já vinha caindo; agora o mult é contínuo via energia. */
+  energiaLimiteFadiga: 70,
+  /** Fallback se idade não calibrar — ~médio. */
+  fadigaPorMinuto: 0.33,
   recuperacaoTitular: 25,
   recuperacaoReserva: 40,
 } as const;
@@ -94,6 +108,9 @@ export type TipoLancamento =
   | 'defesa'
   | 'gol'
   | 'cartao_amarelo'
+  | 'lesao'
+  | 'substituicao'
+  | 'wo'
   | 'intervalo'
   | 'fim';
 
@@ -102,7 +119,18 @@ export interface Lancamento {
   tipo: TipoLancamento;
   timeId?: string;
   jogadorId?: number;
+  /** Reserva que entrou (substituição). */
+  jogadorIdEntrada?: number;
   texto: string;
+}
+
+export interface LesaoEmCampo {
+  jogadorId: number;
+  timeId: string;
+  minuto: number;
+  descricao: string;
+  gravidade: GravidadeLesao;
+  diasBase: number;
 }
 
 export interface MatchSimInput {
@@ -139,6 +167,10 @@ export interface MatchSimResult {
   estatisticas: EstatisticasPartida;
   preJogo: PreJogoInfo;
   simSeed?: number;
+  /** Lesões por fadiga durante a partida (aplicar no elenco após o jogo). */
+  lesoesEmCampo?: LesaoEmCampo[];
+  /** Clube que sofreu W.O. (perde 3–0). */
+  woTimeId?: string;
 }
 
 export function criarRng(seed: number): () => number {
@@ -287,8 +319,22 @@ function probabilidadeCartaoAmarelo(
   return 0.012 + (media / 100) * 0.016;
 }
 
-function escolherJogadorCartao(escalacao: JogadorEmCampo[], rnd: () => number): Jogador {
-  const pesos = escalacao.map(({ jogador }) => {
+function escalacaoAtiva(
+  escalacao: JogadorEmCampo[],
+  fora?: ReadonlySet<number>,
+): JogadorEmCampo[] {
+  if (!fora || fora.size === 0) return escalacao;
+  return escalacao.filter((e) => !fora.has(e.jogador.id));
+}
+
+function escolherJogadorCartao(
+  escalacao: JogadorEmCampo[],
+  rnd: () => number,
+  fora?: ReadonlySet<number>,
+): Jogador {
+  const ativos = escalacaoAtiva(escalacao, fora);
+  const base = ativos.length > 0 ? ativos : escalacao;
+  const pesos = base.map(({ jogador }) => {
     const agr = metricasMotorDeAtributos(jogador.atributos).agressividade;
     return { jogador, w: 0.35 + agr };
   });
@@ -298,11 +344,17 @@ function escolherJogadorCartao(escalacao: JogadorEmCampo[], rnd: () => number): 
     t -= p.w;
     if (t <= 0) return p.jogador;
   }
-  return pesos[pesos.length - 1].jogador;
+  return pesos[pesos.length - 1]!.jogador;
 }
 
-function escolherArtilheiro(escalacao: JogadorEmCampo[], rnd: () => number): Jogador {
-  const pesos = escalacao.map(({ jogador, posicaoEscalada }) => {
+function escolherArtilheiro(
+  escalacao: JogadorEmCampo[],
+  rnd: () => number,
+  fora?: ReadonlySet<number>,
+): Jogador {
+  const ativos = escalacaoAtiva(escalacao, fora);
+  const base = ativos.length > 0 ? ativos : escalacao;
+  const pesos = base.map(({ jogador, posicaoEscalada }) => {
     const motor = metricasMotorDeAtributos(jogador.atributos);
     let w = motor.chute * 0.5 + motor.criatividade * 0.12 + motor.passe * 0.13 + jogador.overall * 0.25;
     w *= multiplicadorDesempenhoPosicao(jogador.posicao, posicaoEscalada);
@@ -319,7 +371,7 @@ function escolherArtilheiro(escalacao: JogadorEmCampo[], rnd: () => number): Jog
     t -= p.w;
     if (t <= 0) return p.jogador;
   }
-  return pesos[pesos.length - 1].jogador;
+  return pesos[pesos.length - 1]!.jogador;
 }
 
 function intensidadeAtaque(
@@ -378,20 +430,22 @@ export function simularPartida(input: MatchSimInput): MatchSimResult {
     bonusMando: input.config.bonusMandoCampo,
   };
 
-  const mandanteEsc =
+  let mandanteEsc =
     input.mandante.escalacao ??
     montarEscalacao(input.mandante.elenco, input.mandante.esquema);
-  const visitanteEsc =
+  let visitanteEsc =
     input.visitante.escalacao ??
     montarEscalacao(input.visitante.elenco, input.visitante.esquema);
 
+  const rnd = criarRng(input.seed ?? Date.now());
   const energia = new Map<number, number>();
   for (const j of [...mandanteEsc, ...visitanteEsc]) {
-    energia.set(j.jogador.id, j.jogador.energia);
+    energia.set(j.jogador.id, energiaInicialPartida(j.jogador.energia, rnd));
   }
 
-  const rnd = criarRng(input.seed ?? Date.now());
   const lancamentos: Lancamento[] = [];
+  const lesoesEmCampo: LesaoEmCampo[] = [];
+  let woTimeId: string | undefined;
 
   const mandoMult = input.mandante.mandoDeCampo !== false ? cfg.bonusMando : 1;
   const forcaInicial = {
@@ -531,8 +585,8 @@ export function simularPartida(input: MatchSimInput): MatchSimResult {
     golsVisitante = amostraPoisson(lambdaV, rnd);
   }
 
-  const minutosGolM = minutosUnicos(golsMandante, rnd);
-  const minutosGolV = minutosUnicos(golsVisitante, rnd);
+  let minutosGolM = minutosUnicos(golsMandante, rnd);
+  let minutosGolV = minutosUnicos(golsVisitante, rnd);
 
   const eventosGol: Lancamento[] = [];
   for (const minuto of minutosGolM) {
@@ -590,29 +644,48 @@ export function simularPartida(input: MatchSimInput): MatchSimResult {
   const corpo: Lancamento[] = [...eventosGol];
 
   const ordemTipo = (t: TipoLancamento) =>
-    ['chance', 'defesa', 'cartao_amarelo', 'gol', 'intervalo'].indexOf(t);
+    ['chance', 'defesa', 'cartao_amarelo', 'lesao', 'substituicao', 'gol', 'wo', 'intervalo'].indexOf(
+      t,
+    );
 
   let posseM = 0;
   let posseV = 0;
   const momento: MomentoAtaque[] = [];
 
   const fadigaPorJogador = new Map<number, number>();
-  for (const { jogador } of mandanteEsc) {
+  const registrarFadiga = (
+    jogador: Jogador,
+    multEquipe: number,
+    desgasteTatico: number,
+  ) => {
+    const baseIdade = fadigaPorMinutoPorIdade(jogador.idade, rnd);
     fadigaPorJogador.set(
       jogador.id,
-      cfg.fadigaPorMinuto *
-        (input.mandante.fadigaPorMinutoMult ?? 1) *
-        modsM.desgaste_fisico,
+      baseIdade * multEquipe * desgasteTatico,
+    );
+  };
+  for (const { jogador } of mandanteEsc) {
+    registrarFadiga(
+      jogador,
+      input.mandante.fadigaPorMinutoMult ?? 1,
+      modsM.desgaste_fisico,
     );
   }
   for (const { jogador } of visitanteEsc) {
-    fadigaPorJogador.set(
-      jogador.id,
-      cfg.fadigaPorMinuto *
-        (input.visitante.fadigaPorMinutoMult ?? 1) *
-        modsV.desgaste_fisico,
+    registrarFadiga(
+      jogador,
+      input.visitante.fadigaPorMinutoMult ?? 1,
+      modsV.desgaste_fisico,
     );
   }
+
+  const idsUsadosBancoM = new Set<number>();
+  const idsUsadosBancoV = new Set<number>();
+  let subsRestantesM = MAX_SUBSTITUICOES_PARTIDA;
+  let subsRestantesV = MAX_SUBSTITUICOES_PARTIDA;
+  // Quem saiu (cartão vermelho / lesão sem reposição) — não joga mais.
+  const foraMandante = expulsosMandante;
+  const foraVisitante = expulsosVisitante;
 
   const ratioPosseM = modsM.posse_bola / Math.max(0.7, modsV.posse_bola);
   const ratioPosseV = modsV.posse_bola / Math.max(0.7, modsM.posse_bola);
@@ -634,10 +707,157 @@ export function simularPartida(input: MatchSimInput): MatchSimResult {
     return { defendido: rndFn() < probDefesa, transicao, xgTransicao };
   };
 
+  const processarLesaoFadiga = (
+    minuto: number,
+    casa: boolean,
+  ): boolean /* wo */ => {
+    const esc = casa ? mandanteEsc : visitanteEsc;
+    const fora = casa ? foraMandante : foraVisitante;
+    const timeId = casa ? input.mandante.timeId : input.visitante.timeId;
+    const nomeTime = casa ? input.mandante.nomeCurto : input.visitante.nomeCurto;
+    const elenco = casa ? input.mandante.elenco : input.visitante.elenco;
+    const idsUsados = casa ? idsUsadosBancoM : idsUsadosBancoV;
+    let subsRestantes = casa ? subsRestantesM : subsRestantesV;
+
+    for (const slot of esc) {
+      const j = slot.jogador;
+      if (fora.has(j.id)) continue;
+      const eAgora = energia.get(j.id) ?? j.energia;
+      if (
+        !chanceLesaoPorFadiga(
+          eAgora,
+          j.atributos.fisicos.fora_por_lesao,
+          rnd,
+        )
+      ) {
+        continue;
+      }
+
+      const gravidade = sortearGravidadeLesaoFadiga(eAgora, rnd);
+      const diasBase = diasBaseLesaoFadiga(gravidade, rnd);
+      const descricao = descricaoLesaoFadiga(gravidade, rnd);
+      lesoesEmCampo.push({
+        jogadorId: j.id,
+        timeId,
+        minuto,
+        descricao,
+        gravidade,
+        diasBase,
+      });
+
+      const idsEmCampo = new Set(
+        esc.filter((x) => !fora.has(x.jogador.id)).map((x) => x.jogador.id),
+      );
+      const reserva =
+        subsRestantes > 0
+          ? escolherReservaParaSub(
+              elenco,
+              idsEmCampo,
+              idsUsados,
+              slot.posicaoEscalada,
+              rnd,
+            )
+          : null;
+
+      if (reserva) {
+        const idx = esc.findIndex((x) => x.jogador.id === j.id);
+        if (idx >= 0) {
+          esc[idx] = {
+            jogador: reserva,
+            posicaoEscalada: slot.posicaoEscalada,
+            celulaCampo: slot.celulaCampo,
+          };
+        }
+        idsUsados.add(reserva.id);
+        idsUsados.add(j.id);
+        energia.set(
+          reserva.id,
+          energiaInicialPartida(reserva.energia, rnd),
+        );
+        registrarFadiga(
+          reserva,
+          (casa
+            ? input.mandante.fadigaPorMinutoMult
+            : input.visitante.fadigaPorMinutoMult) ?? 1,
+          casa ? modsM.desgaste_fisico : modsV.desgaste_fisico,
+        );
+        fadigaPorJogador.delete(j.id);
+        subsRestantes -= 1;
+        if (casa) {
+          subsRestantesM = subsRestantes;
+          mandanteEsc = [...esc];
+        } else {
+          subsRestantesV = subsRestantes;
+          visitanteEsc = [...esc];
+        }
+        corpo.push({
+          minuto,
+          tipo: 'lesao',
+          timeId,
+          jogadorId: j.id,
+          texto: `${j.nome} sente ${descricao} (${Math.round(eAgora)}% de energia) e precisa sair.`,
+        });
+        corpo.push({
+          minuto,
+          tipo: 'substituicao',
+          timeId,
+          jogadorId: j.id,
+          jogadorIdEntrada: reserva.id,
+          texto: `Substituição forçada em ${nomeTime}: sai ${j.nome}, entra ${reserva.nome}.`,
+        });
+      } else {
+        fora.add(j.id);
+        fadigaPorJogador.delete(j.id);
+        if (casa) mandanteEsc = [...esc];
+        else visitanteEsc = [...esc];
+        corpo.push({
+          minuto,
+          tipo: 'lesao',
+          timeId,
+          jogadorId: j.id,
+          texto: `${j.nome} se lesiona (${descricao}) sem substituições restantes — ${nomeTime} fica com um a menos.`,
+        });
+      }
+
+      minutosOcupados.add(minuto);
+
+      if (timeEmWO(casa ? mandanteEsc : visitanteEsc, fora)) {
+        woTimeId = timeId;
+        corpo.push({
+          minuto,
+          tipo: 'wo',
+          timeId,
+          texto: `W.O.: ${nomeTime} não tem jogadores suficientes em campo (mínimo 6 de linha + goleiro). Partida encerrada em 3 a 0.`,
+        });
+        return true;
+      }
+      // Uma lesão por minuto no máximo.
+      return false;
+    }
+    return false;
+  };
+
+  let minutoFinal = 90;
   for (let minuto = 1; minuto <= 90; minuto++) {
-    for (const [id, e] of energia) {
+    // Só quem está em campo gasta energia.
+    for (const slot of mandanteEsc) {
+      if (foraMandante.has(slot.jogador.id)) continue;
+      const id = slot.jogador.id;
+      const e = energia.get(id) ?? slot.jogador.energia;
       const paso = fadigaPorJogador.get(id) ?? cfg.fadigaPorMinuto;
       energia.set(id, Math.max(0, e - paso));
+    }
+    for (const slot of visitanteEsc) {
+      if (foraVisitante.has(slot.jogador.id)) continue;
+      const id = slot.jogador.id;
+      const e = energia.get(id) ?? slot.jogador.energia;
+      const paso = fadigaPorJogador.get(id) ?? cfg.fadigaPorMinuto;
+      energia.set(id, Math.max(0, e - paso));
+    }
+
+    if (processarLesaoFadiga(minuto, true) || processarLesaoFadiga(minuto, false)) {
+      minutoFinal = minuto;
+      break;
     }
 
     if (minutosOcupados.has(minuto)) continue;
@@ -679,10 +899,14 @@ export function simularPartida(input: MatchSimInput): MatchSimResult {
     });
 
     if (rnd() < pressaoM) {
-      const autor = escolherArtilheiro(mandanteEsc, rnd);
-      const assistNome = pickAssistente(mandanteEsc, autor.id, rnd);
+      const autor = escolherArtilheiro(mandanteEsc, rnd, foraMandante);
+      const assistNome = pickAssistente(
+        escalacaoAtiva(mandanteEsc, foraMandante),
+        autor.id,
+        rnd,
+      );
       const { defendido } = probChanceMandante(modsM, modsV, rnd);
-      const goleiro = nomeGoleiro(visitanteEsc);
+      const goleiro = nomeGoleiro(escalacaoAtiva(visitanteEsc, foraVisitante));
       const vars = varsAtaque(
         varsBase(input, minutosGolM, minutosGolV, minuto),
         input.mandante.nomeCurto,
@@ -707,10 +931,14 @@ export function simularPartida(input: MatchSimInput): MatchSimResult {
       });
       minutosOcupados.add(minuto);
     } else if (rnd() < pressaoV) {
-      const autor = escolherArtilheiro(visitanteEsc, rnd);
-      const assistNome = pickAssistente(visitanteEsc, autor.id, rnd);
+      const autor = escolherArtilheiro(visitanteEsc, rnd, foraVisitante);
+      const assistNome = pickAssistente(
+        escalacaoAtiva(visitanteEsc, foraVisitante),
+        autor.id,
+        rnd,
+      );
       const { defendido } = probChanceMandante(modsV, modsM, rnd);
-      const goleiro = nomeGoleiro(mandanteEsc);
+      const goleiro = nomeGoleiro(escalacaoAtiva(mandanteEsc, foraMandante));
       const vars = varsAtaque(
         varsBase(input, minutosGolM, minutosGolV, minuto),
         input.visitante.nomeCurto,
@@ -737,22 +965,26 @@ export function simularPartida(input: MatchSimInput): MatchSimResult {
     } else if (
       minuto >= 12 &&
       rnd() <
-        probabilidadeCartaoAmarelo(mandanteEsc, visitanteEsc) *
+        probabilidadeCartaoAmarelo(
+          escalacaoAtiva(mandanteEsc, foraMandante),
+          escalacaoAtiva(visitanteEsc, foraVisitante),
+        ) *
           ((modsM.incidencia_faltas + modsV.incidencia_faltas) / 2)
     ) {
       const casa = rnd() < pressaoM / (pressaoM + pressaoV + 0.001);
       const esc = casa ? mandanteEsc : visitanteEsc;
+      const fora = casa ? foraMandante : foraVisitante;
       const timeId = casa ? input.mandante.timeId : input.visitante.timeId;
       const ataque = casa ? input.mandante.nomeCurto : input.visitante.nomeCurto;
       const defesa = casa ? input.visitante.nomeCurto : input.mandante.nomeCurto;
-      const j = escolherJogadorCartao(esc, rnd);
+      const j = escolherJogadorCartao(esc, rnd, fora);
       const agr = metricasMotorDeAtributos(j.atributos).agressividade;
       const segunda = (amarelos.get(j.id) ?? 0) >= 1;
       const expulsaoDireta = !segunda && rnd() < 0.04 + (agr / 100) * 0.06;
       const expulso = segunda || expulsaoDireta;
       if (expulso) {
-        if (casa) expulsosMandante.add(j.id);
-        else expulsosVisitante.add(j.id);
+        fora.add(j.id);
+        fadigaPorJogador.delete(j.id);
       }
       amarelos.set(j.id, (amarelos.get(j.id) ?? 0) + 1);
 
@@ -761,8 +993,13 @@ export function simularPartida(input: MatchSimInput): MatchSimResult {
         ataque,
         defesa,
         j.nome,
-        pickAssistente(esc, j.id, rnd),
-        nomeGoleiro(casa ? visitanteEsc : mandanteEsc),
+        pickAssistente(escalacaoAtiva(esc, fora), j.id, rnd),
+        nomeGoleiro(
+          escalacaoAtiva(
+            casa ? visitanteEsc : mandanteEsc,
+            casa ? foraVisitante : foraMandante,
+          ),
+        ),
       );
       corpo.push({
         minuto,
@@ -774,6 +1011,37 @@ export function simularPartida(input: MatchSimInput): MatchSimResult {
           : escolherLegenda('cartao', rnd, vars),
       });
       minutosOcupados.add(minuto);
+
+      if (expulso && timeEmWO(esc, fora)) {
+        woTimeId = timeId;
+        corpo.push({
+          minuto,
+          tipo: 'wo',
+          timeId,
+          texto: `W.O.: ${ataque} fica abaixo do mínimo de atletas em campo. Partida encerrada em 3 a 0.`,
+        });
+        minutoFinal = minuto;
+        break;
+      }
+    }
+  }
+
+  if (woTimeId) {
+    minutosGolM = minutosGolM.filter((m) => m <= minutoFinal);
+    minutosGolV = minutosGolV.filter((m) => m <= minutoFinal);
+    // Remove gols narrados após o W.O.; placar oficial vira 3–0.
+    for (let i = corpo.length - 1; i >= 0; i--) {
+      const l = corpo[i]!;
+      if (l.minuto > minutoFinal || (l.tipo === 'gol' && l.minuto > minutoFinal)) {
+        corpo.splice(i, 1);
+      }
+    }
+    if (woTimeId === input.mandante.timeId) {
+      golsMandante = 0;
+      golsVisitante = 3;
+    } else {
+      golsMandante = 3;
+      golsVisitante = 0;
     }
   }
 
@@ -785,7 +1053,7 @@ export function simularPartida(input: MatchSimInput): MatchSimResult {
   const golsMInt = minutosGolM.filter((m) => m <= 45).length;
   const golsVInt = minutosGolV.filter((m) => m <= 45).length;
   const primeiroTempo = corpo.filter((l) => l.minuto <= 45);
-  const segundoTempo = corpo.filter((l) => l.minuto > 45);
+  const segundoTempo = corpo.filter((l) => l.minuto > 45 && l.minuto <= minutoFinal);
 
   const vars0 = {
     ...varsBase(input, minutosGolM, minutosGolV, 0),
@@ -800,48 +1068,53 @@ export function simularPartida(input: MatchSimInput): MatchSimResult {
     texto: escolherLegendaEntre('abertura', rnd, vars0, 0, 3),
   });
   lancamentos.push(...primeiroTempo);
-  const varsInt = {
-    ...varsBase(input, minutosGolM, minutosGolV, 45),
-    TIME_ATAQUE: input.mandante.nomeCurto,
-    JOGADOR: '',
-    ASSISTENTE: '',
-    GOLEIRO: '',
-    PLACAR: `${golsMInt} x ${golsVInt}`,
-  } as VarsNarracao;
-  lancamentos.push({
-    minuto: 45,
-    tipo: 'intervalo',
-    texto: escolherLegendaEntre('intervalo', rnd, varsInt, 0, 1),
-  });
-  const vars2T = {
-    ...varsBase(input, minutosGolM, minutosGolV, 46),
-    TIME_ATAQUE: rnd() < 0.5 ? input.mandante.nomeCurto : input.visitante.nomeCurto,
-    JOGADOR: '',
-    ASSISTENTE: '',
-    GOLEIRO: '',
-  } as VarsNarracao;
-  lancamentos.push({
-    minuto: 46,
-    tipo: 'inicio',
-    texto: escolherLegendaEntre('abertura', rnd, vars2T, 4, 5),
-  });
-  lancamentos.push(...segundoTempo);
+  if (!woTimeId || minutoFinal >= 45) {
+    const varsInt = {
+      ...varsBase(input, minutosGolM, minutosGolV, 45),
+      TIME_ATAQUE: input.mandante.nomeCurto,
+      JOGADOR: '',
+      ASSISTENTE: '',
+      GOLEIRO: '',
+      PLACAR: `${golsMInt} x ${golsVInt}`,
+    } as VarsNarracao;
+    lancamentos.push({
+      minuto: 45,
+      tipo: 'intervalo',
+      texto: escolherLegendaEntre('intervalo', rnd, varsInt, 0, 1),
+    });
+  }
+  if (!woTimeId || minutoFinal > 45) {
+    const vars2T = {
+      ...varsBase(input, minutosGolM, minutosGolV, 46),
+      TIME_ATAQUE: rnd() < 0.5 ? input.mandante.nomeCurto : input.visitante.nomeCurto,
+      JOGADOR: '',
+      ASSISTENTE: '',
+      GOLEIRO: '',
+    } as VarsNarracao;
+    lancamentos.push({
+      minuto: 46,
+      tipo: 'inicio',
+      texto: escolherLegendaEntre('abertura', rnd, vars2T, 4, 5),
+    });
+    lancamentos.push(...segundoTempo);
+  }
   const placarFinal = `${golsMandante} x ${golsVisitante}`;
   const varsFim = {
-    ...varsBase(input, minutosGolM, minutosGolV, 90),
+    ...varsBase(input, minutosGolM, minutosGolV, minutoFinal),
     PLACAR: placarFinal,
     JOGADOR: '',
     ASSISTENTE: '',
     GOLEIRO: '',
   } as VarsNarracao;
-  const linhaFim =
-    golsMandante === golsVisitante
+  const linhaFim = woTimeId
+    ? `Árbitro encerra: W.O. ${placarFinal}.`
+    : golsMandante === golsVisitante
       ? escolherLegendaEntre('fim', rnd, varsFim as VarsNarracao, 1, 1)
       : rnd() < 0.5
         ? escolherLegendaEntre('fim', rnd, varsFim as VarsNarracao, 0, 0)
         : escolherLegendaEntre('fim', rnd, varsFim as VarsNarracao, 2, 2);
   lancamentos.push({
-    minuto: 90,
+    minuto: minutoFinal,
     tipo: 'fim',
     texto: linhaFim,
   });
@@ -885,15 +1158,17 @@ export function simularPartida(input: MatchSimInput): MatchSimResult {
     preJogo,
     simSeed: input.seed,
     impactoTatico: { mandante: impactoM, visitante: impactoV },
+    ...(lesoesEmCampo.length > 0 ? { lesoesEmCampo } : {}),
+    ...(woTimeId ? { woTimeId } : {}),
   };
 }
 
+/** Recuperação etária aproximada (~3 dias entre rodadas). Preferir recuperarEnergiaUmDia no calendário. */
 export function recuperarEnergiaEntreRodadas(jogadores: Jogador[]): Jogador[] {
+  const rnd = criarRng(Date.now() ^ 0x7e57);
   return jogadores.map((j) => {
-    const ganho =
-      j.status_escalacao === 'RESERVA'
-        ? MOTOR_DEFAULTS.recuperacaoReserva
-        : MOTOR_DEFAULTS.recuperacaoTitular;
+    const ganhoDia = recuperacaoDiariaEnergia(j.idade, rnd);
+    const ganho = ganhoDia * 3;
     return {
       ...j,
       energia: Math.min(100, Math.round((j.energia + ganho) * 10) / 10),

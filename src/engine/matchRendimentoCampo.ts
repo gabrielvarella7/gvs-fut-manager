@@ -1,4 +1,5 @@
 import { metricasMotorDeAtributos } from '../career/atributosJogador';
+import { multiplicadorRendimentoPorEnergia } from '../career/energia';
 import type { CelulaGrade } from '../data/gradeCampinho';
 import { multiplicadorDesempenhoPosicao } from './posicaoCompatibilidade';
 
@@ -117,9 +118,11 @@ export function rendimentoJogadorEmCampo(p: ParametrosRendimentoJogador): number
     mult *= p.improvisacaoMult / IMPROV_PADRAO;
   }
 
-  const limite = p.energiaLimiteFadiga;
-  const fadiga =
-    p.energia >= limite ? 1 : Math.max(0.35, p.energia / limite);
+  // Performance ↔ energia (contínuo). O limite legado reforça queda abaixo do limiar.
+  let fadiga = multiplicadorRendimentoPorEnergia(p.energia);
+  if (p.energia < p.energiaLimiteFadiga) {
+    fadiga *= Math.max(0.85, p.energia / Math.max(1, p.energiaLimiteFadiga));
+  }
 
   const motiv = p.fatorMotivacao ?? 1;
   const moral = p.fatorMoralTime ?? 1;

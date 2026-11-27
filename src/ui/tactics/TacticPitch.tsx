@@ -13,6 +13,7 @@ import {
   type CelulaGrade,
 } from '../../data/gradeCampinho';
 import { SLOTS_POR_ESQUEMA, esquemaOuPadrao } from '../../data/esquemasTaticos';
+import { overallEfetivoPorEnergia } from '../../career/energia';
 import {
   grauDesvioPosicao,
   overallEfetivoEmCampo,
@@ -84,13 +85,18 @@ export function TacticPitch({
           : pos.slice(0, 3);
     const nome = j?.nome ?? '—';
     const overall = j?.overall;
-    const ovrEfetivo =
+    const ovrPos =
       j != null ? overallEfetivoEmCampo(j.overall, j.posicao, pos) : undefined;
+    const ovrEfetivo =
+      j != null && ovrPos != null
+        ? overallEfetivoPorEnergia(ovrPos, j.energia)
+        : undefined;
     const foraPos =
       j != null ? grauDesvioPosicao(j.posicao, pos) : 'ideal';
+    const energiaBaixa = j != null && j.energia < 75;
     const textoOvr =
       overall != null && ovrEfetivo != null
-        ? foraPos !== 'ideal' && ovrEfetivo < overall
+        ? ovrEfetivo < overall || foraPos !== 'ideal'
           ? `:${ovrEfetivo} (${overall})`
           : `:${overall}`
         : '';
@@ -99,13 +105,17 @@ export function TacticPitch({
       overall,
       ovrEfetivo,
       foraPos,
+      energia: j?.energia,
+      energiaBaixa,
       pos,
       rotulo,
       rotuloNome:
         nome !== '—' && textoOvr
-          ? `${primeiroNome(nome)} ${textoOvr}`
+          ? `${primeiroNome(nome)}${energiaBaixa ? ` ${Math.round(j!.energia)}%` : ''} ${textoOvr}`
           : primeiroNome(nome),
-      dicaDesvio: j ? rotuloGrauDesvio(foraPos) : '',
+      dicaDesvio: j
+        ? `${rotuloGrauDesvio(foraPos)} · Energia ${Math.round(j.energia)}%`
+        : '',
     };
   };
 
@@ -333,7 +343,9 @@ export function TacticPitch({
                         ? 'scale-110 border-yellow-400 bg-yellow-950/40 text-yellow-100'
                         : alvo
                           ? 'scale-105 border-sky-400 text-sky-100'
-                          : 'border-emerald-400 text-emerald-100 hover:border-emerald-300'
+                          : j.energiaBaixa
+                            ? 'border-amber-500 text-amber-100 hover:border-amber-400'
+                            : 'border-emerald-400 text-emerald-100 hover:border-emerald-300'
                   }`}
                   title={`${j.nome} (${j.rotulo})${j.dicaDesvio ? ` · ${j.dicaDesvio}` : ''} — arraste do elenco, outra posição ou clique em dois`}
                 >
@@ -343,7 +355,7 @@ export function TacticPitch({
                   className={`mt-0.5 block min-w-[5.25rem] whitespace-nowrap text-center text-[8px] font-medium drop-shadow sm:text-[9px] ${
                     j.foraPos === 'muito_fora'
                       ? 'text-red-300'
-                      : j.foraPos === 'improvisado'
+                      : j.foraPos === 'improvisado' || j.energiaBaixa
                         ? 'text-amber-200'
                         : 'text-zinc-100'
                   }`}

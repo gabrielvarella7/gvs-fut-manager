@@ -53,8 +53,8 @@ export function mesclarPartidaAposMinuto(
     ...futuros.filter((l) => l.tipo !== 'inicio' || l.minuto > 46),
   ].sort((a, b) => a.minuto - b.minuto || a.tipo.localeCompare(b.tipo));
 
-  const semFim = lancamentos.some((l) => l.tipo === 'fim' && l.minuto >= 90);
-  if (!semFim) {
+  const temFim = lancamentos.some((l) => l.tipo === 'fim');
+  if (!temFim) {
     const fim = nova.lancamentos.find((l) => l.tipo === 'fim');
     if (fim) lancamentos.push(fim);
   }

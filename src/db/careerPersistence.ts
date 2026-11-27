@@ -2,7 +2,8 @@ import type { EstadoTemporada, PartidaCampeonato } from '../career/brasileirao';
 import type { Jogador, JogoCalendario, LinhaTabela } from '../types/schema';
 import { db } from './database';
 
-const RECUPERACAO_RESERVA_RODADA = 15;
+/** Bônus residual na virada de rodada (recuperação principal é diária por idade). */
+const RECUPERACAO_RESERVA_RODADA = 4;
 
 export function partidasParaCalendario(partidas: PartidaCampeonato[]): JogoCalendario[] {
   return partidas.map((p) => ({
@@ -58,7 +59,7 @@ export async function persistirJogadoresDexie(jogadores: Jogador[]): Promise<voi
   await db.jogadores.bulkPut(jogadores);
 }
 
-/** +15 energia para reservas e não relacionados na virada de rodada. */
+/** Pequeno reforço para reservas na virada de rodada (calendário diário faz o grosso). */
 export function recuperarReservasViradaRodada(jogadores: Jogador[]): Jogador[] {
   return jogadores.map((j) => {
     if (j.status_escalacao === 'TITULAR') return j;

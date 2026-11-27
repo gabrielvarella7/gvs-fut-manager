@@ -40,6 +40,9 @@ const tipoClasse: Record<Lancamento['tipo'], string> = {
   chance: 'text-zinc-300',
   defesa: 'text-sky-300',
   cartao_amarelo: 'text-orange-400',
+  lesao: 'text-rose-400 font-medium',
+  substituicao: 'text-sky-200',
+  wo: 'text-rose-300 font-semibold',
 };
 
 export function MatchPlayback({
