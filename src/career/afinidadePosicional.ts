@@ -1,4 +1,5 @@
 import { escalaMotor, metricasMotorDeAtributos } from './atributosJogador';
+import { PositionRecalculator } from './positionRecalculator';
 import type { Jogador, Posicao } from '../types/schema';
 import type { LinhaCampinho } from '../data/campinhoLayout';
 
@@ -256,6 +257,8 @@ export interface OpcoesAfinidade {
   /** Linha no campinho (PD/PE profundidade). */
   linhaNatural?: LinhaCampinho;
   linhaEscalada?: LinhaCampinho;
+  /** Coluna 0–4 do campinho (lado LE/LD / AE/AD). */
+  col?: number;
 }
 
 export interface ResultadoAfinidade {
@@ -280,7 +283,8 @@ function clampPena(n: number): number {
 }
 
 /**
- * Calcula pena posicional com paridade OVR + modificadores de attr/treino/idade.
+ * Calcula afinidade via PositionRecalculator (Native / Adapted / Improvised)
+ * + portas de paridade OVR legadas + side-effects (energia/faltas).
  */
 export function calcularAfinidadePosicional(
   jogador: Jogador,
@@ -291,69 +295,74 @@ export function calcularAfinidadePosicional(
   const motor = metricasMotorDeAtributos(jogador.atributos);
   const m = metricasParidadeDe(jogador);
   const defesa = motor.defesa;
-  const passe = motor.passe;
-  const vel = motor.velocidade;
 
-  const paridadeOvr = temParidadeOvr(natural, posicaoEscalada, m, {
+  const matriz = PositionRecalculator.multiplicadorNaPosicaoSchema(jogador, posicaoEscalada, {
+    col: opts.col,
+    linha: opts.linhaEscalada,
+  });
+
+  const paridadeLegacy = temParidadeOvr(natural, posicaoEscalada, m, {
     linhaNatural: opts.linhaNatural,
     linhaEscalada: opts.linhaEscalada,
   });
 
-  const nivel = resolverNivelAfinidade(natural, posicaoEscalada, defesa, paridadeOvr);
-  const penaBase = PENA_BASE_NIVEL[nivel];
-  let pena = penaBase;
+  // Native / paridade legada → 100% OVR.
+  const paridadeOvr = matriz.nativa || paridadeLegacy || natural === posicaoEscalada;
 
-  // Paridade OVR: nunca aplica queda de overall por essa troca.
+  let multiplicador = matriz.mult;
   if (paridadeOvr) {
-    pena = 0;
-  }
-
-  const ehImproviso = !paridadeOvr && nivel !== 'natural';
-  const improvisandoAtras = ehImproviso && DEFENSIVAS.has(posicaoEscalada);
-  const improvisandoAFrente = ehImproviso && OFENSIVAS.has(posicaoEscalada);
-
-  if (!paridadeOvr) {
-    // defesa≥72 improvisando atrás → −3pp
-    if (improvisandoAtras && defesa >= 72) pena -= 3;
-    // defesa&lt;55 → +6pp
-    if (ehImproviso && defesa < 55) pena += 6;
-    // passe+vel ≥78 pra frente → −3pp
-    if (improvisandoAFrente && (passe + vel) / 2 >= 78) pena -= 3;
-    // Veterano 30+ com passe≥80 → −2pp
-    if (ehImproviso && jogador.idade >= 30 && passe >= 80) pena -= 2;
-
+    multiplicador = 1;
+  } else if (matriz.adaptada) {
+    // Adapted já vem −3..−6% do recalculator; polivalência pode suavizar 1pp.
     const poliv = opts.progressoPolivalencia ?? 0;
-    if (ehImproviso && poliv >= 100) {
+    if (poliv >= 100) multiplicador = Math.min(1, multiplicador + 0.01);
+  } else {
+    // Improviso: suaviza com polivalência / secundárias / idade (legado).
+    let pena = Math.round((1 - multiplicador) * 100);
+    const poliv = opts.progressoPolivalencia ?? 0;
+    if (poliv >= 100) {
       const leitura20 = jogador.atributos.mentais.leitura_jogo;
       pena -= leitura20 >= 15 ? 5 : 3;
-    } else if (ehImproviso && poliv >= 60) {
+    } else if (poliv >= 60) {
       pena -= 1 + Math.floor((poliv - 60) / 20);
     }
-
     if (
-      ehImproviso &&
       jogador.idade >= 16 &&
       jogador.idade <= 21 &&
       (opts.jovemSemTreinoPolivalencia || poliv < 20)
     ) {
       pena += 2;
     }
-
+    if (jogador.idade >= 30 && motor.passe >= 80) pena -= 2;
     const secundarias = opts.posicoesSecundarias ?? jogador.posicoes_secundarias ?? [];
-    if (ehImproviso && secundarias.includes(posicaoEscalada)) {
+    if (secundarias.includes(posicaoEscalada)) {
       pena = Math.min(pena, 2);
     }
+    pena = clampPena(pena);
+    multiplicador = 1 - pena / 100;
   }
 
-  pena = clampPena(pena);
-  const multiplicador = 1 - pena / 100;
+  multiplicador = Math.max(0.25, Math.min(1, multiplicador));
+  const penaFinalPct = Math.round((1 - multiplicador) * 100);
+
+  let nivel: NivelAfinidade;
+  if (paridadeOvr || natural === posicaoEscalada) nivel = 'natural';
+  else if (matriz.adaptada || penaFinalPct <= 6) nivel = 'alta';
+  else if (penaFinalPct <= 15) nivel = 'media';
+  else if (natural === 'GOL' || posicaoEscalada === 'GOL') nivel = 'gol_emergencia';
+  else nivel = 'critico';
+
+  // Se a matriz legada for mais generosa (paridade), mantém natural.
+  if (paridadeLegacy) nivel = 'natural';
+
+  const penaBase = PENA_BASE_NIVEL[resolverNivelAfinidade(natural, posicaoEscalada, defesa, paridadeOvr)];
+  const ehImproviso = !paridadeOvr && !matriz.adaptada && nivel !== 'natural';
   const excecaoGrave = !paridadeOvr && (nivel === 'critico' || nivel === 'gol_emergencia');
 
   let multDesgasteEnergia = 1;
-  if (ehImproviso) {
-    if (nivel === 'alta') multDesgasteEnergia = 1.08;
+  if (ehImproviso || (matriz.adaptada && !paridadeOvr)) {
+    if (nivel === 'alta' || matriz.adaptada) multDesgasteEnergia = 1.08;
     else if (nivel === 'media') multDesgasteEnergia = 1.11;
-    else if (nivel === 'critico') multDesgasteEnergia = 1.15;
     else multDesgasteEnergia = 1.15;
   }
 
@@ -365,7 +374,7 @@ export function calcularAfinidadePosicional(
   return {
     nivel,
     penaBasePct: penaBase,
-    penaFinalPct: pena,
+    penaFinalPct,
     multiplicador,
     excecaoGrave,
     ehImproviso,

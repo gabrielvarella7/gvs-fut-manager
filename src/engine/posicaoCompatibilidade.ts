@@ -4,6 +4,7 @@ import {
   type OpcoesAfinidade,
   PENA_BASE_NIVEL,
 } from '../career/afinidadePosicional';
+import { PositionRecalculator } from '../career/positionRecalculator';
 import type { Jogador, Posicao } from '../types/schema';
 
 /**
@@ -101,16 +102,22 @@ export function multiplicadorPosicaoPartidaClamp(
   };
 }
 
-/** OVR aproximado em campo (UI / pré-jogo) — matriz de afinidade. */
+/** OVR aproximado em campo (UI / pré-jogo) — PositionRecalculator.getOverallNaPosicao. */
 export function overallEfetivoEmCampo(
   overall: number,
   posicaoNatural: Posicao,
   posicaoEmCampo: Posicao,
   jogador?: Jogador,
+  opts?: { col?: number; linha?: import('../data/campinhoLayout').LinhaCampinho },
 ): number {
   if (jogador) {
-    const { mult } = multiplicadorPosicaoPartidaClamp(jogador, posicaoEmCampo);
-    return Math.max(1, Math.round(overall * mult));
+    return Math.max(
+      1,
+      PositionRecalculator.getOverallNaPosicaoSchema(jogador, posicaoEmCampo, {
+        col: opts?.col,
+        linha: opts?.linha,
+      }),
+    );
   }
   return Math.max(1, Math.round(overall * multiplicadorDesempenhoPosicao(posicaoNatural, posicaoEmCampo)));
 }

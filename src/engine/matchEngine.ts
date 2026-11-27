@@ -48,6 +48,7 @@ import {
 } from './matchTaticaConfronto';
 import { multiplicadorDesempenhoPosicao } from './posicaoCompatibilidade';
 import type { OpcoesAfinidade } from '../career/afinidadePosicional';
+import { PositionRecalculator } from '../career/positionRecalculator';
 import type { DatabaseTaticas } from '../types/tactics';
 import type { ConfiguracaoTaticaClube } from '../types/tactics';
 import {
@@ -212,10 +213,11 @@ function jogadorAptoEscalacao(j: Jogador): boolean {
 }
 
 export function montarEscalacao(elenco: Jogador[], esquema: EsquemaTatico): JogadorEmCampo[] {
+  const elencoAf = PositionRecalculator.processarElenco(elenco);
   const slots = SLOTS_POR_ESQUEMA[esquemaOuPadrao(esquema)];
-  const aptos = [...elenco].filter(jogadorAptoEscalacao).sort((a, b) => b.overall - a.overall);
+  const aptos = [...elencoAf].filter(jogadorAptoEscalacao).sort((a, b) => b.overall - a.overall);
   /** Lesionados só entram se não houver 11 aptos (evita crash mid-season / rodada ~19). */
-  const lesionados = [...elenco]
+  const lesionados = [...elencoAf]
     .filter((j) => !jogadorAptoEscalacao(j))
     .sort((a, b) => b.overall - a.overall);
   const ordenado = [...aptos, ...lesionados];
@@ -228,9 +230,9 @@ export function montarEscalacao(elenco: Jogador[], esquema: EsquemaTatico): Joga
       titularMesmaPos ??
       ordenado.find((j) => !usados.has(j.id) && j.status_escalacao === 'TITULAR');
     let fallback = improvisado ?? ordenado.find((j) => !usados.has(j.id));
-    if (!fallback && elenco.length > 0) {
+    if (!fallback && elencoAf.length > 0) {
       // Último recurso: reutiliza o mais forte já listado (nunca lança — evita trava na rodada).
-      fallback = [...elenco].sort((a, b) => b.overall - a.overall)[0]!;
+      fallback = [...elencoAf].sort((a, b) => b.overall - a.overall)[0]!;
     }
     if (!fallback) {
       throw new Error(`Elenco insuficiente para preencher posição ${slot}.`);

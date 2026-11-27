@@ -144,6 +144,7 @@ export function rendimentoJogadorEmCampo(p: ParametrosRendimentoJogador): number
   const opcoesAf = {
     ...p.opcoesAfinidade,
     linhaEscalada: p.opcoesAfinidade?.linhaEscalada ?? linhaEscalada,
+    col: p.opcoesAfinidade?.col ?? p.celula?.col,
   };
 
   const pos = multiplicadorPosicaoPartidaClamp(
