@@ -338,23 +338,8 @@ export const useGameStore = create<GameStore>((set, get) => ({
     }),
   irPara: (tela) => {
     const s0 = get();
-    const sondagensPendentes =
-      s0.mundoClube?.rumoresOfertas.filter(rumorPendenteResposta) ?? [];
-    const telasLiberadas = new Set<TelaJogo>([
-      'transferencias',
-      'partida',
-      'relatorio_pre_jogo',
-      'tatica',
-      'configuracoes',
-      'carregar',
-    ]);
-    if (sondagensPendentes.length > 0 && !telasLiberadas.has(tela)) {
-      set({
-        tela: 'transferencias',
-        avisoSalvo: 'Há propostas de mercado aguardando sua resposta.',
-      });
-      return;
-    }
+    // Sondagens obrigatórias só travam avanço de calendário (avancarUmDia /
+    // avancarAteDiaDeJogo) — abas e demais ações do jogo continuam liberadas.
     if (tela === 'escritorio' && s0.clubeRealId) {
       get().garantirCalendarioUsuario();
     }
