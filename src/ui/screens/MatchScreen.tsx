@@ -18,6 +18,7 @@ import type { Jogador } from '../../types/schema';
 import { useGameStore } from '../../store/useGameStore';
 import { MatchCenter } from '../match/MatchCenter';
 import { gerarRelatorioPreJogo } from '../../career/relatorioPreJogo';
+import { montarH2HLiga, montarH2HTorneio } from '../../career/h2hMatch';
 import { multFadigaPreparadorFisico, nivelStaff } from '../../career/staffEfeitos';
 import { formacaoIdDeEsquema, taticaCpuAutomatica } from '../../engine/tacticsEngine';
 import { tryGetDatabaseTaticas } from '../../db/tacticsDatabase';
@@ -65,6 +66,7 @@ export function MatchScreen() {
   const timesReais = useGameStore((s) => s.timesReais);
   const jogadoresReais = useGameStore((s) => s.jogadoresReais);
   const mundoClube = useGameStore((s) => s.mundoClube);
+  const perfil = useGameStore((s) => s.perfil);
 
   const [busy, setBusy] = useState(false);
   const [velocidade, setVelocidade] = useState<VelocidadePlayback>(1);
@@ -313,6 +315,48 @@ export function MatchScreen() {
 
   const idPartida = modoLiga ? partidaLiga?.id : jogo?.id;
   const emTransmissao = !!partidaAtual && partidaJogoId === idPartida;
+
+  const dadosH2H = useMemo(() => {
+    if (modoLiga && brasileirao && partidaLiga && campeonato) {
+      return montarH2HLiga({
+        estado: brasileirao,
+        times: timesReais,
+        mandanteId: partidaLiga.mandanteId,
+        visitanteId: partidaLiga.visitanteId,
+        competicao: campeonato.nome,
+        nomeTecnicoUsuario: perfil?.nome ?? null,
+        usuarioTimeId: clubeRealId,
+        partidaAtual: emTransmissao ? partidaAtual : null,
+      });
+    }
+    if (faseTorneioAmador && jogo) {
+      return montarH2HTorneio({
+        jogos,
+        times,
+        mandanteId: jogo.mandanteId,
+        visitanteId: jogo.visitanteId,
+        nomeTecnicoUsuario: perfil?.nome ?? null,
+        usuarioTimeId: timeUsuarioId,
+        partidaAtual: emTransmissao ? partidaAtual : null,
+      });
+    }
+    return null;
+  }, [
+    modoLiga,
+    brasileirao,
+    partidaLiga,
+    campeonato,
+    timesReais,
+    perfil?.nome,
+    clubeRealId,
+    emTransmissao,
+    partidaAtual,
+    faseTorneioAmador,
+    jogo,
+    jogos,
+    times,
+    timeUsuarioId,
+  ]);
 
   const encerrarAuxiliar = useCallback(() => {
     limparPartidaModoAuxiliar();
@@ -649,6 +693,7 @@ export function MatchScreen() {
                   }
                 : null
             }
+            h2h={dadosH2H}
           />
         </>
       )}
