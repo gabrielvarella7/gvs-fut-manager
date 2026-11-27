@@ -44,9 +44,17 @@ export type StatusNegociacao =
   | 'em_analise'
   | 'contra_proposta'
   | 'aguardando_jogador'
+  /** Atleta decide (3–7 dias): clube mais fraco, minutos, salário. */
+  | 'negociando_jogador'
+  /** Exames médicos (2–4 dias). */
+  | 'em_exames'
+  /** Assinatura formal (1–3 dias). */
+  | 'assinando'
   | 'aceita'
   | 'recusada'
   | 'concluida';
+
+export type FaseNegociacao = 'clubes' | 'jogador' | 'exames' | 'assinatura';
 
 export interface NegociacaoTransferencia {
   id: string;
@@ -64,7 +72,7 @@ export interface NegociacaoTransferencia {
   rodadaNegociacao?: number;
   origemSondagemId?: string;
   tendenciaAceitarSaida?: number;
-  faseNegociacao?: 'clubes' | 'jogador';
+  faseNegociacao?: FaseNegociacao;
   diasRestantesFase?: number;
 }
 

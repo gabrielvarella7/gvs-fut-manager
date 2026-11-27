@@ -60,12 +60,18 @@ import { corrigirDataNaoUltrapassarJogo, podeAvancarUmDia } from '../career/cale
 import {
   avancarNegociacaoPorDia,
   enriquecerRumorEntrada,
-  jogadorAceitaProposta,
   negociacaoDeSondagem,
   rumorPendenteResposta,
   rotuloTendenciaSaida,
   tendenciaJogadorAceitarSaida,
 } from '../career/sondagemMercado';
+import {
+  avancarPipelineVendaPorDia,
+  estaEmPipelineVenda,
+  forcaDoClube,
+  iniciarFaseNegociacaoJogador,
+  noticiaAssinouContrato,
+} from '../career/pipelineVenda';
 import {
   aplicarBalanceamentoNaTemporada,
   avancarDias,
@@ -334,6 +340,81 @@ const estadoInicial = (): EstadoCarreira & {
   negociacoesTransferencia: [],
   partidaModoAuxiliar: false,
 });
+
+/** Avança clubes + pipeline venda (jogador → exames → assinatura). Fecha só ao assinar. */
+function tickNegociacoesUmDia(params: {
+  negociacoes: NegociacaoTransferencia[];
+  jogadores: Jogador[];
+  financas: FinancasClube | null;
+  times: Time[];
+  dataISO: string;
+  alinhamento11: number[] | null;
+  banco11: number[] | null;
+}): {
+  negociacoes: NegociacaoTransferencia[];
+  jogadores: Jogador[];
+  financas: FinancasClube | null;
+  noticias: NoticiaCarreira[];
+  alinhamento11: number[] | null;
+  banco11: number[] | null;
+} {
+  let { negociacoes, jogadores, financas, alinhamento11, banco11 } = params;
+  const noticias: NoticiaCarreira[] = [];
+
+  for (const neg of [...negociacoes]) {
+    if (neg.status === 'em_analise' || neg.status === 'contra_proposta') {
+      const jog = jogadores.find((j) => j.id === neg.jogadorId);
+      if (!jog) continue;
+      const prox = avancarNegociacaoPorDia(neg, jog, neg.ofertaAtual.valorTransferencia);
+      if (prox) negociacoes = negociacoes.map((n) => (n.id === neg.id ? prox : n));
+      continue;
+    }
+
+    if (!estaEmPipelineVenda(neg) || !financas) continue;
+    const jog = jogadores.find((j) => j.id === neg.jogadorId);
+    if (!jog) continue;
+    const nomeComprador =
+      params.times.find((t) => t.id === neg.timeCompradorId)?.nome ?? 'clube comprador';
+    const resultado = avancarPipelineVendaPorDia(neg, {
+      jogador: jog,
+      forcaClubeAtual: forcaDoClube(params.times, neg.timeVendedorId),
+      forcaClubeComprador: forcaDoClube(params.times, neg.timeCompradorId),
+      nomeComprador,
+    });
+    if (!resultado) continue;
+
+    if (resultado.tipo === 'recusada' || resultado.tipo === 'continuar') {
+      negociacoes = negociacoes.map((n) => (n.id === neg.id ? resultado.neg : n));
+      continue;
+    }
+
+    const negFechamento: NegociacaoTransferencia = {
+      ...resultado.neg,
+      ofertaAtual: resultado.neg.contraOfertaClube ?? resultado.neg.ofertaAtual,
+    };
+    const fechamento = concluirVenda(jogadores, negFechamento, financas);
+    if (fechamento.erro) {
+      negociacoes = negociacoes.map((n) =>
+        n.id === neg.id
+          ? { ...resultado.neg, status: 'recusada' as const, mensagem: fechamento.erro! }
+          : n,
+      );
+      continue;
+    }
+    jogadores = fechamento.jogadores;
+    financas = fechamento.financas;
+    negociacoes = negociacoes.map((n) =>
+      n.id === neg.id ? { ...resultado.neg, status: 'concluida' as const } : n,
+    );
+    alinhamento11 = alinhamento11
+      ? alinhamento11.map((jid) => (jid === neg.jogadorId ? 0 : jid))
+      : alinhamento11;
+    banco11 = banco11 ? banco11.filter((jid) => jid !== neg.jogadorId) : banco11;
+    noticias.push(noticiaAssinouContrato(jog.nome, nomeComprador, params.dataISO));
+  }
+
+  return { negociacoes, jogadores, financas, noticias, alinhamento11, banco11 };
+}
 
 export const useGameStore = create<GameStore>((set, get) => ({
   ...estadoInicial(),
@@ -814,23 +895,33 @@ export const useGameStore = create<GameStore>((set, get) => ({
         criarRng((Date.parse(estado.dataAtualISO) ^ 0xeca1) >>> 0),
       );
     }
-    let negociacoes = s.negociacoesTransferencia;
-    for (let i = 0; i < negociacoes.length; i++) {
-      const neg = negociacoes[i]!;
-      if (neg.status !== 'em_analise' && neg.status !== 'contra_proposta') continue;
-      const jog = jogadores.find((j) => j.id === neg.jogadorId);
-      if (!jog) continue;
-      const prox = avancarNegociacaoPorDia(neg, jog, neg.ofertaAtual.valorTransferencia);
-      if (prox) negociacoes = negociacoes.map((n) => (n.id === neg.id ? prox : n));
-    }
+    const tick = tickNegociacoesUmDia({
+      negociacoes: s.negociacoesTransferencia,
+      jogadores,
+      financas: s.financas,
+      times: s.timesReais,
+      dataISO: estado.dataAtualISO,
+      alinhamento11: s.alinhamento11,
+      banco11: s.banco11,
+    });
     set({
       brasileirao: estado,
-      jogadoresReais: jogadores,
+      jogadoresReais: tick.jogadores,
       mundoClube: mundo,
-      negociacoesTransferencia: negociacoes,
-      noticias: deduplicarNoticias([...noticias, ...extras, ...s.noticias]),
+      financas: tick.financas,
+      negociacoesTransferencia: tick.negociacoes,
+      alinhamento11: tick.alinhamento11,
+      banco11: tick.banco11,
+      noticias: deduplicarNoticias([
+        ...noticias,
+        ...extras,
+        ...tick.noticias,
+        ...s.noticias,
+      ]),
     });
-    if (extras.length) void persistirJogadoresDexie(jogadores).catch(console.error);
+    if (extras.length || tick.noticias.length) {
+      void persistirJogadoresDexie(tick.jogadores).catch(console.error);
+    }
   },
   jogarComAuxiliar: () => {
     const s = get();
@@ -907,55 +998,23 @@ export const useGameStore = create<GameStore>((set, get) => ({
     const jogador = s.jogadoresReais.find((j) => j.id === neg.jogadorId);
     if (!jogador) return;
     const oferta = neg.contraOfertaClube ?? neg.ofertaAtual;
-    const aceita = jogadorAceitaProposta(jogador, neg.tendenciaAceitarSaida, oferta);
-    if (!aceita) {
-      set({
-        negociacoesTransferencia: s.negociacoesTransferencia.map((n) =>
-          n.id === negId ?
-            { ...n, status: 'recusada' as const, mensagem: `${jogador.nome} recusou sair do clube.` }
-          : n,
-        ),
-        avisoSalvo: 'Jogador recusou a proposta.',
-      });
-      return;
-    }
-    const negFechamento: NegociacaoTransferencia = {
-      ...neg,
-      ofertaAtual: oferta,
-      timeCompradorId: neg.timeCompradorId,
-    };
-    const fechamento = concluirVenda(s.jogadoresReais, negFechamento, s.financas);
-    if (fechamento.erro) {
-      set({ avisoSalvo: fechamento.erro });
-      return;
-    }
-    const timeNome = s.timesReais.find((t) => t.id === neg.timeCompradorId)?.nome ?? 'clube';
-    const alinhamento = s.alinhamento11
-      ? s.alinhamento11.map((jid) => (jid === neg.jogadorId ? 0 : jid))
-      : s.alinhamento11;
-    const banco = s.banco11
-      ? s.banco11.filter((jid) => jid !== neg.jogadorId)
-      : s.banco11;
+    const iniciada = iniciarFaseNegociacaoJogador(
+      {
+        ...neg,
+        ofertaAtual: oferta,
+        contraOfertaClube: oferta,
+        tendenciaAceitarSaida:
+          neg.tendenciaAceitarSaida ??
+          tendenciaJogadorAceitarSaida(jogador, oferta.valorTransferencia),
+      },
+      jogador.nome,
+    );
     set({
-      jogadoresReais: fechamento.jogadores,
-      financas: fechamento.financas,
       negociacoesTransferencia: s.negociacoesTransferencia.map((n) =>
-        n.id === negId ? { ...n, status: 'concluida' as const } : n,
+        n.id === negId ? iniciada : n,
       ),
-      alinhamento11: alinhamento,
-      banco11: banco,
-      avisoSalvo: 'Jogador aceitou — venda concluída.',
-      noticias: deduplicarNoticias([
-        {
-          id: `n_tr_j_${Date.now()}`,
-          data: new Date().toISOString(),
-          titulo: 'Venda fechada',
-          texto: `${jogador.nome} aceitou ir ao ${timeNome}.`,
-        },
-        ...s.noticias,
-      ]),
+      avisoSalvo: `Negociação com ${jogador.nome} iniciada — ${iniciada.diasRestantesFase} dia(s).`,
     });
-    void persistirJogadoresDexie(fechamento.jogadores).catch(console.error);
   },
   avancarAteDiaDeJogo: () => {
     const s = get();
@@ -976,6 +1035,9 @@ export const useGameStore = create<GameStore>((set, get) => ({
     let jogadores = s.jogadoresReais;
     let mundo = s.mundoClube;
     let negociacoes = s.negociacoesTransferencia;
+    let financas = s.financas;
+    let alinhamento11 = s.alinhamento11;
+    let banco11 = s.banco11;
     const blocos: NoticiaCarreira[] = [];
     for (let guard = 0; guard < 60; guard++) {
       const calendario = podeAvancarUmDia(estado, s.clubeRealId);
@@ -995,20 +1057,30 @@ export const useGameStore = create<GameStore>((set, get) => ({
         mundo = tick.mundo;
         blocos.push(...tick.noticias);
       }
-      for (let i = 0; i < negociacoes.length; i++) {
-        const neg = negociacoes[i]!;
-        if (neg.status !== 'em_analise' && neg.status !== 'contra_proposta') continue;
-        const jog = jogadores.find((j) => j.id === neg.jogadorId);
-        if (!jog) continue;
-        const prox = avancarNegociacaoPorDia(neg, jog, neg.ofertaAtual.valorTransferencia);
-        if (prox) negociacoes = negociacoes.map((n) => (n.id === neg.id ? prox : n));
-      }
+      const tickNeg = tickNegociacoesUmDia({
+        negociacoes,
+        jogadores,
+        financas,
+        times: s.timesReais,
+        dataISO: estado.dataAtualISO,
+        alinhamento11,
+        banco11,
+      });
+      negociacoes = tickNeg.negociacoes;
+      jogadores = tickNeg.jogadores;
+      financas = tickNeg.financas;
+      alinhamento11 = tickNeg.alinhamento11;
+      banco11 = tickNeg.banco11;
+      blocos.push(...tickNeg.noticias);
     }
     set({
       brasileirao: estado,
       jogadoresReais: jogadores,
       mundoClube: mundo,
+      financas,
       negociacoesTransferencia: negociacoes,
+      alinhamento11,
+      banco11,
       noticias: deduplicarNoticias([...blocos, ...s.noticias]),
     });
     if (blocos.length > 0) void persistirJogadoresDexie(jogadores).catch(console.error);
@@ -1719,21 +1791,13 @@ export const useGameStore = create<GameStore>((set, get) => ({
     const jogador = s.jogadoresReais.find((j) => j.id === neg.jogadorId);
     if (!jogador) return;
 
-    const fecharComSucesso = (
+    const fecharCompraComSucesso = (
       proxNeg: NegociacaoTransferencia,
       proxJogadores: Jogador[],
       financasPos: FinancasClube,
       titulo: string,
       texto: string,
     ) => {
-      const alinhamento =
-        proxNeg.tipo === 'venda' && s.alinhamento11
-          ? s.alinhamento11.map((jid) => (jid === proxNeg.jogadorId ? 0 : jid))
-          : s.alinhamento11;
-      const banco =
-        proxNeg.tipo === 'venda' && s.banco11
-          ? s.banco11.filter((jid) => jid !== proxNeg.jogadorId)
-          : s.banco11;
       const noticia: NoticiaCarreira = {
         id: `n_tr_${Date.now()}`,
         data: new Date().toISOString(),
@@ -1746,12 +1810,28 @@ export const useGameStore = create<GameStore>((set, get) => ({
         negociacoesTransferencia: s.negociacoesTransferencia.map((n) =>
           n.id === negId ? { ...proxNeg, status: 'concluida' as const } : n,
         ),
-        alinhamento11: alinhamento,
-        banco11: banco,
         noticias: deduplicarNoticias([noticia, ...s.noticias]),
         avisoSalvo: 'Transferência concluída',
       });
       void persistirJogadoresDexie(proxJogadores).catch(console.error);
+    };
+
+    const iniciarPipelineVenda = (base: NegociacaoTransferencia, jog: Jogador) => {
+      const iniciada = iniciarFaseNegociacaoJogador(
+        {
+          ...base,
+          tendenciaAceitarSaida:
+            base.tendenciaAceitarSaida ??
+            tendenciaJogadorAceitarSaida(jog, base.ofertaAtual.valorTransferencia),
+        },
+        jog.nome,
+      );
+      set({
+        negociacoesTransferencia: s.negociacoesTransferencia.map((n) =>
+          n.id === negId ? iniciada : n,
+        ),
+        avisoSalvo: `Negociação com ${jog.nome}: ${iniciada.diasRestantesFase} dia(s) — depois exames e assinatura.`,
+      });
     };
 
     if (neg.tipo === 'compra') {
@@ -1787,7 +1867,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
         set((st) => ({
           noticias: deduplicarNoticias([...festa, ...st.noticias]),
         }));
-        fecharComSucesso(
+        fecharCompraComSucesso(
           { ...neg, status: 'aceita', mensagem: resultado.mensagem },
           fechamento.jogadores,
           fechamento.financas,
@@ -1874,29 +1954,14 @@ export const useGameStore = create<GameStore>((set, get) => ({
         });
         return;
       }
-      const negFechamento: NegociacaoTransferencia = {
-        ...negAtualizada,
-        ofertaAtual: ofertaComprador,
-      };
-      const fechamento = concluirVenda(s.jogadoresReais, negFechamento, s.financas);
-      if (fechamento.erro) {
-        set({
-          negociacoesTransferencia: s.negociacoesTransferencia.map((n) =>
-            n.id === negId
-              ? { ...n, status: 'recusada', mensagem: fechamento.erro!, atualizadoEm: new Date().toISOString() }
-              : n,
-          ),
-        });
-        return;
-      }
-      const timeNome =
-        s.timesReais.find((t) => t.id === compradorId)?.nome ?? 'outro clube';
-      fecharComSucesso(
-        { ...negFechamento, status: 'aceita', mensagem: resultado.mensagem },
-        fechamento.jogadores,
-        fechamento.financas,
-        'Venda confirmada',
-        `${jogador.nome} foi vendido ao ${timeNome}.`,
+      iniciarPipelineVenda(
+        {
+          ...negAtualizada,
+          ofertaAtual: ofertaComprador,
+          contraOfertaClube: ofertaComprador,
+          mensagem: resultado.mensagem,
+        },
+        jogador,
       );
       return;
     }
@@ -1924,40 +1989,23 @@ export const useGameStore = create<GameStore>((set, get) => ({
     if (neg.tipo === 'venda' && neg.contraOfertaClube) {
       const jogador = s.jogadoresReais.find((j) => j.id === neg.jogadorId);
       if (!jogador) return;
-      const negFechamento: NegociacaoTransferencia = {
-        ...neg,
-        ofertaAtual: neg.contraOfertaClube,
-      };
-      const fechamento = concluirVenda(s.jogadoresReais, negFechamento, s.financas);
-      if (fechamento.erro) return;
-      const timeNome =
-        s.timesReais.find((t) => t.id === neg.timeCompradorId)?.nome ?? 'outro clube';
-      const alinhamento = s.alinhamento11
-        ? s.alinhamento11.map((jid) => (jid === neg.jogadorId ? 0 : jid))
-        : s.alinhamento11;
-      const banco = s.banco11
-        ? s.banco11.filter((jid) => jid !== neg.jogadorId)
-        : s.banco11;
+      const iniciada = iniciarFaseNegociacaoJogador(
+        {
+          ...neg,
+          ofertaAtual: neg.contraOfertaClube,
+          contraOfertaClube: neg.contraOfertaClube,
+          tendenciaAceitarSaida:
+            neg.tendenciaAceitarSaida ??
+            tendenciaJogadorAceitarSaida(jogador, neg.contraOfertaClube.valorTransferencia),
+        },
+        jogador.nome,
+      );
       set({
-        jogadoresReais: fechamento.jogadores,
-        financas: fechamento.financas,
         negociacoesTransferencia: s.negociacoesTransferencia.map((n) =>
-          n.id === negId ? { ...n, status: 'concluida' as const } : n,
+          n.id === negId ? iniciada : n,
         ),
-        alinhamento11: alinhamento,
-        banco11: banco,
-        noticias: deduplicarNoticias([
-          {
-            id: `n_tr_${Date.now()}`,
-            data: new Date().toISOString(),
-            titulo: 'Venda confirmada',
-            texto: `${jogador.nome} foi vendido ao ${timeNome}.`,
-          },
-          ...s.noticias,
-        ]),
-        avisoSalvo: 'Transferência concluída',
+        avisoSalvo: `Contra-proposta aceita — ${jogador.nome} avalia em ${iniciada.diasRestantesFase} dia(s).`,
       });
-      void persistirJogadoresDexie(fechamento.jogadores).catch(console.error);
       return;
     }
 
