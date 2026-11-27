@@ -2,11 +2,9 @@
 
 ## mourinho-welcome.jpg
 
-Foto de José Mourinho de terno sorrindo (com Eden Hazard à esquerda) usada na tela de boas-vindas.
+Foto de José Mourinho sorrindo (rosto de frente) usada na tela de boas-vindas.
 
-- **Arquivo original:** [Chelsea 2 Spurs 0 Capital One Cup winners 2015 (16507117799).jpg](https://commons.wikimedia.org/wiki/File:Chelsea_2_Spurs_0_Capital_One_Cup_winners_2015_(16507117799).jpg) (Wikimedia Commons)
-- **Autor:** [@cfcunofficial (Chelsea Debs)](https://www.flickr.com/people/121676765@N07) via Flickr
-- **Licença:** [Creative Commons Attribution-ShareAlike 2.0 Generic (CC BY-SA 2.0)](https://creativecommons.org/licenses/by-sa/2.0/)
-- **Alterações:** recorte horizontal focado nos rostos; redimensionamento para uso na web
-
-A obra derivada permanece sob CC BY-SA 2.0.
+- **Arquivo original:** [Fenerbahce manager Jose Mourinho and Ali Koç, June 2024 (cropped).jpg](https://commons.wikimedia.org/wiki/File:Fenerbahce_manager_Jose_Mourinho_and_Ali_Ko%C3%A7,_June_2024_(cropped).jpg) (Wikimedia Commons)
+- **Autor:** Hilmi Hacaloğlu / [Voice of America (VOA Türkçe)](https://www.voaturkce.com/a/7639748.html)
+- **Licença:** domínio público (material VOA nos EUA)
+- **Alterações:** leve recorte inferior (microfone); redimensionamento para uso na web
