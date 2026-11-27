@@ -59,6 +59,17 @@ import type {
 } from '../types/mundoClube';
 import type { NoticiaCarreira } from './types';
 import type { EstadoComercial } from '../types/commercial';
+import {
+  classificarJanelaCalendario,
+  classificarTipoNegocio,
+  rotuloTipoNegocio,
+  sortearDesfechoNegociacao,
+  sortearDiasCiclo,
+  sortearQuantidadeNoticiasDia,
+  tituloNoticiaPorDesfecho,
+  type DesfechoNegociacaoMercado,
+  type TipoNegocioMercado,
+} from './transferMarket';
 
 const ROTULO_STAFF: Record<CargoStaff, string> = {
   MEDICO: 'Médico',
@@ -588,19 +599,149 @@ export function decrementarContratosRodada(jogadores: Jogador[]): Jogador[] {
   });
 }
 
+function sortearTipoNegocioCpu(rnd: () => number, livre: boolean): TipoNegocioMercado {
+  if (livre) return 'livre';
+  const r = rnd();
+  if (r < 0.08) return 'multa_rescisoria';
+  if (r < 0.28) return 'emprestimo';
+  if (r < 0.42) return 'compra_internacional';
+  return 'compra_nacional';
+}
+
+function textoDesfechoMercado(params: {
+  desfecho: DesfechoNegociacaoMercado;
+  nomeComp: string;
+  nomeVend: string;
+  jogador: Jogador;
+  valorM: number;
+  tipo: TipoNegocioMercado;
+  diasCiclo: number;
+}): string {
+  const { desfecho, nomeComp, nomeVend, jogador, valorM, tipo, diasCiclo } = params;
+  const tipoTxt = rotuloTipoNegocio(tipo).toLowerCase();
+  switch (desfecho) {
+    case 'assinada':
+      return `${nomeComp} fechou ${tipoTxt} de ${jogador.nome} (${jogador.overall} OVR) junto ao ${nomeVend} por ~R$ ${valorM}M após ${diasCiclo} dia(s).`;
+    case 'recusada_clube':
+      return `${nomeVend} recusou proposta do ${nomeComp} por ${jogador.nome} (~R$ ${valorM}M) — peça-chave ou valor baixo.`;
+    case 'contraproposta':
+      return `${nomeVend} e ${nomeComp} trocam contrapropostas por ${jogador.nome} (${tipoTxt}); divergência de parcelas/% do passe.`;
+    case 'recusada_jogador':
+      return `${jogador.nome} recusou ir ao ${nomeComp} (salário, contrato ou rivalidade) após ${diasCiclo} dia(s) de conversa.`;
+    case 'melada':
+      return `Negociação ${tipoTxt} de ${jogador.nome} (${nomeVend} → ${nomeComp}) melou por exames, fair play ou prazo de janela.`;
+  }
+}
+
+/**
+ * Notícias diárias de mercado calibradas pela janela do calendário
+ * (Jan–Fev pico, pós-estaduais, meio de ano, entressafra).
+ */
+export function gerarNoticiasMercadoDia(params: {
+  jogadores: Jogador[];
+  times: Time[];
+  clubeUsuarioId: string;
+  dataISO: string;
+  seed: number;
+}): { noticias: NoticiaCarreira[]; rumorUsuario: RumorOfertaMercado | null } {
+  const rnd = criarRng(params.seed);
+  const qtd = sortearQuantidadeNoticiasDia(params.dataISO, rnd);
+  const noticias: NoticiaCarreira[] = [];
+  let rumorUsuario: RumorOfertaMercado | null = null;
+  if (qtd <= 0) return { noticias, rumorUsuario };
+
+  const janela = classificarJanelaCalendario(params.dataISO);
+  const idsTimes = params.times.map((t) => t.id).filter((id) => id !== params.clubeUsuarioId);
+  if (idsTimes.length < 2) return { noticias, rumorUsuario };
+
+  const poolGeral = params.jogadores.filter(
+    (j) => j.time_id && j.time_id !== params.clubeUsuarioId && j.overall >= 68 && j.idade <= 34,
+  );
+  const livres = params.jogadores.filter((j) => !j.time_id && j.overall >= 70);
+
+  for (let i = 0; i < qtd; i++) {
+    const livre = livres.length > 0 && rnd() < 0.12;
+    const alvo =
+      livre ? livres[Math.floor(rnd() * livres.length)]!
+      : poolGeral[Math.floor(rnd() * Math.max(poolGeral.length, 1))];
+    if (!alvo) continue;
+
+    const vendedorId = alvo.time_id ?? idsTimes[0]!;
+    let comprador = idsTimes[Math.floor(rnd() * idsTimes.length)]!;
+    if (comprador === vendedorId) {
+      comprador = idsTimes[(idsTimes.indexOf(vendedorId) + 1 + i) % idsTimes.length]!;
+    }
+    const nomeComp = params.times.find((t) => t.id === comprador)?.nome ?? comprador;
+    const nomeVend =
+      !alvo.time_id ? 'agente livre'
+      : (params.times.find((t) => t.id === vendedorId)?.nome ?? vendedorId);
+    const tipo = sortearTipoNegocioCpu(rnd, !alvo.time_id);
+    const desfecho = sortearDesfechoNegociacao(rnd);
+    const diasCiclo = sortearDiasCiclo(tipo, rnd);
+    const valor = alvo.valor_mercado ?? alvo.overall * 800_000;
+    const valorM = Math.max(1, Math.round(valor / 1_000_000));
+
+    noticias.push({
+      id: `merc_dia_${params.dataISO}_${alvo.id}_${i}`,
+      data: `${params.dataISO}T12:00:00.000Z`,
+      titulo: `${tituloNoticiaPorDesfecho(desfecho)} · ${janela.rotulo}`,
+      texto: textoDesfechoMercado({
+        desfecho,
+        nomeComp,
+        nomeVend,
+        jogador: alvo,
+        valorM,
+        tipo,
+        diasCiclo,
+      }),
+    });
+  }
+
+  // Sondagem no elenco do usuário — mais frequente em janela aberta.
+  const elencoUser = params.jogadores.filter(
+    (j) => j.time_id === params.clubeUsuarioId && j.overall >= 74,
+  );
+  const pRumor = janela.janelaAberta ? 0.22 : 0.08;
+  const alvoUser = elencoUser[Math.floor(rnd() * Math.max(elencoUser.length, 1))];
+  if (alvoUser && elencoUser.length > 0 && rnd() < pRumor) {
+    const comprador = idsTimes[Math.floor(rnd() * idsTimes.length)]!;
+    const nomeComp = params.times.find((t) => t.id === comprador)?.nome_completo ?? comprador;
+    rumorUsuario = {
+      id: `rumor_dia_${params.dataISO}_${alvoUser.id}`,
+      jogadorId: alvoUser.id,
+      timeCompradorId: comprador,
+      timeCompradorNome: nomeComp,
+      valorIndicativo: Math.round((alvoUser.valor_mercado ?? 5_000_000) * (0.92 + rnd() * 0.2)),
+      rodada: 0,
+      texto: `${nomeComp} prepara proposta por ${alvoUser.nome} (${janela.rotulo}).`,
+    };
+    noticias.push({
+      id: rumorUsuario.id,
+      data: `${params.dataISO}T12:30:00.000Z`,
+      titulo: 'Sondagem no seu elenco',
+      texto: rumorUsuario.texto,
+    });
+  }
+
+  return { noticias, rumorUsuario };
+}
+
 export function simularMercadoCpuRodada(
   jogadores: Jogador[],
   times: Time[],
   clubeUsuarioId: string,
   rodada: number,
   seed: number,
+  dataISO?: string,
 ): { jogadores: Jogador[]; noticias: NoticiaCarreira[]; rumorUsuario: RumorOfertaMercado | null } {
   const rnd = criarRng(seed);
   const noticias: NoticiaCarreira[] = [];
   let rumorUsuario: RumorOfertaMercado | null = null;
+  const janela = dataISO ? classificarJanelaCalendario(dataISO) : null;
+  const pMovimento = janela ? (janela.janelaAberta ? 0.55 : 0.22) : 0.45;
 
   const idsTimes = times.map((t) => t.id).filter((id) => id !== clubeUsuarioId);
-  if (idsTimes.length >= 2 && rnd() < 0.45) {
+  if (idsTimes.length >= 2 && rnd() < pMovimento) {
     const vendedor = idsTimes[Math.floor(rnd() * idsTimes.length)]!;
     let comprador = idsTimes[Math.floor(rnd() * idsTimes.length)]!;
     if (comprador === vendedor) comprador = idsTimes[(idsTimes.indexOf(vendedor) + 1) % idsTimes.length]!;
@@ -608,14 +749,40 @@ export function simularMercadoCpuRodada(
     const alvo = pool[Math.floor(rnd() * Math.max(pool.length, 1))];
     if (alvo && pool.length > 0) {
       const nomeComp = times.find((t) => t.id === comprador)?.nome ?? comprador;
+      const nomeVend = times.find((t) => t.id === vendedor)?.nome ?? vendedor;
       const valor = alvo.valor_mercado ?? alvo.overall * 800_000;
+      const valorM = Math.max(1, Math.round(valor / 1_000_000));
+      const internacional = rnd() < 0.18;
+      const tipo = classificarTipoNegocio({
+        jogador: alvo,
+        oferta: {
+          valorTransferencia: valor,
+          percentualDireitos: 100,
+          salarioCltMensal: 50_000,
+          direitoImagemMensal: 20_000,
+          luvas: 100_000,
+          duracaoMeses: 36,
+          isEmprestimo: rnd() < 0.2,
+          isInternacional: internacional,
+        },
+      });
+      const desfecho = sortearDesfechoNegociacao(rnd);
+      const diasCiclo = sortearDiasCiclo(tipo, rnd);
       noticias.push({
         id: `merc_cpu_${rodada}_${alvo.id}`,
         data: new Date().toISOString(),
-        titulo: 'Movimentação no Brasileirão',
-        texto: `${nomeComp} negocia a contratação de ${alvo.nome} (${alvo.overall} OVR) por valores na casa de ${Math.round(valor / 1_000_000)}M.`,
+        titulo: tituloNoticiaPorDesfecho(desfecho),
+        texto: textoDesfechoMercado({
+          desfecho,
+          nomeComp,
+          nomeVend,
+          jogador: alvo,
+          valorM,
+          tipo,
+          diasCiclo,
+        }),
       });
-      if (rnd() < 0.35) {
+      if (desfecho === 'assinada') {
         const next = jogadores.map((j) =>
           j.id === alvo.id ? { ...j, time_id: comprador, status_escalacao: 'RESERVA' as const } : j,
         );
@@ -626,7 +793,8 @@ export function simularMercadoCpuRodada(
 
   const elencoUser = jogadores.filter((j) => j.time_id === clubeUsuarioId && j.overall >= 74);
   const alvoUser = elencoUser[Math.floor(rnd() * Math.max(elencoUser.length, 1))];
-  if (alvoUser && elencoUser.length > 0 && rnd() < 0.28) {
+  const pRumor = janela ? (janela.janelaAberta ? 0.32 : 0.12) : 0.28;
+  if (alvoUser && elencoUser.length > 0 && rnd() < pRumor) {
     const comprador = idsTimes[Math.floor(rnd() * idsTimes.length)]!;
     const nomeComp = times.find((t) => t.id === comprador)?.nome_completo ?? comprador;
     rumorUsuario = {
@@ -655,12 +823,14 @@ export interface TickDiaMundoParams {
   clubeId: string;
   dataISO: string;
   comercialHumor?: number;
+  times?: Time[];
 }
 
 export function tickMundoPorDia(params: TickDiaMundoParams): {
   jogadores: Jogador[];
   mundo: EstadoMundoClube;
   noticias: NoticiaCarreira[];
+  rumorUsuario?: RumorOfertaMercado | null;
 } {
   const rnd = criarRng(rndSeed(params.dataISO, params.clubeId));
   let mundo = params.mundo;
@@ -720,7 +890,32 @@ export function tickMundoPorDia(params: TickDiaMundoParams): {
     };
   }
 
-  return { jogadores, mundo, noticias };
+  let rumorUsuario: RumorOfertaMercado | null = null;
+  if (params.times && params.times.length >= 2) {
+    const mercadoDia = gerarNoticiasMercadoDia({
+      jogadores,
+      times: params.times,
+      clubeUsuarioId: params.clubeId,
+      dataISO: params.dataISO,
+      seed: rndSeed(params.dataISO, 'merc', params.clubeId),
+    });
+    noticias.push(...mercadoDia.noticias);
+    rumorUsuario = mercadoDia.rumorUsuario;
+    if (rumorUsuario) {
+      const jAlvo = jogadores.find((j) => j.id === rumorUsuario!.jogadorId);
+      const rumor =
+        jAlvo != null
+          ? enriquecerRumorEntrada(rumorUsuario, jAlvo, params.dataISO)
+          : rumorUsuario;
+      mundo = {
+        ...mundo,
+        rumoresOfertas: [rumor, ...mundo.rumoresOfertas].slice(0, 8),
+      };
+      rumorUsuario = rumor;
+    }
+  }
+
+  return { jogadores, mundo, noticias, rumorUsuario };
 }
 
 export interface TickRodadaMundoParams {
@@ -797,6 +992,7 @@ export function tickMundoPosRodada(params: TickRodadaMundoParams): {
     params.clubeId,
     params.rodada,
     params.seed,
+    params.brasileirao.dataAtualISO,
   );
   jogadores = mercado.jogadores;
   noticias.push(...mercado.noticias);

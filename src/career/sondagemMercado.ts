@@ -4,6 +4,13 @@ import type { NegociacaoTransferencia, OfertaTransferencia } from './types';
 import { adicionarDias } from './brasileirao';
 import { avaliarRespostaVenda, ofertaPadraoVenda } from './transfers';
 import { criarIdNegociacao } from './transfers';
+import {
+  classificarTipoNegocio,
+  diasRespostaContraproposta,
+  diasRespostaSondagemInicial,
+  diasRumorAteProposta,
+  distribuirFasesPipeline,
+} from './transferMarket';
 
 /** 0–100 — tendência do atleta aceitar sair após acordo entre clubes. */
 export function tendenciaJogadorAceitarSaida(jogador: Jogador, valorOferta: number): number {
@@ -29,13 +36,15 @@ export function enriquecerRumorEntrada(
   rumor: RumorOfertaMercado,
   jogador: Jogador,
   dataISO: string,
+  rng: () => number = Math.random,
 ): RumorOfertaMercado {
   const tendencia = tendenciaJogadorAceitarSaida(jogador, rumor.valorIndicativo);
+  const lag = diasRumorAteProposta(rng);
   return {
     ...rumor,
     status: 'pendente_resposta',
     criadoEmISO: dataISO,
-    prazoRespostaISO: adicionarDias(dataISO, 3),
+    prazoRespostaISO: adicionarDias(dataISO, Math.max(3, lag + 1)),
     tendenciaSair: tendencia,
     valorPedido: rumor.valorIndicativo,
     diasNegociacaoRestantes: 0,
@@ -51,9 +60,13 @@ export function negociacaoDeSondagem(
   jogador: Jogador,
   clubeVendedorId: string,
   valorPedido: number,
+  rng: () => number = Math.random,
 ): NegociacaoTransferencia {
   const oferta = ofertaPadraoVenda(jogador);
   oferta.valorTransferencia = valorPedido;
+  const tipoNegocio = classificarTipoNegocio({ jogador, oferta });
+  const fases = distribuirFasesPipeline(tipoNegocio, rng);
+  const diasClube = diasRespostaSondagemInicial(rng);
   return {
     id: criarIdNegociacao(),
     tipo: 'venda',
@@ -64,11 +77,15 @@ export function negociacaoDeSondagem(
     contraOfertaClube: null,
     contraOfertaJogador: null,
     status: 'em_analise',
-    mensagem: `${rumor.timeCompradorNome} analisa sua resposta. A negociação pode levar alguns dias.`,
+    mensagem: `${rumor.timeCompradorNome} analisa sua resposta (${tipoNegocio.replace('_', ' ')}). Retorno em ${diasClube} dia(s).`,
     origemSondagemId: rumor.id,
     tendenciaAceitarSaida: rumor.tendenciaSair,
     faseNegociacao: 'clubes',
-    diasRestantesFase: 2 + Math.floor(Math.random() * 2),
+    diasRestantesFase: diasClube,
+    tipoNegocio,
+    diasFaseJogador: fases.jogador,
+    diasFaseExames: fases.exames,
+    diasFaseAssinatura: fases.assinatura,
     atualizadoEm: new Date().toISOString(),
     rodadaNegociacao: 1,
   };
@@ -78,6 +95,7 @@ export function avancarNegociacaoPorDia(
   neg: NegociacaoTransferencia,
   jogador: Jogador,
   valorPedido: number,
+  rng: () => number = Math.random,
 ): NegociacaoTransferencia | null {
   if (neg.status !== 'em_analise' && neg.status !== 'contra_proposta') return null;
   const dias = (neg.diasRestantesFase ?? 1) - 1;
@@ -90,7 +108,6 @@ export function avancarNegociacaoPorDia(
   }
   if (neg.faseNegociacao === 'jogador') return null;
 
-  let compradorId = neg.timeCompradorId;
   let ofertaComprador = neg.contraOfertaClube;
   if (!ofertaComprador) {
     ofertaComprador = {
@@ -117,7 +134,7 @@ export function avancarNegociacaoPorDia(
       status: 'contra_proposta',
       contraOfertaClube: resultado.contraOfertaClube,
       mensagem: `Contraproposta: R$ ${Math.round(nova / 1_000_000)}M. Aceite, recuse ou ajuste e reenvie.`,
-      diasRestantesFase: 2,
+      diasRestantesFase: diasRespostaContraproposta(rng),
     };
   }
   return {

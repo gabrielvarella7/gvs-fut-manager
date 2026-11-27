@@ -9,6 +9,10 @@ import type {
 } from '../types/schema';
 import type { FinancasClube } from '../types/schema';
 import { multiplicadorValorPorGenetica } from './genetica';
+import {
+  TETO_DIREITO_IMAGEM,
+  veteranoRecusaContratoCurto,
+} from './transferMarket';
 
 export interface TimeMercado extends Time {
   nome_curto: string;
@@ -346,6 +350,21 @@ export function avaliarPropostaClube(input: PropostaClubeInput): ResultadoAvalia
   }
 
   const camada = jogador.suscetibilidade?.camada ?? 'ABERTO_A_PROPOSTAS';
+
+  // Cenário C: oferta de arquirrival abaixo da multa → recusa imediata (24h).
+  if (
+    nivelRivalidade === 'ARQUIRIVAL_HISTORICO' &&
+    valorOferecido < jogador.contrato.multa_nacional
+  ) {
+    return {
+      aceita: false,
+      nivelRivalidade,
+      motivo: `Recusa imediata (24h): o ${clubeVendedor.nome_curto} não reforça rival direto abaixo da multa (R$ ${jogador.contrato.multa_nacional.toLocaleString('pt-BR')}).`,
+      contraPropostaValor: jogador.contrato.multa_nacional,
+      percentualContraProposta: maxPercentual,
+    };
+  }
+
   if (
     nivelRivalidade === 'ARQUIRIVAL_HISTORICO' &&
     (camada === 'INTRANSFERIVEL' || camada === 'RELUTANTE')
@@ -426,7 +445,11 @@ export function avaliarNegociacaoJogador(input: PropostaJogadorInput): Resultado
   }
 
   const pacoteMensalOferecido = salarioCltOferecido + direitoImagemOferecido;
-  if (pacoteMensalOferecido <= 0 || direitoImagemOferecido > pacoteMensalOferecido * 0.405) {
+  // Cenário E: teto 40% Direito de Imagem (Lei Pelé).
+  if (
+    pacoteMensalOferecido <= 0 ||
+    direitoImagemOferecido > pacoteMensalOferecido * (TETO_DIREITO_IMAGEM + 0.005)
+  ) {
     return {
       status: 'RECUSADA',
       nivelRivalidade,
@@ -434,6 +457,18 @@ export function avaliarNegociacaoJogador(input: PropostaJogadorInput): Resultado
       pacienciaRestante,
       motivo:
         'Proposta rejeitada pelo jurídico: Direitos de Imagem não podem ultrapassar 40% da remuneração (Lei Pelé).',
+    };
+  }
+
+  // Cenário D: veterano 33+ recusa 12 meses sem luvas +35%.
+  const vet = veteranoRecusaContratoCurto(jogador, duracaoMeses, luvasOferecidas);
+  if (vet.recusa) {
+    return {
+      status: 'RECUSADA',
+      nivelRivalidade,
+      aderenciaOfertaPercentual: 0,
+      pacienciaRestante: 0,
+      motivo: vet.motivo!,
     };
   }
 

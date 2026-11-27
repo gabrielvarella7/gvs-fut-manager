@@ -34,6 +34,12 @@ export interface OfertaTransferencia {
   luvas: number;
   duracaoMeses: number;
   isPreContrato?: boolean;
+  /** Empréstimo simples (1 temporada + opção). */
+  isEmprestimo?: boolean;
+  /** Destino Europa / Oriente Médio / MLS. */
+  isInternacional?: boolean;
+  /** Pagamento integral da multa rescisória à vista. */
+  pagaMultaRescisoria?: boolean;
   /** Legado UI */
   salarioMensal?: number;
   anosContrato?: number;
@@ -44,17 +50,27 @@ export type StatusNegociacao =
   | 'em_analise'
   | 'contra_proposta'
   | 'aguardando_jogador'
-  /** Atleta decide (3–7 dias): clube mais fraco, minutos, salário. */
+  /** Atleta decide (ciclo calibrado por tipo de negócio). */
   | 'negociando_jogador'
-  /** Exames médicos (2–4 dias). */
+  /** Exames médicos / BID (1–2 dias calibrados). */
   | 'em_exames'
-  /** Assinatura formal (1–3 dias). */
+  /** Assinatura formal. */
   | 'assinando'
   | 'aceita'
   | 'recusada'
+  /** Melada por exames / FFP / prazo de janela. */
+  | 'melada'
   | 'concluida';
 
 export type FaseNegociacao = 'clubes' | 'jogador' | 'exames' | 'assinatura';
+
+/** Livre | empréstimo | compra nacional/internacional | multa — ver transferMarket.ts */
+export type TipoNegocioTransferencia =
+  | 'livre'
+  | 'emprestimo'
+  | 'compra_nacional'
+  | 'compra_internacional'
+  | 'multa_rescisoria';
 
 export interface NegociacaoTransferencia {
   id: string;
@@ -74,6 +90,12 @@ export interface NegociacaoTransferencia {
   tendenciaAceitarSaida?: number;
   faseNegociacao?: FaseNegociacao;
   diasRestantesFase?: number;
+  /** Calibração survey 1.000 transferências. */
+  tipoNegocio?: TipoNegocioTransferencia;
+  /** Dias planejados das fases pós-acordo (pipeline multi-dia). */
+  diasFaseJogador?: number;
+  diasFaseExames?: number;
+  diasFaseAssinatura?: number;
 }
 
 export type TelaJogo =

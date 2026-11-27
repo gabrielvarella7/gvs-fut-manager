@@ -20,6 +20,7 @@
     "smoke:affinity": "node scripts/smoke-affinity-ovr-parity.mjs",
     "smoke:matrix": "node scripts/smoke-position-recalculator.mjs",
     "smoke:pipeline-venda": "npx --yes tsx scripts/smoke-pipeline-venda.mjs",
+    "smoke:transfer-market": "npx --yes tsx scripts/smoke-transfer-market.mjs",
     "smoke:slots": "npx --yes tsx scripts/smoke-pe-pd-st-slots.mjs",
     "smoke:sub23-ovr": "npx --yes tsx scripts/smoke-sub23-ovr-plantel.mjs",
     "smoke:elenco-campo": "node scripts/smoke-lineup-elenco-campo.mjs",
