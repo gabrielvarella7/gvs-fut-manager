@@ -2,6 +2,7 @@ import { useState } from 'react';
 import type { EstadoTemporada } from '../../career/brasileirao';
 import { estatisticasParciais } from '../../engine/matchStats';
 import type { MatchSimResult } from '../../engine/matchEngine';
+import type { InfoJogadorPartida } from '../../engine/jogadorDaPartida';
 import type { CampeonatoConfig, Time } from '../../types/schema';
 import { MatchEventTimeline } from './MatchEventTimeline';
 import { MatchMomentum } from './MatchMomentum';
@@ -22,6 +23,7 @@ type Props = {
   mandanteNome: string;
   visitanteNome: string;
   estadio?: string;
+  jogadoresInfo?: ReadonlyMap<number, InfoJogadorPartida> | Readonly<Record<number, InfoJogadorPartida>>;
   velocidade: VelocidadePlayback;
   onVelocidade: (v: VelocidadePlayback) => void;
   pausado: boolean;
@@ -56,6 +58,7 @@ export function MatchCenter({
   mandanteNome,
   visitanteNome,
   estadio,
+  jogadoresInfo,
   velocidade,
   onVelocidade,
   pausado,
@@ -136,6 +139,7 @@ export function MatchCenter({
           result={result}
           mandanteNome={mandanteNome}
           visitanteNome={visitanteNome}
+          jogadoresInfo={jogadoresInfo}
           velocidade={velocidade}
           pausado={pausado}
           onPausado={onPausado}
