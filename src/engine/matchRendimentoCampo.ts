@@ -1,9 +1,11 @@
 import { metricasMotorDeAtributos } from '../career/atributosJogador';
-import { multiplicadorRendimentoPorEnergia } from '../career/energia';
+import type { OpcoesAfinidade } from '../career/afinidadePosicional';
+import {
+  calcularPerformancePartida,
+  overallBaseDe,
+} from '../career/performancePartida';
 import type { CelulaGrade } from '../data/gradeCampinho';
-import { multiplicadorDesempenhoPosicao } from './posicaoCompatibilidade';
-
-const IMPROV_PADRAO = 0.8;
+import { multiplicadorPosicaoPartidaClamp } from './posicaoCompatibilidade';
 import type { AtributosJogador, Jogador, Posicao } from '../types/schema';
 
 export type ZonaCampo = 'GOL' | 'DEF' | 'VOL' | 'MC' | 'MO' | 'ATA';
@@ -102,30 +104,49 @@ export interface ParametrosRendimentoJogador {
   celula?: CelulaGrade | null;
   energia: number;
   energiaLimiteFadiga: number;
-  improvisacaoMult: number;
+  /** @deprecated Preferir opcoesAfinidade.progressoPolivalencia. */
+  improvisacaoMult?: number;
+  opcoesAfinidade?: OpcoesAfinidade;
   /** Motivação do time + contexto (≈ 0,82–1,1). */
   fatorMotivacao?: number;
   /** Clima depressivo pós-goleada / sequência ruim. */
   fatorMoralTime?: number;
 }
 
+/**
+ * Rendimento em campo = overall_base (atributos/zona) × performance_partida (clampada).
+ * Afinidade posicional substitui o flat −20% de improvisação.
+ * Cansaço/moral/pressão nunca gravam em attrs permanentes.
+ */
 export function rendimentoJogadorEmCampo(p: ParametrosRendimentoJogador): number {
   const zona = p.celula ? zonaDaCelula(p.celula) : zonaFallbackPosicao(p.posicaoEscalada);
-  let base = rendimentoAtributosNaZona(p.jogador.atributos, zona);
+  const base = rendimentoAtributosNaZona(p.jogador.atributos, zona);
 
-  let mult = multiplicadorDesempenhoPosicao(p.jogador.posicao, p.posicaoEscalada);
-  if (p.jogador.posicao !== p.posicaoEscalada) {
-    mult *= p.improvisacaoMult / IMPROV_PADRAO;
-  }
+  const pos = multiplicadorPosicaoPartidaClamp(
+    p.jogador,
+    p.posicaoEscalada,
+    p.opcoesAfinidade,
+  );
 
-  // Performance ↔ energia (contínuo). O limite legado reforça queda abaixo do limiar.
-  let fadiga = multiplicadorRendimentoPorEnergia(p.energia);
-  if (p.energia < p.energiaLimiteFadiga) {
-    fadiga *= Math.max(0.85, p.energia / Math.max(1, p.energiaLimiteFadiga));
-  }
+  const perf = calcularPerformancePartida({
+    overallBase: overallBaseDe(p.jogador),
+    energia: p.energia,
+    multPosicao: pos.mult,
+    excecaoGrave: pos.excecaoGrave,
+    posicaoNatural: p.jogador.posicao === p.posicaoEscalada,
+    fatorMotivacao: p.fatorMotivacao,
+    fatorMoralTime: p.fatorMoralTime,
+    idade: p.jogador.idade,
+  });
 
-  const motiv = p.fatorMotivacao ?? 1;
-  const moral = p.fatorMoralTime ?? 1;
+  return base * perf.performanceMult;
+}
 
-  return base * mult * fadiga * motiv * moral;
+/** Expõe afinidade para o motor (desgaste / cartões). */
+export function afinidadeEmCampo(
+  jogador: Jogador,
+  posicaoEscalada: Posicao,
+  opts?: OpcoesAfinidade,
+) {
+  return multiplicadorPosicaoPartidaClamp(jogador, posicaoEscalada, opts).afinidade;
 }

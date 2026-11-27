@@ -15,6 +15,12 @@ import {
   normalizarAtributosOlheiro,
   obterOlheiro,
 } from './olheiroScout';
+import {
+  ajusteCargaTemporada,
+  curvaIdadeSazonal,
+  propensaoLesaoDe,
+  temCicatrizFisica,
+} from './curvaCarreira';
 import { recuperarEnergiaUmDia } from './energia';
 import { nivelDiretorBase } from './staffEfeitos';
 import {
@@ -298,16 +304,16 @@ function evoluirJogadorUmPonto(j: Jogador, attrs: (keyof Jogador['atributos']['t
 }
 
 function declinioVeterano(j: Jogador): Jogador {
+  // Veteranos perdem só Velocidade (não Passe/Chute/drible técnico).
   const atributos = {
     ...j.atributos,
-    tecnicos: { ...j.atributos.tecnicos },
     fisicos: { ...j.atributos.fisicos },
+    mentais: { ...j.atributos.mentais },
   };
-  if (j.idade >= 34) {
-    atributos.fisicos.velocidade = Math.max(1, atributos.fisicos.velocidade - 1);
-    atributos.tecnicos.drible = Math.max(1, atributos.tecnicos.drible - 1);
-  } else if (j.idade >= 31) {
-    atributos.fisicos.velocidade = Math.max(1, atributos.fisicos.velocidade - 1);
+  const perda = j.idade >= 40 ? 2 : j.idade >= 36 ? 1 : 1;
+  atributos.fisicos.velocidade = Math.max(1, atributos.fisicos.velocidade - perda);
+  if (j.idade >= 30 && j.idade <= 32) {
+    atributos.mentais.leitura_jogo = Math.min(20, atributos.mentais.leitura_jogo + 1);
   }
   const overall = overallDeAtributos(j.posicao, atributos);
   return { ...j, atributos, overall, valor_mercado: calcularValorMercado(overall, j.idade, j.posicao) };
@@ -386,17 +392,26 @@ export function desenvolverElencoFimTemporada(
 
     const teto = tetoDeltaOverallPorIdade(j.idade);
     const jogos = opts.participacoes?.[j.id] ?? 0;
-    const desempenhoCampo = Math.min(1.2, jogos / 28) * (0.55 + formaTime * 0.45 + pressaoTabela * 0.25);
+    const carga = ajusteCargaTemporada(jogos);
+    // 35–40 jogos: estável (carga neutra); 55+: −2 OVR estrutural.
+    if (carga === -2) {
+      return aplicarDeltaOverall(j, Math.max(-teto, -2));
+    }
 
-    let curvaIdade = 0;
-    if (j.idade <= 21) curvaIdade = 2.2 + fatorStaff * 1.5;
-    else if (j.idade <= 24) curvaIdade = 1.2 + fatorStaff;
-    else if (j.idade <= 28) curvaIdade = 0.25;
-    else if (j.idade <= 33) curvaIdade = -0.4;
-    else if (j.idade <= 36) curvaIdade = -1.8;
-    else curvaIdade = -3.2;
+    const desempenhoCampo =
+      carga === 0
+        ? 0
+        : Math.min(1.2, jogos / 28) * (0.55 + formaTime * 0.45 + pressaoTabela * 0.25);
 
-    const bruto = curvaIdade + desempenhoCampo * (j.status_escalacao === 'TITULAR' ? 2.4 : 1.1);
+    let curvaIdade = curvaIdadeSazonal(j.idade, j.posicao) + fatorStaff * (j.idade <= 23 ? 1.2 : 0.3);
+    if (temCicatrizFisica(j)) curvaIdade -= 0.6;
+    if (propensaoLesaoDe(j) <= 0.75) curvaIdade += 0.25;
+    if (propensaoLesaoDe(j) >= 1.6) curvaIdade -= 0.5;
+
+    const bruto =
+      curvaIdade +
+      desempenhoCampo * (j.status_escalacao === 'TITULAR' ? 2.4 : 1.1) +
+      carga;
     const delta = Math.max(-teto, Math.min(teto, Math.round(bruto)));
     return aplicarDeltaOverall(j, delta);
   });

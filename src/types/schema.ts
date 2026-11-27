@@ -173,6 +173,8 @@ export interface Jogador {
   nome: string;
   idade: number;
   posicao: Posicao;
+  /** Posições secundárias declaradas — pena de afinidade limitada a −2%. */
+  posicoes_secundarias?: Posicao[];
   atributos: AtributosJogador;
   overall: number;
   energia: number;
@@ -184,6 +186,19 @@ export interface Jogador {
   suscetibilidade?: SuscetibilidadeTransferencia;
   /** Indisponível enquanto diasRestantes > 0. */
   lesao?: EstadoLesao | null;
+  /** Sequência de jogos fora da posição natural (insatisfação de estrela). */
+  jogosImprovisoSeguidos?: number;
+  /** Cicatriz de lesão grave sem médico (acelera regressão). */
+  cicatrizFisica?: boolean;
+  /**
+   * Genética opcional (PA / absorção / propensão) — compatível com DM/fisiologia.
+   */
+  genetica?: {
+    potencial_maximo: number;
+    fator_absorcao: number;
+    propensao_lesao: number;
+    perfil_scout?: string;
+  };
   /** Jogador promovido da base; guia evolução conforme o foco do clube. */
   formacaoBase?: {
     foco: 'VENDER' | 'PROFISSIONALIZAR';

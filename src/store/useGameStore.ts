@@ -97,6 +97,7 @@ import {
   tickMundoPorDia,
   tickMundoPosRodada,
 } from '../career/mundoParalelo';
+import { deveGerarInsatisfacaoImproviso } from '../career/afinidadePosicional';
 import { recuperarEnergiaUmDia } from '../career/energia';
 import { criarRng } from '../engine/matchEngine';
 import type { FocoCategoriaBase, NivelInvestimentoBase } from '../types/mundoClube';
@@ -845,7 +846,39 @@ export const useGameStore = create<GameStore>((set, get) => ({
     const s = get();
     if (!s.brasileirao || !s.campeonato || !s.clubeRealId) return;
     let jogadores = aplicarFadigaPosPartida(s.jogadoresReais, result.energiaFinal);
+    // Contagem de improvisação (estrela 5+ jogos → insatisfação).
+    {
+      const improvisoSet = new Set(result.idsImprovisados ?? []);
+      const participantes = new Set(result.energiaFinal.map((e) => e.id));
+      jogadores = jogadores.map((j) => {
+        if (!participantes.has(j.id)) return j;
+        if (improvisoSet.has(j.id)) {
+          return {
+            ...j,
+            jogosImprovisoSeguidos: (j.jogosImprovisoSeguidos ?? 0) + 1,
+          };
+        }
+        return { ...j, jogosImprovisoSeguidos: 0 };
+      });
+    }
     const noticiasLesaoCampo: NoticiaCarreira[] = [];
+    for (const j of jogadores) {
+      if (
+        j.time_id === s.clubeRealId &&
+        deveGerarInsatisfacaoImproviso({
+          overall: j.overall,
+          jogosImprovisoSeguidos: j.jogosImprovisoSeguidos ?? 0,
+        }) &&
+        (j.jogosImprovisoSeguidos ?? 0) === 5
+      ) {
+        noticiasLesaoCampo.push({
+          id: `improviso_${j.id}_${Date.now()}`,
+          data: new Date().toISOString(),
+          titulo: `${j.nome} demonstra insatisfação`,
+          texto: `${j.nome} jogou fora de posição em 5 partidas seguidas e pediu conversa com a comissão. O entorno fala em desgaste moral.`,
+        });
+      }
+    }
     if (result.lesoesEmCampo?.length) {
       const aplicadas = aplicarLesoesEmCampo(
         jogadores,

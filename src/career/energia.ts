@@ -1,4 +1,8 @@
 import type { GravidadeLesao, Jogador } from '../types/schema';
+import {
+  multiplicadorFadigaPartida,
+  overallEfetivoPorEnergiaBase,
+} from './performancePartida';
 
 /** Jovem < 23 · médio 23–33 · veterano ≥ 34 */
 export type FaixaEtariaEnergia = 'jovem' | 'medio' | 'veterano';
@@ -79,16 +83,16 @@ export function energiaInicialPartida(energiaAtual: number, rnd: () => number): 
 }
 
 /**
- * Rendimento cai com a energia (performance ↔ energia).
- * 100% → 1 · 80% → 0,88 · 60% → 0,76 · piso 0,4.
+ * Rendimento ↔ energia (curto prazo, clampado).
+ * 80–100: sem pena · 65–79: −2%…−5% · &lt;65: máx −9% (piso competitivo).
+ * Não altera overall_base / atributos permanentes.
  */
 export function multiplicadorRendimentoPorEnergia(energia: number): number {
-  const e = Math.max(0, Math.min(100, energia));
-  return Math.max(0.4, 0.4 + 0.6 * (e / 100));
+  return multiplicadorFadigaPartida(energia);
 }
 
 export function overallEfetivoPorEnergia(overall: number, energia: number): number {
-  return Math.max(1, Math.round(overall * multiplicadorRendimentoPorEnergia(energia)));
+  return overallEfetivoPorEnergiaBase(overall, energia);
 }
 
 export function corClasseEnergia(energia: number): string {
