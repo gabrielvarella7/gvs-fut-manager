@@ -289,7 +289,7 @@ export function gerarAlertaFisiologistaElenco(params: {
     id: `fisio_alerta_${params.clubeId}_${pick.j.id}_${params.dataISO}`,
     data: `${params.dataISO}T09:00:00.000Z`,
     titulo: `Fisiologista · alerta de carga (${pick.j.nome})`,
-    texto: `${pick.j.nome} apresenta perfil ${tier.toLowerCase()} (propensão ${pick.g.propensao_lesao.toFixed(2)}×). Recomenda-se redução de carga / prevenção muscular (sessão Prevenção Muscular ou regime Regenerativo) nas próximas semanas.`,
+    texto: `${pick.j.nome} apresenta perfil ${tier.toLowerCase()} (propensão ${pick.g.propensao_lesao.toFixed(2)}×). Recomenda-se redução de carga / prevenção muscular (plano ou sessão Prevenção Muscular, ou regime Regenerativo) nas próximas semanas.`,
   };
 }
 
