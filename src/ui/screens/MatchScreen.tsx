@@ -18,6 +18,8 @@ import type { Jogador } from '../../types/schema';
 import { useGameStore } from '../../store/useGameStore';
 import { MatchCenter } from '../match/MatchCenter';
 import { gerarRelatorioPreJogo } from '../../career/relatorioPreJogo';
+import { montarInfoPartidaPreJogo } from '../../career/infoPartidaPreJogo';
+import { montarPacotePreJogoEquipes } from '../../career/preJogoEquipeStats';
 import { multFadigaPreparadorFisico, nivelStaff } from '../../career/staffEfeitos';
 import { formacaoIdDeEsquema, taticaCpuAutomatica } from '../../engine/tacticsEngine';
 import { tryGetDatabaseTaticas } from '../../db/tacticsDatabase';
@@ -276,6 +278,29 @@ export function MatchScreen() {
     () => (simInput ? previsaoPreJogo(simInput) : null),
     [simInput],
   );
+
+  const equipesPreJogo = useMemo(() => {
+    if (!modoLiga || !brasileirao || !mandanteLiga || !visitanteLiga) return null;
+    return montarPacotePreJogoEquipes({
+      estado: brasileirao,
+      mandante: mandanteLiga,
+      visitante: visitanteLiga,
+      jogadores: jogadoresReais,
+    });
+  }, [modoLiga, brasileirao, mandanteLiga, visitanteLiga, jogadoresReais]);
+
+  const infoPartidaPreJogo = useMemo(() => {
+    if (!modoLiga || !partidaLiga || !mandanteLiga || !campeonato) return null;
+    const neutro =
+      partidaLiga.campoNeutro ??
+      detectarClassico(partidaLiga.mandanteId, partidaLiga.visitanteId, timesReais);
+    return montarInfoPartidaPreJogo({
+      partida: partidaLiga,
+      campeonato,
+      mandante: mandanteLiga,
+      campoNeutro: neutro,
+    });
+  }, [modoLiga, partidaLiga, mandanteLiga, campeonato, timesReais]);
 
   const gradePartida =
     taticaPersonalizada && gradeTatica11?.length === 11 ? gradeTatica11 : null;
@@ -588,6 +613,8 @@ export function MatchScreen() {
                   forcaVisitante: preJogo.forcaVisitante,
                   mandoBonus: preJogo.mandoBonus,
                 }}
+                equipes={equipesPreJogo}
+                infoPartida={infoPartidaPreJogo}
               />
               <div className="mt-4 flex flex-wrap gap-2">
                 <CmBtn onClick={() => void iniciarPartida()} disabled={busy}>
@@ -649,6 +676,8 @@ export function MatchScreen() {
                   }
                 : null
             }
+            equipesPreJogo={equipesPreJogo}
+            infoPartida={infoPartidaPreJogo}
           />
         </>
       )}

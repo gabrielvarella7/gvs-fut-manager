@@ -67,6 +67,7 @@ import {
   avancarDias,
   diasAteProximoJogo,
   ehDiaDeJogo,
+  extrasDeResultado,
   formatarDataBr,
   iniciarTemporadaBrasileirao,
   posicaoDoTime,
@@ -922,7 +923,10 @@ export const useGameStore = create<GameStore>((set, get) => ({
       result.golsMandante,
       result.golsVisitante,
       s.campeonato,
-      { mandante: minutosM, visitante: minutosV },
+      {
+        ...extrasDeResultado(result),
+        minutosGols: { mandante: minutosM, visitante: minutosV },
+      },
     );
     const partida = estado.partidas.find((p) => p.id === partidaId);
     const seed = (Date.now() ^ partidaId) >>> 0;

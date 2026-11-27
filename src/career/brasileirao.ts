@@ -2,10 +2,20 @@ import type { MatchSimInput, MatchSimResult } from '../engine/matchEngine';
 import { getDatabaseTaticas } from '../db/tacticsDatabase';
 import { taticaCpuAutomatica } from '../engine/tacticsEngine';
 import { simularPartida } from '../engine/matchEngine';
+import type { EstatisticasTime } from '../engine/matchStats';
 import { esquemaOuPadrao } from '../data/esquemasTaticos';
 import { detectarClassico, montarContextoPartidaSync } from '../engine/matchContext';
 import type { CampeonatoConfig, Jogador, LinhaTabela, Time } from '../types/schema';
 import type { NoticiaCarreira } from './types';
+import {
+  extrairDesempenhoPartida,
+  type DesempenhoJogadorPartida,
+} from './disciplinaCartoes';
+
+export interface EstatisticasPartidaSalva {
+  mandante: EstatisticasTime;
+  visitante: EstatisticasTime;
+}
 
 export interface PartidaCampeonato {
   id: number;
@@ -22,6 +32,10 @@ export interface PartidaCampeonato {
   ehDoUsuario: boolean;
   /** Clássico / campo neutro — não conta na sequência mandante/visitante */
   campoNeutro?: boolean;
+  /** Visão geral da partida — médias de campeonato / últimos 5 no pré-jogo. */
+  estatisticas?: EstatisticasPartidaSalva;
+  /** Gols e cartões por jogador (destaques + disciplina). */
+  desempenhoJogadores?: DesempenhoJogadorPartida[];
 }
 
 export interface EstadoTemporada {
@@ -431,8 +445,17 @@ export function registrarPlacarPartida(
   golsMandante: number,
   golsVisitante: number,
   campeonato: CampeonatoConfig,
-  minutosGols?: { mandante?: number[]; visitante?: number[] },
+  extras?: {
+    /** Minutos de gol (tabela ao vivo) — flat `{ mandante, visitante }` or nested. */
+    minutosGols?: { mandante?: number[]; visitante?: number[] };
+    mandante?: number[];
+    visitante?: number[];
+    estatisticas?: EstatisticasPartidaSalva;
+    desempenhoJogadores?: DesempenhoJogadorPartida[];
+  },
 ): EstadoTemporada {
+  const minutosM = extras?.minutosGols?.mandante ?? extras?.mandante;
+  const minutosV = extras?.minutosGols?.visitante ?? extras?.visitante;
   const partidas = estado.partidas.map((p) =>
     p.id === partidaId
       ? {
@@ -440,8 +463,12 @@ export function registrarPlacarPartida(
           finalizado: true,
           golsMandante,
           golsVisitante,
-          ...(minutosGols?.mandante ? { minutosGolsMandante: minutosGols.mandante } : {}),
-          ...(minutosGols?.visitante ? { minutosGolsVisitante: minutosGols.visitante } : {}),
+          ...(minutosM ? { minutosGolsMandante: minutosM } : {}),
+          ...(minutosV ? { minutosGolsVisitante: minutosV } : {}),
+          ...(extras?.estatisticas ? { estatisticas: extras.estatisticas } : {}),
+          ...(extras?.desempenhoJogadores
+            ? { desempenhoJogadores: extras.desempenhoJogadores }
+            : {}),
         }
       : p,
   );
@@ -465,6 +492,29 @@ export function registrarPlacarPartida(
     : Math.max(estado.rodadaAtual, p.rodada);
 
   return { ...estado, partidas, tabela, rodadaAtual };
+}
+
+/** Extrai stats + desempenho + minutos de gol de um MatchSimResult. */
+export function extrasDeResultado(result: MatchSimResult): {
+  estatisticas: EstatisticasPartidaSalva;
+  desempenhoJogadores: DesempenhoJogadorPartida[];
+  minutosGols: { mandante: number[]; visitante: number[] };
+} {
+  const minutosM: number[] = [];
+  const minutosV: number[] = [];
+  for (const l of result.lancamentos) {
+    if (l.tipo !== 'gol') continue;
+    if (l.timeId === result.mandanteId) minutosM.push(l.minuto);
+    else minutosV.push(l.minuto);
+  }
+  return {
+    estatisticas: {
+      mandante: result.estatisticas.mandante,
+      visitante: result.estatisticas.visitante,
+    },
+    desempenhoJogadores: extrairDesempenhoPartida(result),
+    minutosGols: { mandante: minutosM, visitante: minutosV },
+  };
 }
 
 function elencoDoTime(jogadores: Jogador[], timeId: string): Jogador[] {
@@ -555,17 +605,14 @@ export function simularRestanteRodada(
       );
       seed = (s * 1103515245 + 12345) >>> 0;
       const r = simularPartidaCpu({ ...input, seed: s, indicePartidaTemporada: indice });
-      const minutosM: number[] = [];
-      const minutosV: number[] = [];
-      for (const l of r.lancamentos) {
-        if (l.tipo !== 'gol') continue;
-        if (l.timeId === r.mandanteId) minutosM.push(l.minuto);
-        else minutosV.push(l.minuto);
-      }
-      next = registrarPlacarPartida(next, p.id, r.golsMandante, r.golsVisitante, campeonato, {
-        mandante: minutosM,
-        visitante: minutosV,
-      });
+      next = registrarPlacarPartida(
+        next,
+        p.id,
+        r.golsMandante,
+        r.golsVisitante,
+        campeonato,
+        extrasDeResultado(r),
+      );
       indice += 1;
     } catch (err) {
       // Evita truncar a temporada se um confronto CPU falhar (ex.: elenco dizimado por lesões).
