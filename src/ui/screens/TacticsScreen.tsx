@@ -7,6 +7,7 @@ import {
 } from '../../career/aptidaoEscalacao';
 import { escalacaoAssistenteMelhorOverall } from '../../career/assistenteTecnico';
 import {
+  alternarIdNoBanco,
   idsBancoPadrao,
   idsEscalacaoPadrao,
   RESERVAS_PARTIDA,
@@ -277,23 +278,17 @@ function TacticsScreenPro() {
 
   const toggleBanco = (jogadorId: number) => {
     if (slotIds.includes(jogadorId)) return;
-    setBancoIds((prev) => {
-      if (prev.includes(jogadorId)) {
-        const next = prev.filter((id) => id !== jogadorId);
-        persistirLineup(slotIds, next, grade11, selecao, esquemaBase, selecao === 'PERSONALIZADO');
-        return next;
-      }
-      const entrando = elenco.find((j) => j.id === jogadorId);
-      if (entrando && bloqueadoPorLesaoComEnergiaBaixa(entrando)) {
-        const msg = mensagemBloqueioLesaoEnergia(entrando);
-        if (msg) useGameStore.setState({ avisoSalvo: msg });
-        return prev;
-      }
-      if (prev.length >= RESERVAS_PARTIDA) return prev;
-      const next = [...prev, jogadorId];
-      persistirLineup(slotIds, next, grade11, selecao, esquemaBase, selecao === 'PERSONALIZADO');
-      return next;
-    });
+    const entrando = elenco.find((j) => j.id === jogadorId);
+    const podeEntrar = !(entrando && bloqueadoPorLesaoComEnergiaBaixa(entrando));
+    const { banco: next, recusado } = alternarIdNoBanco(bancoIds, jogadorId, podeEntrar);
+    if (recusado === 'bloqueado') {
+      const msg = entrando ? mensagemBloqueioLesaoEnergia(entrando) : null;
+      if (msg) useGameStore.setState({ avisoSalvo: msg });
+      return;
+    }
+    if (recusado === 'cheio') return;
+    setBancoIds(next);
+    persistirLineup(slotIds, next, grade11, selecao, esquemaBase, selecao === 'PERSONALIZADO');
   };
 
   const aplicarSubstituicao = (slot: number, jogadorId: number) => {

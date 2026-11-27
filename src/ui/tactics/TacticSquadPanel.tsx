@@ -18,8 +18,12 @@ import {
   SORT_MERCADO,
 } from '../playerList';
 
-/** Movimento mínimo (px) para tratar o gesto como arraste e não como clique. */
-const LIMIAR_ARRASTO_PX = 8;
+/**
+ * Movimento mínimo (px) para tratar o gesto como arraste e não como clique.
+ * 8px era baixo demais no mobile: toques legítimos viravam “arrasto” e
+ * engoliam o toggle banco → fora da lista.
+ */
+const LIMIAR_ARRASTO_PX = 24;
 
 type Props = {
   elenco: Jogador[];
@@ -60,6 +64,8 @@ function MiniJogador({
   arrastando,
   alvoSubstituicao,
   bloqueado,
+  /** Reserva no banco: clique remove mesmo se lesionado (não joga, mas sai da lista). */
+  permitirCliqueBloqueado,
   titleBloqueio,
 }: {
   nome: string;
@@ -74,9 +80,11 @@ function MiniJogador({
   arrastando?: boolean;
   alvoSubstituicao?: boolean;
   bloqueado?: boolean;
+  permitirCliqueBloqueado?: boolean;
   titleBloqueio?: string | null;
 }) {
   const energiaBaixa = energia != null && energia < 70;
+  const cliqueLiberado = Boolean(titular || permitirCliqueBloqueado);
   /**
    * Com setPointerCapture o `click` dispara mesmo após arrastar até o gramado.
    * Se o gesto moveu, ignoramos o click para não chamar toggleBanco e desfazer
@@ -86,18 +94,21 @@ function MiniJogador({
   return (
     <button
       type="button"
-      disabled={bloqueado && !titular}
+      disabled={Boolean(bloqueado && !cliqueLiberado)}
       title={titleBloqueio ?? undefined}
       onClick={() => {
         const foiArrasto = gestoRef.current?.moveu === true;
         gestoRef.current = null;
         if (foiArrasto) return;
-        if (bloqueado && !titular) return;
+        if (bloqueado && !cliqueLiberado) return;
         onClick();
       }}
       onPointerDown={(e) => {
-        if (bloqueado) return;
+        // Bloqueado sem remoção: não inicia gesto. Com permitirCliqueBloqueado,
+        // registra gesto só para o click (sem arrastar ao gramado).
+        if (bloqueado && !permitirCliqueBloqueado) return;
         gestoRef.current = { x: e.clientX, y: e.clientY, moveu: false };
+        if (bloqueado) return;
         try {
           e.currentTarget.setPointerCapture(e.pointerId);
         } catch {
@@ -118,9 +129,11 @@ function MiniJogador({
       }}
       style={{ touchAction: 'none' }}
       className={`flex w-full items-center gap-2 rounded-lg border px-2 py-1.5 text-left transition-colors ${
-        bloqueado
+        bloqueado && !permitirCliqueBloqueado
           ? 'cursor-not-allowed border-rose-800/80 bg-rose-950/40 opacity-70'
-          : 'cursor-grab active:cursor-grabbing'
+          : bloqueado && permitirCliqueBloqueado
+            ? 'cursor-pointer border-rose-800/80 bg-rose-950/40 opacity-80 hover:border-rose-600'
+            : 'cursor-grab active:cursor-grabbing'
       } ${
         bloqueado
           ? ''
@@ -283,14 +296,19 @@ export function TacticSquadPanel({
                     nome={nomeCurto(j.nome)}
                     detalhe={
                       bloqueado
-                        ? `⚠ ${aviso ?? 'Não pode jogar'}`
+                        ? `⚠ ${aviso ?? 'Não pode jogar'} · toque p/ tirar do banco`
                         : `${rotuloPosicao(j.posicao)} · toque p/ tirar do banco`
                     }
                     ovr={j.overall}
                     energia={j.energia}
                     ativo={reservaAtiva === j.id}
                     bloqueado={bloqueado}
-                    titleBloqueio={aviso}
+                    permitirCliqueBloqueado
+                    titleBloqueio={
+                      bloqueado
+                        ? `${aviso ?? 'Não pode jogar'} — toque para tirar do banco`
+                        : aviso
+                    }
                     arrastando={arrastandoJogadorId === j.id}
                     alvoSubstituicao={slotAguardandoReserva != null && !bloqueado}
                     onArrastar={(e) => {
@@ -302,8 +320,9 @@ export function TacticSquadPanel({
                       if (!bloqueado) onSoltarReservaComCampo?.(j.id);
                     }}
                     onClick={() => {
-                      if (bloqueado) return;
+                      // Entrar em campo (sub): só se apto. Sair do banco: sempre.
                       if (slotAguardandoReserva != null) {
+                        if (bloqueado) return;
                         onReservaClick(j.id);
                         return;
                       }
