@@ -110,7 +110,10 @@ export function synthesizeFrame(opts: {
   };
 }
 
-/** Fill ~12s of buildup frames ending at the event. */
+/**
+ * Legacy linear buildup (prefer `buildCm04HighlightClip`).
+ * Clock is frozen at clockAtEvent for the whole clip.
+ */
 export function synthesizeBuildupClip(opts: {
   clockAtEvent: number;
   roster: HighlightRoster;
@@ -119,13 +122,14 @@ export function synthesizeBuildupClip(opts: {
   ticks?: number;
   banner?: string;
 }): SimulationFrame[] {
-  const ticks = opts.ticks ?? 12 * 10;
+  const ticks = opts.ticks ?? 12 * 20;
+  const frozen = Math.floor(opts.clockAtEvent);
   const frames: SimulationFrame[] = [];
   for (let i = 0; i < ticks; i++) {
     const t = (i + 1) / ticks;
     frames.push(
       synthesizeFrame({
-        clock: opts.clockAtEvent - (1 - t) * 0.35,
+        clock: frozen,
         roster: opts.roster,
         attackingHome: opts.attackingHome,
         phase: t,

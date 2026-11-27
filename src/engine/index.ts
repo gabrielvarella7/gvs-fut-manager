@@ -20,6 +20,8 @@ export {
 export {
   MatchHighlightManager,
   bindHighlightControls,
+  buildCm04HighlightClip,
+  gerarLanceHighlightCM04,
   isDangerousChance,
   rosterFromEscalacao,
   synthesizeBuildupClip,
