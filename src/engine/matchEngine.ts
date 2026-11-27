@@ -132,6 +132,14 @@ export interface Lancamento {
   jogadorId?: number;
   /** Reserva que entrou (substituição). */
   jogadorIdEntrada?: number;
+  /** Nome do jogador principal (autor do gol, cartão, lesão, saída). */
+  jogadorNome?: string;
+  /** Assistência em gols (quando houver). */
+  assistenteNome?: string;
+  /** Nome de quem entrou na substituição. */
+  jogadorNomeEntrada?: string;
+  /** Cartão mostrado; vermelho inclui segundo amarelo / expulsão direta. */
+  cartao?: 'amarelo' | 'vermelho';
   texto: string;
 }
 
@@ -643,12 +651,12 @@ export function simularPartida(input: MatchSimInput): MatchSimResult {
   for (const minuto of minutosGolM) {
     const autor = escolherArtilheiro(mandanteEsc, rnd);
     const parceiro = rnd() < 0.55 ? escolherArtilheiro(mandanteEsc, rnd) : null;
-    const assistNome =
-      parceiro && parceiro.id !== autor.id
-        ? parceiro.nome
-        : pickAssistente(mandanteEsc, autor.id, rnd);
+    const temAssist = parceiro != null && parceiro.id !== autor.id;
+    const assistNome = temAssist
+      ? parceiro.nome
+      : pickAssistente(mandanteEsc, autor.id, rnd);
     const goleiro = nomeGoleiro(visitanteEsc);
-    const cat = categoriaGol(rnd, parceiro != null && parceiro.id !== autor.id);
+    const cat = categoriaGol(rnd, temAssist);
     const vars = varsAtaque(
       varsBase(input, minutosGolM, minutosGolV, minuto),
       input.mandante.nomeCurto,
@@ -662,18 +670,20 @@ export function simularPartida(input: MatchSimInput): MatchSimResult {
       tipo: 'gol',
       timeId: input.mandante.timeId,
       jogadorId: autor.id,
+      jogadorNome: autor.nome,
+      ...(temAssist ? { assistenteNome: parceiro.nome } : {}),
       texto: escolherLegenda(cat, rnd, vars),
     });
   }
   for (const minuto of minutosGolV) {
     const autor = escolherArtilheiro(visitanteEsc, rnd);
     const parceiro = rnd() < 0.55 ? escolherArtilheiro(visitanteEsc, rnd) : null;
-    const assistNome =
-      parceiro && parceiro.id !== autor.id
-        ? parceiro.nome
-        : pickAssistente(visitanteEsc, autor.id, rnd);
+    const temAssist = parceiro != null && parceiro.id !== autor.id;
+    const assistNome = temAssist
+      ? parceiro.nome
+      : pickAssistente(visitanteEsc, autor.id, rnd);
     const goleiro = nomeGoleiro(mandanteEsc);
-    const cat = categoriaGol(rnd, parceiro != null && parceiro.id !== autor.id);
+    const cat = categoriaGol(rnd, temAssist);
     const vars = varsAtaque(
       varsBase(input, minutosGolM, minutosGolV, minuto),
       input.visitante.nomeCurto,
@@ -687,6 +697,8 @@ export function simularPartida(input: MatchSimInput): MatchSimResult {
       tipo: 'gol',
       timeId: input.visitante.timeId,
       jogadorId: autor.id,
+      jogadorNome: autor.nome,
+      ...(temAssist ? { assistenteNome: parceiro.nome } : {}),
       texto: escolherLegenda(cat, rnd, vars),
     });
   }
@@ -879,6 +891,7 @@ export function simularPartida(input: MatchSimInput): MatchSimResult {
           tipo: 'lesao',
           timeId,
           jogadorId: j.id,
+          jogadorNome: j.nome,
           texto: `${j.nome} sente ${descricao} (${Math.round(eAgora)}% de energia) e precisa sair.`,
         });
         corpo.push({
@@ -887,6 +900,8 @@ export function simularPartida(input: MatchSimInput): MatchSimResult {
           timeId,
           jogadorId: j.id,
           jogadorIdEntrada: reserva.id,
+          jogadorNome: j.nome,
+          jogadorNomeEntrada: reserva.nome,
           texto: `Substituição forçada em ${nomeTime}: sai ${j.nome}, entra ${reserva.nome}.`,
         });
       } else {
@@ -899,6 +914,7 @@ export function simularPartida(input: MatchSimInput): MatchSimResult {
           tipo: 'lesao',
           timeId,
           jogadorId: j.id,
+          jogadorNome: j.nome,
           texto: `${j.nome} se lesiona (${descricao}) sem substituições restantes — ${nomeTime} fica com um a menos.`,
         });
       }
@@ -1101,6 +1117,8 @@ export function simularPartida(input: MatchSimInput): MatchSimResult {
         tipo: 'cartao_amarelo',
         timeId,
         jogadorId: j.id,
+        jogadorNome: j.nome,
+        cartao: expulso ? 'vermelho' : 'amarelo',
         texto: expulso
           ? `${escolherLegenda('cartao', rnd, vars)} Expulsão — time volta a jogar com um a menos.`
           : escolherLegenda('cartao', rnd, vars),
