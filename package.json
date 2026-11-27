@@ -11,6 +11,7 @@
     "smoke:injury": "npx --yes tsx scripts/smoke-injury-engine.mjs",
     "smoke:lesao-energia": "node scripts/smoke-lesao-energia-lockout.mjs",
     "smoke:jogador-partida": "npx --yes tsx scripts/smoke-jogador-da-partida.mjs",
+    "smoke:press-conference": "npx --yes tsx scripts/smoke-press-conference.mjs",
     "db:migrate-atributos": "node scripts/migrate-atributos-jogadores.mjs",
     "dev": "vite",
     "build": "vite build",

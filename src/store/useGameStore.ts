@@ -56,6 +56,13 @@ import {
   resumoContratacaoCompra,
 } from '../career/transfers';
 import { detectarClassico } from '../engine/matchContext';
+import type {
+  ColetivaPosJogo,
+  OpcaoRespostaColetiva,
+  ResultadoColetiva,
+} from '../engine/pressConferenceEngine';
+import { processarRespostaColetiva } from '../engine/pressConferenceEngine';
+import { aplicarDeltasMoralColetiva } from '../engine/pressConferenceMoral';
 import { corrigirDataNaoUltrapassarJogo, podeAvancarUmDia } from '../career/calendarioUsuario';
 import {
   avancarNegociacaoPorDia,
@@ -210,6 +217,14 @@ interface GameStore extends EstadoCarreira {
   fecharElencoClube: () => void;
   registrarResultadoPartida: (jogoId: number, result: MatchSimResult) => void;
   encerrarTransmissao: () => void;
+  /**
+   * Processa resposta da coletiva pós-jogo: moral clamp + notícia (manchete).
+   * Retorna o ResultadoColetiva para a UI.
+   */
+  responderColetivaPosJogo: (
+    coletiva: ColetivaPosJogo,
+    opcao: OpcaoRespostaColetiva,
+  ) => ResultadoColetiva | null;
   finalizarTorneioSePronto: () => void;
   salvarCarreira: () => boolean;
   listarSaves: () => SaveSlotMeta[];
@@ -1507,6 +1522,55 @@ export const useGameStore = create<GameStore>((set, get) => ({
       transmissaoCheckpoint: null,
       pendingResumePartida: false,
     }),
+  responderColetivaPosJogo: (coletiva, opcao) => {
+    const s = get();
+    const clubeId = s.clubeRealId ?? s.timeUsuarioId;
+    if (!clubeId) return null;
+    const alvo =
+      s.jogadoresReais.find((j) => j.id === coletiva.jogadorAlvo.id) ??
+      s.timesFicticios.flatMap((t) => t.jogadores).find((j) => j.id === coletiva.jogadorAlvo.id);
+    if (!alvo) return null;
+
+    const resultado = processarRespostaColetiva(coletiva, opcao, alvo);
+    const noticia: NoticiaCarreira = {
+      id: `coletiva_${coletiva.id}_${opcao.id}_${Date.now()}`,
+      data: coletiva.data || new Date().toISOString(),
+      titulo: `Coletiva · ${coletiva.clubeSigla}`,
+      texto: `${resultado.mancheteGerada} ${resultado.reacaoJogadorTexto}`,
+    };
+
+    if (s.clubeRealId) {
+      const jogadores = aplicarDeltasMoralColetiva(
+        s.jogadoresReais,
+        s.clubeRealId,
+        coletiva.jogadorAlvo.id,
+        resultado,
+      );
+      set({
+        jogadoresReais: jogadores,
+        noticias: deduplicarNoticias([noticia, ...s.noticias]),
+      });
+      void persistirJogadoresDexie(jogadores).catch(console.error);
+    } else {
+      const timesFicticios = s.timesFicticios.map((t) => {
+        if (t.id !== clubeId) return t;
+        return {
+          ...t,
+          jogadores: aplicarDeltasMoralColetiva(
+            t.jogadores,
+            clubeId,
+            coletiva.jogadorAlvo.id,
+            resultado,
+          ),
+        };
+      });
+      set({
+        timesFicticios,
+        noticias: deduplicarNoticias([noticia, ...s.noticias]),
+      });
+    }
+    return resultado;
+  },
   finalizarTorneioSePronto: () => {
     const { jogos, timesReais, desempenho } = get();
     const usuarioPronto = jogos.filter((j) => j.ehDoUsuario).every((j) => j.finalizado);

@@ -21,6 +21,25 @@ export type {
   GravidadeLesaoCatalogo,
 } from './injuryEngine';
 export {
+  gerarColetivaPosJogo,
+  processarRespostaColetiva,
+} from './pressConferenceEngine';
+export type {
+  ColetivaPosJogo,
+  OpcaoRespostaColetiva,
+  ResultadoColetiva,
+  TomRespostaColetiva,
+} from './pressConferenceEngine';
+export { BANCO_RESPOSTAS_COLETIVA, contagemBancoColetiva } from './pressConferenceBank';
+export {
+  aplicarDeltasMoralColetiva,
+  fatorMoralMedioElenco,
+  moralDe,
+  MORAL_PADRAO,
+} from './pressConferenceMoral';
+export { montarColetivaPosPartida } from './pressConferenceFromMatch';
+export type { ContextoColetivaMatch } from './pressConferenceFromMatch';
+export {
   gerarGraficoMomentum,
   mapearEstiloTatica,
   mesclarSerieMomento,

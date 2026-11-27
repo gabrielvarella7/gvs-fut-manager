@@ -32,8 +32,14 @@ import { formacaoIdDeEsquema, taticaCpuAutomatica } from '../../engine/tacticsEn
 import { tryGetDatabaseTaticas } from '../../db/tacticsDatabase';
 import { PreMatchReport } from '../match/PreMatchReport';
 import { MatchPreGame } from '../match/MatchPreGame';
+import { PressConferenceModal } from '../match/PressConferenceModal';
 import type { VelocidadePlayback } from '../MatchPlayback';
 import { CmBtn, CmPanel, CmShell } from '../cm/CmShell';
+import { montarColetivaPosPartida } from '../../engine/pressConferenceFromMatch';
+import type {
+  ColetivaPosJogo,
+  OpcaoRespostaColetiva,
+} from '../../engine/pressConferenceEngine';
 
 function elencoTime(jogadores: Jogador[], timeId: string): Jogador[] {
   return jogadores.filter((j) => j.time_id === timeId);
@@ -101,6 +107,7 @@ export function MatchScreen() {
   const registrar = useGameStore((s) => s.registrarResultadoPartida);
   const registrarLiga = useGameStore((s) => s.registrarResultadoBrasileirao);
   const encerrarTransmissao = useGameStore((s) => s.encerrarTransmissao);
+  const responderColetivaPosJogo = useGameStore((s) => s.responderColetivaPosJogo);
   const irPara = useGameStore((s) => s.irPara);
   const abrirTatica = useGameStore((s) => s.abrirTaticaNaPartida);
   const salvarCheckpoint = useGameStore((s) => s.salvarCheckpointTransmissao);
@@ -127,6 +134,8 @@ export function MatchScreen() {
   const [skipToEndNonce, setSkipToEndNonce] = useState(0);
   const [erroSim, setErroSim] = useState<string | null>(null);
   const [aguardandoSegundoTempo, setAguardandoSegundoTempo] = useState(false);
+  const [coletivaAberta, setColetivaAberta] = useState<ColetivaPosJogo | null>(null);
+  const [posColetivaAcao, setPosColetivaAcao] = useState<'hub' | 'auxiliar' | null>(null);
 
   const faseTorneioAmador = !clubeRealId;
   const partidaLiga = useMemo(() => {
@@ -587,11 +596,62 @@ export function MatchScreen() {
     timeUsuarioId,
   ]);
 
+  const concluirSaidaPartida = useCallback(
+    (modo: 'hub' | 'auxiliar') => {
+      if (modo === 'auxiliar') limparPartidaModoAuxiliar();
+      encerrarTransmissao();
+      irPara(modoLiga ? 'escritorio' : 'hub_torneio');
+    },
+    [limparPartidaModoAuxiliar, encerrarTransmissao, irPara, modoLiga],
+  );
+
+  const tentarAbrirColetiva = useCallback(
+    (modo: 'hub' | 'auxiliar'): boolean => {
+      if (!partidaAtual) return false;
+      const clubeId = clubeRealId ?? timeUsuarioId;
+      if (!clubeId) return false;
+      const casa = partidaAtual.mandanteId === clubeId;
+      const clubeNome = (casa ? mandanteNome : visitanteNome) ?? 'Clube';
+      const adversarioNome = (casa ? visitanteNome : mandanteNome) ?? 'Adversário';
+      const elencoClube = modoLiga
+        ? elencoTime(jogadoresReais, clubeId)
+        : (getTimeFicticio(times, clubeId)?.jogadores ?? []);
+      try {
+        const coletiva = montarColetivaPosPartida({
+          result: partidaAtual,
+          clubeId,
+          clubeNome,
+          adversarioNome,
+          elencoClube,
+          dataISO: brasileirao?.dataAtualISO
+            ? `${brasileirao.dataAtualISO}T22:00:00.000Z`
+            : undefined,
+        });
+        if (!coletiva || coletiva.opcoes.length < 3) return false;
+        setPosColetivaAcao(modo);
+        setColetivaAberta(coletiva);
+        return true;
+      } catch {
+        return false;
+      }
+    },
+    [
+      partidaAtual,
+      clubeRealId,
+      timeUsuarioId,
+      mandanteNome,
+      visitanteNome,
+      modoLiga,
+      jogadoresReais,
+      times,
+      brasileirao?.dataAtualISO,
+    ],
+  );
+
   const encerrarAuxiliar = useCallback(() => {
-    limparPartidaModoAuxiliar();
-    encerrarTransmissao();
-    irPara(modoLiga ? 'escritorio' : 'hub_torneio');
-  }, [limparPartidaModoAuxiliar, encerrarTransmissao, irPara, modoLiga]);
+    if (tentarAbrirColetiva('auxiliar')) return;
+    concluirSaidaPartida('auxiliar');
+  }, [tentarAbrirColetiva, concluirSaidaPartida]);
 
   const checkRelacionados = useMemo(
     () => validarRelacionadosPartida(alinhamento11, banco11),
@@ -782,12 +842,9 @@ export function MatchScreen() {
   }, [emTransmissao, idPartida, hashTaticaAtual, salvarCheckpoint, abrirTatica]);
 
   const voltarHub = () => {
-    encerrarTransmissao();
-    if (modoLiga) {
-      irPara('escritorio');
-      return;
-    }
-    irPara('hub_torneio');
+    // Coletiva só no fim do jogo (90'+); "Voltar" mid-match não abre imprensa.
+    if (emTransmissao && minuto >= 90 && tentarAbrirColetiva('hub')) return;
+    concluirSaidaPartida('hub');
   };
 
   const tituloRodada = modoLiga
@@ -834,6 +891,30 @@ export function MatchScreen() {
         </div>
       }
     >
+      {coletivaAberta && (
+        <PressConferenceModal
+          coletiva={coletivaAberta}
+          onEscolher={(opcao: OpcaoRespostaColetiva) => {
+            const r = responderColetivaPosJogo(coletivaAberta, opcao);
+            if (!r) {
+              return {
+                mancheteGerada: opcao.textoImprensa,
+                deltaMoralJogador: 0,
+                deltaMoralElenco: 0,
+                reacaoJogadorTexto: 'Sem reação registrada.',
+                efeitoInesperado: false,
+              };
+            }
+            return r;
+          }}
+          onContinuar={() => {
+            const modo = posColetivaAcao ?? 'hub';
+            setColetivaAberta(null);
+            setPosColetivaAcao(null);
+            concluirSaidaPartida(modo);
+          }}
+        />
+      )}
       {partidaModoAuxiliar && partidaAtual && emTransmissao && (
         <CmPanel className="mb-4 border-emerald-800/60">
           <p className="text-lg font-semibold text-emerald-200">
