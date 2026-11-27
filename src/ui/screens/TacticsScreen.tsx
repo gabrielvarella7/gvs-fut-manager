@@ -215,7 +215,8 @@ export function TacticsScreen() {
 
   const aplicarMelhorOverall = () => {
     const esq = esquemaGrafico;
-    const ids = escalacaoAssistenteMelhorOverall(elenco, esq);
+    const bruto = escalacaoAssistenteMelhorOverall(elenco, esq);
+    const { ids } = sanitizarAlinhamento11(elenco, bruto);
     if (ids.length < 11) return;
     const grade = gradePadrao(esq);
     const banco = idsBancoPadrao(elenco, ids);
@@ -582,7 +583,8 @@ export function TacticsScreen() {
             Assistente escolhe os melhores (11+11)
           </CmBtn>
           <span className="self-center text-xs text-zinc-500">
-            11 titulares + 11 reservas ({rotuloCampo}); exclui lesão com energia &lt;60%.
+            11 titulares + 11 reservas ({rotuloCampo}); exclui lesionados e lesão+energia
+            &lt;60%.
           </span>
         </div>
       )}

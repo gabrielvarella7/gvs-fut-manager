@@ -45,6 +45,20 @@ export function filtrarAptosParaJogar(elenco: Jogador[]): Jogador[] {
 }
 
 /**
+ * Apto para o Assistente 11+11 (auto-pick):
+ * - mesma trava manual: lesão + energia &lt;60% → fora
+ * - e qualquer lesão ativa (schema: indisponível enquanto diasRestantes &gt; 0)
+ */
+export function jogadorAptoAssistente(j: Jogador): boolean {
+  return jogadorPodeJogar(j) && !temLesaoAtiva(j);
+}
+
+/** Elenco elegível ao botão “Assistente escolhe os melhores”. */
+export function filtrarAptosAssistente(elenco: Jogador[]): Jogador[] {
+  return elenco.filter(jogadorAptoAssistente);
+}
+
+/**
  * Sanitiza um XI: troca bloqueados por reservas aptas (mesmo pos quando possível).
  * Mantém 11 ids quando o elenco permitir.
  */
