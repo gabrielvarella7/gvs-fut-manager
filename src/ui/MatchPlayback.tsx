@@ -24,6 +24,8 @@ type Props = {
   playbackKey?: string;
   /** Disparado uma vez ao consumir o lance de intervalo. */
   onIntervalo?: () => void;
+  /** Increment to jump playback to the final whistle without leaving the screen. */
+  skipToEndNonce?: number;
 };
 
 function delayMs(atual: Lancamento, anterior: Lancamento | null, velocidade: number): number {
@@ -53,12 +55,16 @@ export function MatchPlayback({
   resumeFrom = null,
   playbackKey,
   onIntervalo,
+  skipToEndNonce = 0,
 }: Props) {
   const [idx, setIdx] = useState(resumeFrom?.idx ?? 0);
   const [placar, setPlacar] = useState({ m: resumeFrom?.golsM ?? 0, v: resumeFrom?.golsV ?? 0 });
   const [aoVivo, setAoVivo] = useState(true);
   const listaRef = useRef<HTMLUListElement>(null);
   const intervaloDisparadoRef = useRef(false);
+  const lastSkipNonce = useRef(0);
+  const skipToEndNonceRef = useRef(skipToEndNonce);
+  skipToEndNonceRef.current = skipToEndNonce;
   const lanc = result.lancamentos;
 
   useEffect(() => {
@@ -75,7 +81,17 @@ export function MatchPlayback({
       intervaloDisparadoRef.current = false;
     }
     setAoVivo(true);
+    lastSkipNonce.current = skipToEndNonceRef.current;
   }, [result, playbackKey]); // resumeFrom sync only on key/result change — avoid reset loops
+
+  useEffect(() => {
+    if (skipToEndNonce <= 0 || skipToEndNonce === lastSkipNonce.current) return;
+    lastSkipNonce.current = skipToEndNonce;
+    intervaloDisparadoRef.current = true;
+    setIdx(lanc.length);
+    setPlacar({ m: result.golsMandante, v: result.golsVisitante });
+    setAoVivo(false);
+  }, [skipToEndNonce, lanc.length, result.golsMandante, result.golsVisitante]);
 
   useEffect(() => {
     if (pausado || !aoVivo || idx >= lanc.length) return;
