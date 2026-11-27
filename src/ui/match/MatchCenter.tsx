@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import type { EstadoTemporada } from '../../career/brasileirao';
 import type { DadosH2H } from '../../career/h2hMatch';
 import {
@@ -42,15 +42,19 @@ import {
 } from '../MatchPlayback';
 import { CmBtn } from '../cm/CmShell';
 
-type Aba =
+/**
+ * Live-match tab ids — Sofascore-style bar.
+ * resumo: controls → timeline → comentários
+ */
+export type MatchAba =
+  | 'resumo'
   | 'comentario'
+  | 'formacoes'
   | 'estatisticas'
   | 'classificacao'
-  | 'prejogo'
-  | 'detalhes'
   | 'h2h'
-  | 'notas'
-  | 'formacoes';
+  | 'prejogo'
+  | 'notas';
 
 type Props = {
   result: MatchSimResult;
@@ -97,6 +101,16 @@ type Props = {
   infoPartida?: InfoPartidaPreJogo | null;
   /** Head-to-head panel data (liga ou torneio). */
   h2h?: DadosH2H | null;
+  /** Optional live timeline override for Resumo. */
+  resumoTimeline?: ReactNode;
+  /** Optional Formações body override. */
+  formacoesContent?: ReactNode;
+  /** Optional Classificação body override. */
+  classificacaoContent?: ReactNode;
+  /** Optional H2H body override. */
+  h2hContent?: ReactNode;
+  /** Optional Notas / pitch ratings override. */
+  notasContent?: ReactNode;
 };
 
 const MODE_LABEL: Record<HighlightMode, string> = {
@@ -104,6 +118,25 @@ const MODE_LABEL: Record<HighlightMode, string> = {
   ONLY_GOALS: 'APENAS GOLS',
   OFF: 'OFF',
 };
+
+/** Hook slot for live event timeline on the Resumo tab. */
+export function MatchResumoTimelineSlot({ children }: { children?: ReactNode }) {
+  if (children) return <div data-match-resumo-timeline>{children}</div>;
+  return (
+    <div
+      className="rounded-lg border border-zinc-700/80 bg-zinc-900/40 px-3 py-3"
+      data-match-resumo-timeline
+      aria-label="Linha do tempo da partida"
+    >
+      <p className="text-[11px] font-semibold uppercase tracking-wider text-emerald-400/90">
+        Resumo
+      </p>
+      <p className="mt-1 text-xs text-zinc-500">
+        Linha do tempo ao vivo — conteúdo em construção.
+      </p>
+    </div>
+  );
+}
 
 export function MatchCenter({
   result,
@@ -136,8 +169,13 @@ export function MatchCenter({
   equipesPreJogo = null,
   infoPartida = null,
   h2h = null,
+  resumoTimeline,
+  formacoesContent,
+  classificacaoContent,
+  h2hContent,
+  notasContent,
 }: Props) {
-  const [aba, setAba] = useState<Aba>('comentario');
+  const [aba, setAba] = useState<MatchAba>('resumo');
   const [minuto, setMinuto] = useState(resumePlayback?.minuto ?? 0);
   const [periodoStats, setPeriodoStats] = useState<PeriodoEstatisticas>('todos');
   const [progresso, setProgresso] = useState<PlaybackProgress>(
@@ -296,49 +334,157 @@ export function MatchCenter({
     estatisticasParciais(result, minuto, result.mandanteId, periodoStats);
 
   const temFormacoes = !!formacoesMandante && !!formacoesVisitante;
+  const temNotas = !!notasMandante && !!notasVisitante;
   const lancamentosVisiveis = result.lancamentos.slice(0, progresso.idx);
-  const abas: { id: Aba; label: string }[] = [
-    { id: 'detalhes', label: 'Detalhes' },
-    ...(temFormacoes ? [{ id: 'formacoes' as const, label: 'Formações' }] : []),
-    { id: 'estatisticas', label: 'Estatísticas' },
-    ...(classificacao ? [{ id: 'classificacao' as const, label: 'Classificação' }] : []),
+  const partidaEncerrada = !aoVivo;
+
+  const abas: { id: MatchAba; label: string }[] = [
+    { id: 'resumo', label: 'Resumo' },
     { id: 'comentario', label: 'Comentário' },
-    { id: 'notas', label: 'Notas' },
+    ...(temFormacoes || formacoesContent
+      ? [{ id: 'formacoes' as const, label: 'Formações' }]
+      : []),
+    { id: 'estatisticas', label: 'Estatísticas' },
+    ...(classificacao || classificacaoContent
+      ? [{ id: 'classificacao' as const, label: 'Classificação' }]
+      : []),
+    ...(h2h || h2hContent ? [{ id: 'h2h' as const, label: 'H2H' }] : []),
     { id: 'prejogo', label: 'Pré-jogo' },
-    ...(h2h ? [{ id: 'h2h' as const, label: 'H2H' }] : []),
+    ...(temNotas || notasContent ? [{ id: 'notas' as const, label: 'Notas' }] : []),
   ];
 
-  const mostrarPlayback = aba === 'comentario' || aba === 'detalhes';
+  const mostrarPlayback = aba === 'resumo' || aba === 'comentario';
+
+  const timelineNode = resumoTimeline ?? (
+    <MatchEventTimeline
+      lancamentos={lancamentosVisiveis}
+      mandanteId={result.mandanteId}
+      placarAtual={{ m: progresso.golsM, v: progresso.golsV }}
+    />
+  );
+
+  const highlightSelect = (
+    <label className="flex items-center gap-2 text-xs text-zinc-400">
+      Destaques 2D
+      <select
+        id="highlight-selector"
+        className="rounded border border-zinc-600 bg-zinc-900 px-2 py-1 font-medium text-zinc-100"
+        value={highlightMode}
+        onChange={(e) => {
+          const v = e.target.value as HighlightMode;
+          setHighlightMode(v);
+          manager.setMode(v);
+        }}
+        aria-label="Modo de destaques 2D"
+      >
+        <option value="ON">{MODE_LABEL.ON}</option>
+        <option value="ONLY_GOALS">{MODE_LABEL.ONLY_GOALS}</option>
+        <option value="OFF">{MODE_LABEL.OFF}</option>
+      </select>
+    </label>
+  );
+
+  const controlesPrincipais = (
+    <>
+      {!aguardandoSegundoTempo && (
+        <CmBtn variant="ghost" onClick={() => onPausado(!pausado)} disabled={!!activeClip}>
+          {pausado ? 'Iniciar' : 'Pausar'}
+        </CmBtn>
+      )}
+      {partidaEncerrada && onFinalizarJogo && (
+        <CmBtn variant="primary" onClick={onFinalizarJogo}>
+          Finalizar partida
+        </CmBtn>
+      )}
+      <CmBtn
+        variant="ghost"
+        onClick={() => {
+          onPausado(true);
+          onTaticas();
+        }}
+      >
+        Táticas
+      </CmBtn>
+      <label className="flex items-center gap-2 text-xs text-zinc-400">
+        Velocidade
+        <select
+          className="rounded border border-zinc-600 bg-zinc-800 px-2 py-1 text-zinc-200"
+          value={velocidade}
+          onChange={(e) => onVelocidade(Number(e.target.value) as VelocidadePlayback)}
+        >
+          <option value={0.5}>0,5×</option>
+          <option value={1}>1×</option>
+          <option value={2}>2×</option>
+          <option value={4}>4×</option>
+        </select>
+      </label>
+      {highlightSelect}
+      {aoVivo && (
+        <span className="text-xs text-red-400 animate-pulse">● {minuto}&apos;</span>
+      )}
+      {aoVivo && onIrProFimDoJogo && (
+        <CmBtn variant="ghost" onClick={onIrProFimDoJogo}>
+          Ir pro fim
+        </CmBtn>
+      )}
+    </>
+  );
 
   return (
     <div className="space-y-3">
-      <nav className="flex flex-wrap gap-1 border-b border-zinc-800 pb-2">
-        {abas.map((a) => (
-          <button
-            key={a.id}
-            type="button"
-            onClick={() => setAba(a.id)}
-            className={`rounded px-2 py-1 text-xs font-medium ${
-              aba === a.id
-                ? 'bg-emerald-900 text-emerald-100'
-                : 'text-zinc-400 hover:bg-zinc-800'
-            }`}
-          >
-            {a.label}
-          </button>
-        ))}
+      <nav
+        className="relative -mx-1 overflow-x-auto border-b border-[var(--mm-border)]"
+        aria-label="Abas da partida"
+      >
+        <div className="flex min-w-max gap-0 px-1">
+          {abas.map((a) => {
+            const ativa = aba === a.id;
+            return (
+              <button
+                key={a.id}
+                type="button"
+                role="tab"
+                aria-selected={ativa}
+                onClick={() => setAba(a.id)}
+                className={`relative shrink-0 px-3 py-2.5 text-sm transition-colors ${
+                  ativa
+                    ? 'font-semibold text-emerald-300'
+                    : 'font-medium text-emerald-400/55 hover:text-emerald-300/85'
+                }`}
+              >
+                {a.label}
+                <span
+                  aria-hidden
+                  className={`absolute inset-x-1 bottom-0 h-0.5 rounded-full transition-opacity ${
+                    ativa ? 'bg-emerald-400 opacity-100' : 'opacity-0'
+                  }`}
+                />
+              </button>
+            );
+          })}
+        </div>
       </nav>
 
-      {aba === 'comentario' && (
-        <MatchEventTimeline
-          lancamentos={lancamentosVisiveis}
-          mandanteId={result.mandanteId}
-          placarAtual={{ m: progresso.golsM, v: progresso.golsV }}
-        />
+      {aba === 'resumo' && (
+        <div className="space-y-3" data-match-aba="resumo">
+          <div className="flex flex-wrap items-center gap-2 rounded-lg border border-zinc-700/80 bg-zinc-900/50 px-3 py-2.5">
+            {controlesPrincipais}
+          </div>
+          <MatchResumoTimelineSlot>{timelineNode}</MatchResumoTimelineSlot>
+        </div>
       )}
 
       {/* Mantém montado para não resetar placar/tempo ao trocar de aba */}
-      <div className={mostrarPlayback ? undefined : 'hidden'} aria-hidden={!mostrarPlayback}>
+      <div
+        className={mostrarPlayback ? undefined : 'hidden'}
+        aria-hidden={!mostrarPlayback}
+        data-match-comentarios
+      >
+        {aba === 'comentario' && (
+          <p className="mb-2 text-[11px] font-semibold uppercase tracking-wider text-emerald-400/90">
+            Comentário
+          </p>
+        )}
         <MatchPlayback
           result={result}
           mandanteNome={mandanteNome}
@@ -384,18 +530,20 @@ export function MatchCenter({
         />
       )}
 
-      {aba === 'classificacao' && classificacao && (
-        <MatchClassificacaoPanel
-          estado={classificacao.estado}
-          campeonato={classificacao.campeonato}
-          times={classificacao.times}
-          partidaAoVivoId={classificacao.partidaAoVivoId}
-          resultAoVivo={result}
-          minuto={minuto}
-          mandanteId={classificacao.mandanteId}
-          visitanteId={classificacao.visitanteId}
-        />
-      )}
+      {aba === 'classificacao' &&
+        (classificacaoContent ??
+          (classificacao && (
+            <MatchClassificacaoPanel
+              estado={classificacao.estado}
+              campeonato={classificacao.campeonato}
+              times={classificacao.times}
+              partidaAoVivoId={classificacao.partidaAoVivoId}
+              resultAoVivo={result}
+              minuto={minuto}
+              mandanteId={classificacao.mandanteId}
+              visitanteId={classificacao.visitanteId}
+            />
+          )))}
 
       {aba === 'prejogo' && (
         <MatchPreGame
@@ -408,37 +556,30 @@ export function MatchCenter({
         />
       )}
 
-      {aba === 'notas' && notasMandante && notasVisitante && (
-        <MatchNotasPitch
-          result={result}
-          minuto={minuto}
-          mandante={notasMandante}
-          visitante={notasVisitante}
-        />
-      )}
+      {aba === 'notas' &&
+        (notasContent ??
+          (temNotas && (
+            <MatchNotasPitch
+              result={result}
+              minuto={minuto}
+              mandante={notasMandante}
+              visitante={notasVisitante}
+            />
+          )))}
 
-      {aba === 'h2h' && h2h && <MatchH2HPanel dados={h2h} />}
+      {aba === 'h2h' && (h2hContent ?? (h2h && <MatchH2HPanel dados={h2h} />))}
 
-      {aba === 'detalhes' && stats && (
-        <MatchStatsPanel
-          mandante={stats.mandante}
-          visitante={stats.visitante}
-          mandanteNome={mandanteNome}
-          visitanteNome={visitanteNome}
-          periodo={periodoStats}
-          onPeriodo={setPeriodoStats}
-        />
-      )}
-
-      {aba === 'formacoes' && temFormacoes && (
-        <MatchFormacoesPanel
-          result={result}
-          minuto={minuto}
-          mandante={formacoesMandante}
-          visitante={formacoesVisitante}
-          arbitro={arbitro}
-        />
-      )}
+      {aba === 'formacoes' &&
+        (formacoesContent ??
+          (temFormacoes && (
+            <MatchFormacoesPanel
+              result={result}
+              minuto={minuto}
+              mandante={formacoesMandante}
+              visitante={formacoesVisitante}
+              arbitro={arbitro}
+            />
+          )))}
 
       {result.estatisticas?.momento && (
         <MatchMomentum
@@ -476,64 +617,11 @@ export function MatchCenter({
         </div>
       )}
 
-      <div className="flex flex-wrap items-center gap-2 border-t border-zinc-800 pt-3">
-        {!aguardandoSegundoTempo && (
-          <CmBtn variant="ghost" onClick={() => onPausado(!pausado)} disabled={!!activeClip}>
-            {pausado ? 'Retomar' : 'Pausar'}
-          </CmBtn>
-        )}
-        <CmBtn
-          variant="ghost"
-          onClick={() => {
-            onPausado(true);
-            onTaticas();
-          }}
-        >
-          Táticas
-        </CmBtn>
-        <label className="flex items-center gap-2 text-xs text-zinc-400">
-          Velocidade
-          <select
-            className="rounded border border-zinc-600 bg-zinc-800 px-2 py-1 text-zinc-200"
-            value={velocidade}
-            onChange={(e) => onVelocidade(Number(e.target.value) as VelocidadePlayback)}
-          >
-            <option value={0.5}>0,5×</option>
-            <option value={1}>1×</option>
-            <option value={2}>2×</option>
-            <option value={4}>4×</option>
-          </select>
-        </label>
-        <label className="flex items-center gap-2 text-xs text-zinc-400">
-          Destaques 2D
-          <select
-            id="highlight-selector"
-            className="rounded border border-zinc-600 bg-zinc-900 px-2 py-1 font-medium text-zinc-100"
-            value={highlightMode}
-            onChange={(e) => {
-              const v = e.target.value as HighlightMode;
-              setHighlightMode(v);
-              manager.setMode(v);
-            }}
-            aria-label="Modo de destaques 2D"
-          >
-            <option value="ON">{MODE_LABEL.ON}</option>
-            <option value="ONLY_GOALS">{MODE_LABEL.ONLY_GOALS}</option>
-            <option value="OFF">{MODE_LABEL.OFF}</option>
-          </select>
-        </label>
-        {aoVivo && (
-          <span className="text-xs text-red-400 animate-pulse">● {minuto}&apos;</span>
-        )}
-        {aoVivo && onIrProFimDoJogo && (
-          <CmBtn onClick={onIrProFimDoJogo}>ir pro fim do jogo</CmBtn>
-        )}
-        {!aoVivo && onFinalizarJogo && (
-          <CmBtn variant="primary" onClick={onFinalizarJogo}>
-            Finalizar jogo
-          </CmBtn>
-        )}
-      </div>
+      {aba !== 'resumo' && (
+        <div className="flex flex-wrap items-center gap-2 border-t border-zinc-800 pt-3">
+          {controlesPrincipais}
+        </div>
+      )}
 
       <MatchHighlightOverlay
         clip={activeClip}
