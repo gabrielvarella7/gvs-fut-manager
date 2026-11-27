@@ -201,6 +201,14 @@ export interface Jogador {
   ultimaPartidaISO?: string;
   /** Sequência de jogos fora da posição natural (insatisfação de estrela). */
   jogosImprovisoSeguidos?: number;
+  /**
+   * Cache da matriz atributo→posição (Gabriel).
+   * Preenchido por PositionRecalculator.processarElenco / recalcular.
+   */
+  afinidade_matriz?: {
+    posicoesNativas: string[];
+    posicoesAdaptadas: { posicao: string; fatorOverall: number }[];
+  };
   /** Cicatriz de lesão grave sem médico (acelera regressão). */
   cicatrizFisica?: boolean;
   /** Jogador promovido da base; guia evolução, pressão e identidade. */

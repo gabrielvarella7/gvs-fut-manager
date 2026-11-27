@@ -1,4 +1,5 @@
 import type { Lancamento, MatchSimResult } from './matchEngine';
+import { mesclarSerieMomento } from './matchMomentum';
 import type { ConfiguracaoTaticaClube } from '../types/tactics';
 
 export interface CheckpointTransmissao {
@@ -75,7 +76,14 @@ export function mesclarPartidaAposMinuto(
     },
     forcaInicial: nova.forcaInicial,
     probabilidades: anterior.probabilidades ?? anterior.preJogo.probabilidades,
-    estatisticas: nova.estatisticas,
+    estatisticas: {
+      ...nova.estatisticas,
+      momento: mesclarSerieMomento(
+        anterior.estatisticas?.momento ?? [],
+        nova.estatisticas?.momento ?? [],
+        minutoAtual,
+      ),
+    },
     simSeed: nova.simSeed ?? anterior.simSeed,
     /** Mantém histórico tático do trecho já jogado; o caller pode acrescentar o novo segmento. */
     historicoTatico: anterior.historicoTatico ?? nova.historicoTatico,

@@ -29,9 +29,9 @@ import { type ContextoDinamicoPartida, modificadoresUrgencia } from './matchCont
 import {
   construirEstatisticasPartida,
   type EstatisticasPartida,
-  type MomentoAtaque,
   type PreJogoInfo,
 } from './matchStats';
+import { gerarGraficoMomentum } from './matchMomentum';
 import { prepararPartidaComFaixa } from './matchProbabilidades';
 import {
   indicePartidaDeveSerAlucinado,
@@ -48,6 +48,7 @@ import {
 } from './matchTaticaConfronto';
 import { multiplicadorDesempenhoPosicao } from './posicaoCompatibilidade';
 import type { OpcoesAfinidade } from '../career/afinidadePosicional';
+import { PositionRecalculator } from '../career/positionRecalculator';
 import type { DatabaseTaticas } from '../types/tactics';
 import type { ConfiguracaoTaticaClube } from '../types/tactics';
 import {
@@ -131,6 +132,14 @@ export interface Lancamento {
   jogadorId?: number;
   /** Reserva que entrou (substituição). */
   jogadorIdEntrada?: number;
+  /** Nome do jogador principal (autor do gol, cartão, lesão, saída). */
+  jogadorNome?: string;
+  /** Assistência em gols (quando houver). */
+  assistenteNome?: string;
+  /** Nome de quem entrou na substituição. */
+  jogadorNomeEntrada?: string;
+  /** Cartão mostrado; vermelho inclui segundo amarelo / expulsão direta. */
+  cartao?: 'amarelo' | 'vermelho';
   texto: string;
 }
 
@@ -227,10 +236,11 @@ function jogadorAptoEscalacao(j: Jogador): boolean {
 }
 
 export function montarEscalacao(elenco: Jogador[], esquema: EsquemaTatico): JogadorEmCampo[] {
+  const elencoAf = PositionRecalculator.processarElenco(elenco);
   const slots = SLOTS_POR_ESQUEMA[esquemaOuPadrao(esquema)];
-  const aptos = [...elenco].filter(jogadorAptoEscalacao).sort((a, b) => b.overall - a.overall);
+  const aptos = [...elencoAf].filter(jogadorAptoEscalacao).sort((a, b) => b.overall - a.overall);
   /** Lesionados só entram se não houver 11 aptos (evita crash mid-season / rodada ~19). */
-  const lesionados = [...elenco]
+  const lesionados = [...elencoAf]
     .filter((j) => !jogadorAptoEscalacao(j))
     .sort((a, b) => b.overall - a.overall);
   const ordenado = [...aptos, ...lesionados];
@@ -243,9 +253,9 @@ export function montarEscalacao(elenco: Jogador[], esquema: EsquemaTatico): Joga
       titularMesmaPos ??
       ordenado.find((j) => !usados.has(j.id) && j.status_escalacao === 'TITULAR');
     let fallback = improvisado ?? ordenado.find((j) => !usados.has(j.id));
-    if (!fallback && elenco.length > 0) {
+    if (!fallback && elencoAf.length > 0) {
       // Último recurso: reutiliza o mais forte já listado (nunca lança — evita trava na rodada).
-      fallback = [...elenco].sort((a, b) => b.overall - a.overall)[0]!;
+      fallback = [...elencoAf].sort((a, b) => b.overall - a.overall)[0]!;
     }
     if (!fallback) {
       throw new Error(`Elenco insuficiente para preencher posição ${slot}.`);
@@ -656,12 +666,12 @@ export function simularPartida(input: MatchSimInput): MatchSimResult {
   for (const minuto of minutosGolM) {
     const autor = escolherArtilheiro(mandanteEsc, rnd);
     const parceiro = rnd() < 0.55 ? escolherArtilheiro(mandanteEsc, rnd) : null;
-    const assistNome =
-      parceiro && parceiro.id !== autor.id
-        ? parceiro.nome
-        : pickAssistente(mandanteEsc, autor.id, rnd);
+    const temAssist = parceiro != null && parceiro.id !== autor.id;
+    const assistNome = temAssist
+      ? parceiro.nome
+      : pickAssistente(mandanteEsc, autor.id, rnd);
     const goleiro = nomeGoleiro(visitanteEsc);
-    const cat = categoriaGol(rnd, parceiro != null && parceiro.id !== autor.id);
+    const cat = categoriaGol(rnd, temAssist);
     const vars = varsAtaque(
       varsBase(input, minutosGolM, minutosGolV, minuto),
       input.mandante.nomeCurto,
@@ -675,18 +685,20 @@ export function simularPartida(input: MatchSimInput): MatchSimResult {
       tipo: 'gol',
       timeId: input.mandante.timeId,
       jogadorId: autor.id,
+      jogadorNome: autor.nome,
+      ...(temAssist ? { assistenteNome: parceiro.nome } : {}),
       texto: escolherLegenda(cat, rnd, vars),
     });
   }
   for (const minuto of minutosGolV) {
     const autor = escolherArtilheiro(visitanteEsc, rnd);
     const parceiro = rnd() < 0.55 ? escolherArtilheiro(visitanteEsc, rnd) : null;
-    const assistNome =
-      parceiro && parceiro.id !== autor.id
-        ? parceiro.nome
-        : pickAssistente(visitanteEsc, autor.id, rnd);
+    const temAssist = parceiro != null && parceiro.id !== autor.id;
+    const assistNome = temAssist
+      ? parceiro.nome
+      : pickAssistente(visitanteEsc, autor.id, rnd);
     const goleiro = nomeGoleiro(mandanteEsc);
-    const cat = categoriaGol(rnd, parceiro != null && parceiro.id !== autor.id);
+    const cat = categoriaGol(rnd, temAssist);
     const vars = varsAtaque(
       varsBase(input, minutosGolM, minutosGolV, minuto),
       input.visitante.nomeCurto,
@@ -700,6 +712,8 @@ export function simularPartida(input: MatchSimInput): MatchSimResult {
       tipo: 'gol',
       timeId: input.visitante.timeId,
       jogadorId: autor.id,
+      jogadorNome: autor.nome,
+      ...(temAssist ? { assistenteNome: parceiro.nome } : {}),
       texto: escolherLegenda(cat, rnd, vars),
     });
   }
@@ -714,7 +728,6 @@ export function simularPartida(input: MatchSimInput): MatchSimResult {
 
   let posseM = 0;
   let posseV = 0;
-  const momento: MomentoAtaque[] = [];
 
   const fadigaPorJogador = new Map<number, number>();
   const multFaltasPorJogador = new Map<number, number>();
@@ -892,6 +905,7 @@ export function simularPartida(input: MatchSimInput): MatchSimResult {
           tipo: 'lesao',
           timeId,
           jogadorId: j.id,
+          jogadorNome: j.nome,
           texto: `${j.nome} sente ${descricao} (${Math.round(eAgora)}% de energia) e precisa sair.`,
         });
         corpo.push({
@@ -900,6 +914,8 @@ export function simularPartida(input: MatchSimInput): MatchSimResult {
           timeId,
           jogadorId: j.id,
           jogadorIdEntrada: reserva.id,
+          jogadorNome: j.nome,
+          jogadorNomeEntrada: reserva.nome,
           texto: `Substituição forçada em ${nomeTime}: sai ${j.nome}, entra ${reserva.nome}.`,
         });
       } else {
@@ -912,6 +928,7 @@ export function simularPartida(input: MatchSimInput): MatchSimResult {
           tipo: 'lesao',
           timeId,
           jogadorId: j.id,
+          jogadorNome: j.nome,
           texto: `${j.nome} se lesiona (${descricao}) sem substituições restantes — ${nomeTime} fica com um a menos.`,
         });
       }
@@ -965,8 +982,6 @@ export function simularPartida(input: MatchSimInput): MatchSimResult {
       break;
     }
 
-    if (minutosOcupados.has(minuto)) continue;
-
     const fadigaRatio = minuto > 45 ? 0.92 : 1;
     const forcaM = calcularForcaSetores(mandanteEsc, energia, cfg, opcoesM());
     const forcaV = calcularForcaSetores(visitanteEsc, energia, cfg, opcoesV());
@@ -996,12 +1011,8 @@ export function simularPartida(input: MatchSimInput): MatchSimResult {
       Math.max(0.55, Math.min(1.65, ratioPosseV));
     posseM += pressaoM + 0.02;
     posseV += pressaoV + 0.02;
-    momento.push({
-      minuto,
-      valor: (pressaoM - pressaoV) * 48,
-      golMandante: minutosGolM.includes(minuto),
-      golVisitante: minutosGolV.includes(minuto),
-    });
+
+    if (minutosOcupados.has(minuto)) continue;
 
     if (rnd() < pressaoM) {
       const autor = escolherArtilheiro(mandanteEsc, rnd, foraMandante);
@@ -1114,6 +1125,8 @@ export function simularPartida(input: MatchSimInput): MatchSimResult {
         tipo: 'cartao_amarelo',
         timeId,
         jogadorId: j.id,
+        jogadorNome: j.nome,
+        cartao: expulso ? 'vermelho' : 'amarelo',
         texto: expulso
           ? `${escolherLegenda('cartao', rnd, vars)} Expulsão — time volta a jogar com um a menos.`
           : escolherLegenda('cartao', rnd, vars),
@@ -1231,6 +1244,18 @@ export function simularPartida(input: MatchSimInput): MatchSimResult {
     id,
     energia: Math.round(e * 10) / 10,
   }));
+
+  const momento = gerarGraficoMomentum({
+    minutoFinal,
+    lancamentos,
+    mandanteId: input.mandante.timeId,
+    visitanteId: input.visitante.timeId,
+    taticaMandante: taticaM,
+    taticaVisitante: taticaV,
+    skillMandante: globalM,
+    skillVisitante: globalV,
+    seed: input.seed,
+  });
 
   const estatisticas = construirEstatisticasPartida(
     lancamentos,

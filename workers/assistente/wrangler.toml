@@ -1,0 +1,7 @@
+name = "mestre-mou-assistente"
+main = "worker.js"
+compatibility_date = "2024-11-01"
+compatibility_flags = ["nodejs_compat"]
+
+# Segredo: npx wrangler secret put GEMINI_API_KEY
+# Opcional: GEMINI_MODEL (padrão gemini-2.0-flash)
