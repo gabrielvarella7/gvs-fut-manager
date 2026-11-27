@@ -8,6 +8,7 @@
     "db:seed": "node scripts/generate-test-database.mjs",
     "db:seed-genetica": "node scripts/seed-genetica-jogadores.mjs",
     "smoke:medico": "node scripts/smoke-medico-energia.mjs",
+    "smoke:jogador-partida": "npx --yes tsx scripts/smoke-jogador-da-partida.mjs",
     "db:migrate-atributos": "node scripts/migrate-atributos-jogadores.mjs",
     "dev": "vite",
     "build": "vite build",
@@ -15,6 +16,8 @@
     "lint": "oxlint",
     "preview": "vite preview",
     "smoke:performance": "node scripts/smoke-performance-career.mjs",
+    "smoke:affinity": "node scripts/smoke-affinity-ovr-parity.mjs",
+    "smoke:matrix": "node scripts/smoke-position-recalculator.mjs",
     "sync": "powershell -NoProfile -ExecutionPolicy Bypass -File ./scripts/sync-nuvem.ps1"
   },
   "dependencies": {
