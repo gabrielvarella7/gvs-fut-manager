@@ -1,5 +1,8 @@
 # Dois projetos no GitHub
 
+**Pasta local deste jogo (projeto Cursor “GVS FUT Manager”):**  
+`C:\Users\gcarn\Projects\gvs-fut-manager`
+
 | Projeto | Repositório | Site (jogar) | Editar no celular |
 |--------|-------------|--------------|-------------------|
 | **GVS FUT Manager** (este código) | [gvs-fut-manager](https://github.com/gabrielvarella7/gvs-fut-manager) | https://gabrielvarella7.github.io/gvs-fut-manager/ | App GitHub → repo **gvs-fut-manager** → branch **main** |
