@@ -124,6 +124,99 @@ export function overallDeAtributos(posicao: Posicao, atributos: AtributosJogador
   return Math.max(40, Math.min(96, Math.round(media20 * 4.75)));
 }
 
+function escalarAttrsPorFator(atributos: AtributosJogador, fator: number): AtributosJogador {
+  const scale = (n: number) => clampAttr20(n * fator);
+  return {
+    tecnicos: {
+      dominio: scale(atributos.tecnicos.dominio),
+      passe: scale(atributos.tecnicos.passe),
+      chute: scale(atributos.tecnicos.chute),
+      cabeceio: scale(atributos.tecnicos.cabeceio),
+      drible: scale(atributos.tecnicos.drible),
+      lancamentos: scale(atributos.tecnicos.lancamentos),
+      bola_parada: scale(atributos.tecnicos.bola_parada),
+    },
+    mentais: {
+      leitura_jogo: scale(atributos.mentais.leitura_jogo),
+      cobertura: scale(atributos.mentais.cobertura),
+      criatividade: scale(atributos.mentais.criatividade),
+      agressividade: scale(atributos.mentais.agressividade),
+      lideranca: scale(atributos.mentais.lideranca),
+      pressao: scale(atributos.mentais.pressao),
+    },
+    fisicos: {
+      fora_por_lesao: scale(atributos.fisicos.fora_por_lesao),
+      velocidade: scale(atributos.fisicos.velocidade),
+      forca: scale(atributos.fisicos.forca),
+    },
+  };
+}
+
+/**
+ * Escala atributos (1–20) para o overall alvo. Necessário porque
+ * `gerarAtributosNovos` comprime forca baixa (~piso OVR 58–62).
+ */
+export function calibrarAtributosParaOverall(
+  posicao: Posicao,
+  atributos: AtributosJogador,
+  ovrAlvo: number,
+): AtributosJogador {
+  const alvo = Math.max(40, Math.min(96, Math.round(ovrAlvo)));
+  const atual = overallDeAtributos(posicao, atributos);
+  if (atual === alvo) return atributos;
+
+  let lo = 0.28;
+  let hi = 1.5;
+  let melhor: AtributosJogador = atributos;
+  let melhorGap = Math.abs(atual - alvo);
+
+  for (let i = 0; i < 18; i++) {
+    const mid = (lo + hi) / 2;
+    const candidato = escalarAttrsPorFator(atributos, mid);
+    const o = overallDeAtributos(posicao, candidato);
+    const gap = Math.abs(o - alvo);
+    // Prefere ≤ alvo em empate (evita estourar teto da base)
+    if (gap < melhorGap || (gap === melhorGap && o <= alvo && overallDeAtributos(posicao, melhor) > alvo)) {
+      melhor = candidato;
+      melhorGap = gap;
+    }
+    if (o > alvo) hi = mid;
+    else lo = mid;
+    if (o === alvo) return candidato;
+  }
+
+  // Micro-ajuste: −1 em attrs se ainda acima do alvo
+  if (overallDeAtributos(posicao, melhor) > alvo) {
+    const clone: AtributosJogador = {
+      tecnicos: { ...melhor.tecnicos },
+      mentais: { ...melhor.mentais },
+      fisicos: { ...melhor.fisicos },
+    };
+    const bumpDown = (obj: Record<string, number>) => {
+      for (const k of Object.keys(obj)) {
+        if ((obj[k] ?? 1) > 1) {
+          obj[k] = (obj[k] ?? 1) - 1;
+          return true;
+        }
+      }
+      return false;
+    };
+    for (let n = 0; n < 12 && overallDeAtributos(posicao, clone) > alvo; n++) {
+      if (
+        !bumpDown(clone.tecnicos as unknown as Record<string, number>) &&
+        !bumpDown(clone.mentais as unknown as Record<string, number>) &&
+        !bumpDown(clone.fisicos as unknown as Record<string, number>)
+      ) {
+        break;
+      }
+    }
+    if (overallDeAtributos(posicao, clone) <= alvo || Math.abs(overallDeAtributos(posicao, clone) - alvo) <= melhorGap) {
+      melhor = clone;
+    }
+  }
+  return melhor;
+}
+
 export function isAtributosLegado(a: unknown): a is LegacyAtributos {
   if (!a || typeof a !== 'object') return false;
   const o = a as Record<string, unknown>;
