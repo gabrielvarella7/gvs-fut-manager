@@ -258,19 +258,25 @@ export function TacticPitch({
     return () => window.removeEventListener('pointerup', onUp);
   }, [liberarArrasto]);
 
+  const onSoltarJogadorNoSlotRef = useRef(onSoltarJogadorNoSlot);
+  const onArrastoElencoCanceladoRef = useRef(onArrastoElencoCancelado);
+  const slotDoPontoRef = useRef(slotDoPonto);
   useEffect(() => {
-    if (arrastandoJogadorId == null) {
-      setHoverSlotExterno(null);
-      return;
-    }
+    onSoltarJogadorNoSlotRef.current = onSoltarJogadorNoSlot;
+    onArrastoElencoCanceladoRef.current = onArrastoElencoCancelado;
+    slotDoPontoRef.current = slotDoPonto;
+  }, [onSoltarJogadorNoSlot, onArrastoElencoCancelado, slotDoPonto]);
+
+  useEffect(() => {
+    if (arrastandoJogadorId == null) return;
     const onUp = (e: PointerEvent) => {
-      const slot = slotDoPonto(e.clientX, e.clientY);
-      if (slot != null) onSoltarJogadorNoSlot?.(slot);
-      else onArrastoElencoCancelado?.();
+      const slot = slotDoPontoRef.current(e.clientX, e.clientY);
+      if (slot != null) onSoltarJogadorNoSlotRef.current?.(slot);
+      else onArrastoElencoCanceladoRef.current?.();
       setHoverSlotExterno(null);
     };
     const onMove = (e: PointerEvent) => {
-      setHoverSlotExterno(slotDoPonto(e.clientX, e.clientY));
+      setHoverSlotExterno(slotDoPontoRef.current(e.clientX, e.clientY));
     };
     window.addEventListener('pointerup', onUp);
     window.addEventListener('pointermove', onMove);
@@ -279,12 +285,7 @@ export function TacticPitch({
       window.removeEventListener('pointermove', onMove);
       setHoverSlotExterno(null);
     };
-  }, [
-    arrastandoJogadorId,
-    onArrastoElencoCancelado,
-    onSoltarJogadorNoSlot,
-    slotDoPonto,
-  ]);
+  }, [arrastandoJogadorId]);
 
   const onPointerDownSlot = (i: number, e: React.PointerEvent) => {
     if (grade11[i]?.gol) return;
