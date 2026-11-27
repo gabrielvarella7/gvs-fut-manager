@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { getTimeFicticio } from '../../career/fictionalLeague';
-import { escalacaoDeIds } from '../../career/lineup';
+import { escalacaoDeIds, validarRelacionadosPartida } from '../../career/lineup';
 import { esquemaOuPadrao } from '../../data/esquemasTaticos';
 import type { MatchSimInput } from '../../engine/matchEngine';
 import {
@@ -24,6 +24,8 @@ import type { Jogador } from '../../types/schema';
 import { useGameStore } from '../../store/useGameStore';
 import { MatchCenter } from '../match/MatchCenter';
 import { gerarRelatorioPreJogo } from '../../career/relatorioPreJogo';
+import { montarInfoPartidaPreJogo } from '../../career/infoPartidaPreJogo';
+import { montarPacotePreJogoEquipes } from '../../career/preJogoEquipeStats';
 import { montarH2HLiga, montarH2HTorneio } from '../../career/h2hMatch';
 import { multFadigaPreparadorFisico, nivelStaff } from '../../career/staffEfeitos';
 import { formacaoIdDeEsquema, taticaCpuAutomatica } from '../../engine/tacticsEngine';
@@ -52,6 +54,17 @@ function coresTimeFicticio(timeId: string): { primaria: string; secundaria: stri
   return CORES_FIC_FALLBACK[timeId] ?? { primaria: '#0a2748', secundaria: '#74acdf' };
 }
 
+/** Só titulares + reservas relacionados entram no plantel da partida. */
+function elencoRelacionado(
+  elenco: Jogador[],
+  titulares: number[] | null | undefined,
+  banco: number[] | null | undefined,
+): Jogador[] {
+  if (!titulares?.length || !banco?.length) return elenco;
+  const ids = new Set([...titulares, ...banco].filter((id) => id > 0));
+  return elenco.filter((j) => ids.has(j.id));
+}
+
 export function MatchScreen() {
   const jogos = useGameStore((s) => s.jogos);
   const times = useGameStore((s) => s.timesFicticios);
@@ -59,6 +72,7 @@ export function MatchScreen() {
   const jogoEmCursoId = useGameStore((s) => s.partidaJogoEmCurso);
   const esquemaUsuario = useGameStore((s) => s.esquemaAtual);
   const alinhamento11 = useGameStore((s) => s.alinhamento11);
+  const banco11 = useGameStore((s) => s.banco11);
   const gradeTatica11 = useGameStore((s) => s.gradeTatica11);
   const taticaPersonalizada = useGameStore((s) => s.usoTaticaPersonalizada);
   const dbTaticasStore = useGameStore((s) => s.dbTaticas);
@@ -148,7 +162,8 @@ export function MatchScreen() {
           : esquemaOuPadrao(visitanteLiga.esquema_tatico_padrao);
       const gradePartida =
         taticaPersonalizada && gradeTatica11?.length === 11 ? gradeTatica11 : null;
-      const elencoUser = mandanteLiga.id === clubeRealId ? elencoM : elencoV;
+      const elencoUserRaw = mandanteLiga.id === clubeRealId ? elencoM : elencoV;
+      const elencoUser = elencoRelacionado(elencoUserRaw, alinhamento11, banco11);
       const escalacaoUser =
         alinhamento11?.length === 11
           ? escalacaoDeIds(elencoUser, esquemaUsuario, alinhamento11, gradePartida)
@@ -186,7 +201,7 @@ export function MatchScreen() {
           timeId: mandanteLiga.id,
           nomeCurto: mandanteLiga.nome,
           esquema: esqM,
-          elenco: elencoM,
+          elenco: mandanteLiga.id === clubeRealId ? elencoUser : elencoM,
           mandoDeCampo: !neutro,
           forcaInstitucional: mandanteLiga.prestigio ?? mandanteLiga.forca_geral,
           ...(mandanteLiga.id === clubeRealId && escalacaoUser ? { escalacao: escalacaoUser } : {}),
@@ -204,7 +219,7 @@ export function MatchScreen() {
           timeId: visitanteLiga.id,
           nomeCurto: visitanteLiga.nome,
           esquema: esqV,
-          elenco: elencoV,
+          elenco: visitanteLiga.id === clubeRealId ? elencoUser : elencoV,
           forcaInstitucional: visitanteLiga.prestigio ?? visitanteLiga.forca_geral,
           ...(visitanteLiga.id === clubeRealId && escalacaoUser ? { escalacao: escalacaoUser } : {}),
           ...(visitanteLiga.id === clubeRealId && fadigaUser ? { fadigaPorMinutoMult: fadigaUser } : {}),
@@ -232,8 +247,9 @@ export function MatchScreen() {
     if (jogo && mandanteFic && visitanteFic && timeUsuarioId) {
       const gradePartida =
         taticaPersonalizada && gradeTatica11?.length === 11 ? gradeTatica11 : null;
-      const elencoUser =
+      const elencoUserRaw =
         mandanteFic.id === timeUsuarioId ? mandanteFic.jogadores : visitanteFic.jogadores;
+      const elencoUser = elencoRelacionado(elencoUserRaw, alinhamento11, banco11);
       const escalacaoUser =
         alinhamento11?.length === 11
           ? escalacaoDeIds(elencoUser, esquemaUsuario, alinhamento11, gradePartida)
@@ -247,7 +263,8 @@ export function MatchScreen() {
           timeId: mandanteFic.id,
           nomeCurto: mandanteFic.nome,
           esquema: esqMf,
-          elenco: mandanteFic.jogadores,
+          elenco:
+            mandanteFic.id === timeUsuarioId ? elencoUser : mandanteFic.jogadores,
           mandoDeCampo: true,
           tatica:
             mandanteFic.id === timeUsuarioId
@@ -259,7 +276,8 @@ export function MatchScreen() {
           timeId: visitanteFic.id,
           nomeCurto: visitanteFic.nome,
           esquema: esqVf,
-          elenco: visitanteFic.jogadores,
+          elenco:
+            visitanteFic.id === timeUsuarioId ? elencoUser : visitanteFic.jogadores,
           tatica:
             visitanteFic.id === timeUsuarioId
               ? taticaUsuario
@@ -283,6 +301,7 @@ export function MatchScreen() {
     timesReais,
     esquemaUsuario,
     alinhamento11,
+    banco11,
     gradeTatica11,
     mundoClube,
     taticaPersonalizada,
@@ -354,6 +373,29 @@ export function MatchScreen() {
     [simInput],
   );
 
+  const equipesPreJogo = useMemo(() => {
+    if (!modoLiga || !brasileirao || !mandanteLiga || !visitanteLiga) return null;
+    return montarPacotePreJogoEquipes({
+      estado: brasileirao,
+      mandante: mandanteLiga,
+      visitante: visitanteLiga,
+      jogadores: jogadoresReais,
+    });
+  }, [modoLiga, brasileirao, mandanteLiga, visitanteLiga, jogadoresReais]);
+
+  const infoPartidaPreJogo = useMemo(() => {
+    if (!modoLiga || !partidaLiga || !mandanteLiga || !campeonato) return null;
+    const neutro =
+      partidaLiga.campoNeutro ??
+      detectarClassico(partidaLiga.mandanteId, partidaLiga.visitanteId, timesReais);
+    return montarInfoPartidaPreJogo({
+      partida: partidaLiga,
+      campeonato,
+      mandante: mandanteLiga,
+      campoNeutro: neutro,
+    });
+  }, [modoLiga, partidaLiga, mandanteLiga, campeonato, timesReais]);
+
   /** Catálogo para o painel Jogador da partida (nomes sem fotos). */
   const jogadoresInfo = useMemo(() => {
     const mapa = new Map<number, { id: number; nome: string; timeId: string }>();
@@ -396,6 +438,7 @@ export function MatchScreen() {
     jogadoresReais,
     esquemaUsuario,
     alinhamento11,
+    banco11,
     gradePartida,
     dbTaticas,
     taticaUsuario,
@@ -452,9 +495,21 @@ export function MatchScreen() {
     irPara(modoLiga ? 'escritorio' : 'hub_torneio');
   }, [limparPartidaModoAuxiliar, encerrarTransmissao, irPara, modoLiga]);
 
+  const checkRelacionados = useMemo(
+    () => validarRelacionadosPartida(alinhamento11, banco11),
+    [alinhamento11, banco11],
+  );
+
   const iniciarPartida = useCallback(async () => {
     if (!simInput || idPartida == null) return;
     if (emTransmissao) return;
+    if (!checkRelacionados.ok) {
+      setErroSim(
+        checkRelacionados.motivo ??
+          'Relacione 11 titulares e 11 reservas antes de iniciar a partida.',
+      );
+      return;
+    }
     if (jogo?.finalizado) {
       setErroSim('Esta rodada já foi finalizada. Volte ao torneio e abra a próxima.');
       return;
@@ -494,11 +549,15 @@ export function MatchScreen() {
     simInput,
     idPartida,
     emTransmissao,
+    checkRelacionados,
     modoLiga,
     partidaLiga,
     jogo,
     registrar,
     registrarLiga,
+    brasileirao,
+    clubeRealId,
+    salvarCheckpoint,
   ]);
 
   useEffect(() => {
@@ -710,6 +769,24 @@ export function MatchScreen() {
         </CmPanel>
       )}
 
+      {!partidaModoAuxiliar && !emTransmissao && !checkRelacionados.ok && (
+        <CmPanel className="mb-4 border-rose-700/60 bg-rose-950/30">
+          <p className="text-sm font-medium text-rose-100">
+            {checkRelacionados.motivo ??
+              'Relacione 11 titulares e 11 reservas antes de iniciar a partida.'}
+          </p>
+          <p className="mt-1 text-xs text-rose-200/80">
+            Agora: {checkRelacionados.titulares}/11 titulares · {checkRelacionados.reservas}/11
+            reservas.
+          </p>
+          <div className="mt-3">
+            <CmBtn variant="ghost" onClick={() => abrirTatica()}>
+              Ir para tática
+            </CmBtn>
+          </div>
+        </CmPanel>
+      )}
+
       {!partidaModoAuxiliar && !emTransmissao && preJogo && simInput && (
         <>
           {erroSim && (
@@ -722,11 +799,18 @@ export function MatchScreen() {
               relatorio={relatorioLiga}
               acoes={
                 <>
-                  <CmBtn onClick={() => void iniciarPartida()} disabled={busy}>
+                  <CmBtn
+                    onClick={() => void iniciarPartida()}
+                    disabled={busy || !checkRelacionados.ok}
+                  >
                     {busy ? 'Preparando…' : 'Iniciar partida'}
                   </CmBtn>
                   {modoLiga && (
-                    <CmBtn variant="ghost" onClick={jogarComAuxiliarAction}>
+                    <CmBtn
+                      variant="ghost"
+                      onClick={jogarComAuxiliarAction}
+                      disabled={!checkRelacionados.ok}
+                    >
                       Mandar auxiliar
                     </CmBtn>
                   )}
@@ -751,9 +835,14 @@ export function MatchScreen() {
                   forcaVisitante: preJogo.forcaVisitante,
                   mandoBonus: preJogo.mandoBonus,
                 }}
+                equipes={equipesPreJogo}
+                infoPartida={infoPartidaPreJogo}
               />
               <div className="mt-4 flex flex-wrap gap-2">
-                <CmBtn onClick={() => void iniciarPartida()} disabled={busy}>
+                <CmBtn
+                  onClick={() => void iniciarPartida()}
+                  disabled={busy || !checkRelacionados.ok}
+                >
                   {busy ? 'Preparando…' : 'Iniciar partida'}
                 </CmBtn>
                 <CmBtn variant="ghost" onClick={abrirTatica}>
@@ -815,6 +904,8 @@ export function MatchScreen() {
                   }
                 : null
             }
+            equipesPreJogo={equipesPreJogo}
+            infoPartida={infoPartidaPreJogo}
             h2h={dadosH2H}
           />
         </>

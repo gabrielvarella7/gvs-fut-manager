@@ -1,11 +1,16 @@
 import { useState } from 'react';
 import type { EstadoTemporada } from '../../career/brasileirao';
 import type { DadosH2H } from '../../career/h2hMatch';
-import { estatisticasParciais } from '../../engine/matchStats';
+import {
+  estatisticasParciais,
+  type PeriodoEstatisticas,
+} from '../../engine/matchStats';
 import type { MatchSimResult } from '../../engine/matchEngine';
 import type { TimeNotasInput } from '../../engine/matchNotas';
 import type { InfoJogadorPartida } from '../../engine/jogadorDaPartida';
 import type { CampeonatoConfig, Time } from '../../types/schema';
+import type { InfoPartidaPreJogo } from '../../career/infoPartidaPreJogo';
+import type { PacotePreJogoEquipes } from '../../career/preJogoEquipeStats';
 import { MatchEventTimeline } from './MatchEventTimeline';
 import { MatchH2HPanel } from './MatchH2HPanel';
 import { MatchMomentum } from './MatchMomentum';
@@ -65,6 +70,9 @@ type Props = {
     mandanteId: string;
     visitanteId: string;
   } | null;
+  /** Stats de temporada para a aba Pré-jogo (ambos os times). */
+  equipesPreJogo?: PacotePreJogoEquipes | null;
+  infoPartida?: InfoPartidaPreJogo | null;
   /** Head-to-head panel data (liga ou torneio). */
   h2h?: DadosH2H | null;
 };
@@ -94,10 +102,13 @@ export function MatchCenter({
   onIrProFimDoJogo,
   onFinalizarJogo,
   classificacao = null,
+  equipesPreJogo = null,
+  infoPartida = null,
   h2h = null,
 }: Props) {
   const [aba, setAba] = useState<Aba>('comentario');
   const [minuto, setMinuto] = useState(resumePlayback?.minuto ?? 0);
+  const [periodoStats, setPeriodoStats] = useState<PeriodoEstatisticas>('todos');
   const [progresso, setProgresso] = useState<PlaybackProgress>(
     resumePlayback ?? { idx: 0, golsM: 0, golsV: 0, minuto: 0 },
   );
@@ -111,7 +122,7 @@ export function MatchCenter({
 
   const stats =
     result.estatisticas &&
-    estatisticasParciais(result, minuto, result.mandanteId);
+    estatisticasParciais(result, minuto, result.mandanteId, periodoStats);
 
   const lancamentosVisiveis = result.lancamentos.slice(0, progresso.idx);
 
@@ -192,6 +203,8 @@ export function MatchCenter({
           visitante={stats.visitante}
           mandanteNome={mandanteNome}
           visitanteNome={visitanteNome}
+          periodo={periodoStats}
+          onPeriodo={setPeriodoStats}
         />
       )}
 
@@ -214,6 +227,8 @@ export function MatchCenter({
           visitanteNome={visitanteNome}
           estadio={estadio}
           preJogo={result.preJogo}
+          equipes={equipesPreJogo}
+          infoPartida={infoPartida}
         />
       )}
 
@@ -234,6 +249,8 @@ export function MatchCenter({
           visitante={stats.visitante}
           mandanteNome={mandanteNome}
           visitanteNome={visitanteNome}
+          periodo={periodoStats}
+          onPeriodo={setPeriodoStats}
         />
       )}
 

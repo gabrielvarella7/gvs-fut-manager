@@ -141,6 +141,8 @@ export interface Lancamento {
   /** Cartão mostrado; vermelho inclui segundo amarelo / expulsão direta. */
   cartao?: 'amarelo' | 'vermelho';
   texto: string;
+  /** Cartão amarelo que virou expulsão (2º amarelo ou vermelho direto). */
+  expulsao?: boolean;
 }
 
 export interface LesaoEmCampo {
@@ -1127,6 +1129,7 @@ export function simularPartida(input: MatchSimInput): MatchSimResult {
         jogadorId: j.id,
         jogadorNome: j.nome,
         cartao: expulso ? 'vermelho' : 'amarelo',
+        expulsao: expulso || undefined,
         texto: expulso
           ? `${escolherLegenda('cartao', rnd, vars)} Expulsão — time volta a jogar com um a menos.`
           : escolherLegenda('cartao', rnd, vars),
