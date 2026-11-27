@@ -17,3 +17,17 @@ export {
   montarContextoPartidaDb,
   montarContextoPartidaSync,
 } from './matchContext';
+export {
+  MatchHighlightManager,
+  bindHighlightControls,
+  isDangerousChance,
+  rosterFromEscalacao,
+  synthesizeBuildupClip,
+  synthesizeFrame,
+} from './highlights';
+export type {
+  HighlightClip,
+  HighlightMode,
+  HighlightRoster,
+  SimulationFrame,
+} from './highlights';
