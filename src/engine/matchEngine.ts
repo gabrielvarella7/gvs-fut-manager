@@ -19,6 +19,7 @@ import {
   chanceLesaoPorFadiga,
   escolherReservaParaSub,
   energiaInicialPartida,
+  diasDescansoAntesPartida,
   fadigaPorMinutoCompleta,
   multiplicadorDrainGeneticaNoMinuto,
   MAX_SUBSTITUICOES_PARTIDA,
@@ -26,6 +27,7 @@ import {
   sortearGravidadeLesaoFadiga,
   diasBaseLesaoFadiga,
   descricaoLesaoFadiga,
+  tetoDrainPartidaPct,
   timeEmWO,
   vetoresTaticosDeConfig,
 } from '../career/energia';
@@ -72,7 +74,7 @@ export const MOTOR_DEFAULTS = {
   /** Abaixo disto o rendimento já vinha caindo; agora o mult é contínuo via energia. */
   energiaLimiteFadiga: 70,
   /** Fallback se idade não calibrar — ~médio. */
-  fadigaPorMinuto: 0.33,
+  fadigaPorMinuto: 0.14,
   recuperacaoTitular: 25,
   recuperacaoReserva: 40,
 } as const;
@@ -108,6 +110,8 @@ export interface MatchTeamInput {
   tatica?: ConfiguracaoTaticaClube;
   bonusTreino?: Record<string, number>;
   multExecucaoTreino?: number;
+  /** Jogos já disputados na temporada (id → contagem) — carga etária. */
+  participacoesTemporada?: Record<number, number>;
 }
 
 export interface MatchSimConfig {
@@ -176,6 +180,8 @@ export interface MatchSimInput {
   contexto?: ContextoDinamicoPartida;
   /** 1ª partida finalizada da temporada = 1 — a cada 30 pode sair zebra alucinada. */
   indicePartidaTemporada?: number;
+  /** Data da partida (ISO) — densidade do calendário / descanso. */
+  dataPartidaISO?: string;
 }
 
 export interface ProbabilidadesResultado {
@@ -505,7 +511,7 @@ export function simularPartida(input: MatchSimInput): MatchSimResult {
     polivalenciaPorJogador: input.config.polivalenciaPorJogador,
     energiaLimiteFadiga:
       input.config.energiaLimiteFadiga ?? MOTOR_DEFAULTS.energiaLimiteFadiga,
-    fadigaPorMinuto: fadigaBase * (isClassico ? 1.28 : 1),
+    fadigaPorMinuto: fadigaBase * (isClassico ? 1.12 : 1),
     bonusMando: input.config.bonusMandoCampo,
   };
 
@@ -774,6 +780,10 @@ export function simularPartida(input: MatchSimInput): MatchSimResult {
   let posseV = 0;
 
   const fadigaPorJogador = new Map<number, number>();
+  /** Teto de perda absoluta nesta partida (pp) — um jogo nunca esvazia o XI. */
+  const tetoDrainPorJogador = new Map<number, number>();
+  const energiaInicioPartida = new Map<number, number>();
+  for (const [id, e] of energia) energiaInicioPartida.set(id, e);
   const multFaltasPorJogador = new Map<number, number>();
   const idsImprovisados = new Set<number>();
   const tudoOuNada =
@@ -788,12 +798,20 @@ export function simularPartida(input: MatchSimInput): MatchSimResult {
     desgasteTatico: number,
     vetores: ReturnType<typeof vetoresTaticosDeConfig>,
     nivelPrep: number,
+    participacoes?: Record<number, number>,
   ) => {
     const af = afinidadeEmCampo(jogador, posicaoEscalada, opcoesAfinidadeDe(jogador));
     if (af.ehImproviso) idsImprovisados.add(jogador.id);
     multFaltasPorJogador.set(jogador.id, af.multFaltas);
     const prop = getGeneticaSegura(jogador).propensao_lesao;
     const sobrecarga17 = efeitoSobrecargaExtremo17(jogador, posicaoEscalada, 90);
+    const diasDescanso = diasDescansoAntesPartida(
+      jogador.ultimaPartidaISO,
+      input.dataPartidaISO,
+    );
+    const jogosTemporada = participacoes?.[jogador.id] ?? 0;
+    const teto = tetoDrainPartidaPct(jogador.idade, posicaoEscalada);
+    tetoDrainPorJogador.set(jogador.id, teto);
     const paso = fadigaPorMinutoCompleta({
       idade: jogador.idade,
       posicao: posicaoEscalada,
@@ -805,11 +823,13 @@ export function simularPartida(input: MatchSimInput): MatchSimResult {
       isClassico,
       tudoOuNada,
       nivelPreparador: nivelPrep,
+      diasDescanso,
+      jogosTemporada,
     });
-    fadigaPorJogador.set(
-      jogador.id,
-      paso * (1 + sobrecarga17.fadigaExtra) * af.multDesgasteEnergia,
-    );
+    // Afinidade/U17 suaves; re-aplica teto para não furar o cap da partida.
+    const afMult = Math.min(af.multDesgasteEnergia, 1.12);
+    const bruto = paso * (1 + Math.min(sobrecarga17.fadigaExtra, 0.12)) * afMult;
+    fadigaPorJogador.set(jogador.id, Math.min(bruto, teto / 90));
   };
   for (const slot of mandanteEsc) {
     registrarFadiga(
@@ -819,6 +839,7 @@ export function simularPartida(input: MatchSimInput): MatchSimResult {
       modsM.desgaste_fisico,
       vetoresM,
       input.mandante.nivelPreparador ?? 10,
+      input.mandante.participacoesTemporada,
     );
   }
   for (const slot of visitanteEsc) {
@@ -829,6 +850,7 @@ export function simularPartida(input: MatchSimInput): MatchSimResult {
       modsV.desgaste_fisico,
       vetoresV,
       input.visitante.nivelPreparador ?? 10,
+      input.visitante.participacoesTemporada,
     );
   }
 
@@ -921,10 +943,9 @@ export function simularPartida(input: MatchSimInput): MatchSimResult {
         }
         idsUsados.add(reserva.id);
         idsUsados.add(j.id);
-        energia.set(
-          reserva.id,
-          energiaInicialPartida(reserva.energia, rnd),
-        );
+        const eRes = energiaInicialPartida(reserva.energia, rnd);
+        energia.set(reserva.id, eRes);
+        energiaInicioPartida.set(reserva.id, eRes);
         registrarFadiga(
           reserva,
           slot.posicaoEscalada,
@@ -934,6 +955,9 @@ export function simularPartida(input: MatchSimInput): MatchSimResult {
           casa ? modsM.desgaste_fisico : modsV.desgaste_fisico,
           casa ? vetoresM : vetoresV,
           (casa ? input.mandante.nivelPreparador : input.visitante.nivelPreparador) ?? 10,
+          casa
+            ? input.mandante.participacoesTemporada
+            : input.visitante.participacoesTemporada,
         );
         fadigaPorJogador.delete(j.id);
         subsRestantes -= 1;
@@ -1043,7 +1067,9 @@ export function simularPartida(input: MatchSimInput): MatchSimResult {
         }
         idsUsados.add(reserva.id);
         idsUsados.add(j.id);
-        energia.set(reserva.id, energiaInicialPartida(reserva.energia, rnd));
+        const eRes = energiaInicialPartida(reserva.energia, rnd);
+        energia.set(reserva.id, eRes);
+        energiaInicioPartida.set(reserva.id, eRes);
         registrarFadiga(
           reserva,
           slot.posicaoEscalada,
@@ -1053,6 +1079,9 @@ export function simularPartida(input: MatchSimInput): MatchSimResult {
           casa ? modsM.desgaste_fisico : modsV.desgaste_fisico,
           casa ? vetoresM : vetoresV,
           (casa ? input.mandante.nivelPreparador : input.visitante.nivelPreparador) ?? 10,
+          casa
+            ? input.mandante.participacoesTemporada
+            : input.visitante.participacoesTemporada,
         );
         fadigaPorJogador.delete(j.id);
         subsRestantes -= 1;
@@ -1112,26 +1141,32 @@ export function simularPartida(input: MatchSimInput): MatchSimResult {
   for (let minuto = 1; minuto <= 90; minuto++) {
     const aHomemMenosM = foraMandante.size > 0;
     const aHomemMenosV = foraVisitante.size > 0;
-    // Só quem está em campo gasta energia.
+    // Só quem está em campo gasta energia (perda acumulada ≤ teto da partida).
     for (const slot of mandanteEsc) {
       if (foraMandante.has(slot.jogador.id)) continue;
       const id = slot.jogador.id;
       const e = energia.get(id) ?? slot.jogador.energia;
+      const inicio = energiaInicioPartida.get(id) ?? e;
+      const teto = tetoDrainPorJogador.get(id) ?? tetoDrainPartidaPct(slot.jogador.idade, slot.posicaoEscalada);
+      const piso = Math.max(0, inicio - teto);
       const basePaso = fadigaPorJogador.get(id) ?? cfg.fadigaPorMinuto;
       const prop = getGeneticaSegura(slot.jogador).propensao_lesao;
       const multMin = multiplicadorDrainGeneticaNoMinuto(prop, minuto);
-      const multHomem = aHomemMenosM ? 1.18 : 1;
-      energia.set(id, Math.max(0, e - basePaso * multMin * multHomem));
+      const multHomem = aHomemMenosM ? 1.12 : 1;
+      energia.set(id, Math.max(piso, e - basePaso * multMin * multHomem));
     }
     for (const slot of visitanteEsc) {
       if (foraVisitante.has(slot.jogador.id)) continue;
       const id = slot.jogador.id;
       const e = energia.get(id) ?? slot.jogador.energia;
+      const inicio = energiaInicioPartida.get(id) ?? e;
+      const teto = tetoDrainPorJogador.get(id) ?? tetoDrainPartidaPct(slot.jogador.idade, slot.posicaoEscalada);
+      const piso = Math.max(0, inicio - teto);
       const basePaso = fadigaPorJogador.get(id) ?? cfg.fadigaPorMinuto;
       const prop = getGeneticaSegura(slot.jogador).propensao_lesao;
       const multMin = multiplicadorDrainGeneticaNoMinuto(prop, minuto);
-      const multHomem = aHomemMenosV ? 1.18 : 1;
-      energia.set(id, Math.max(0, e - basePaso * multMin * multHomem));
+      const multHomem = aHomemMenosV ? 1.12 : 1;
+      energia.set(id, Math.max(piso, e - basePaso * multMin * multHomem));
     }
 
     if (processarLesaoFadiga(minuto, true) || processarLesaoFadiga(minuto, false)) {

@@ -32,10 +32,27 @@ function multiplicadorXpPorTeto(ovr, pot) {
   return 0.08 + gap * 0.1;
 }
 function multiplicadorDrainPosicao(pos) {
-  if (pos === 'GOL') return 0.25;
-  if (pos === 'ZAG') return 0.85;
+  if (pos === 'GOL') return 0.45;
+  if (pos === 'ZAG') return 0.88;
   if (pos === 'ATA') return 1.0;
-  return 1.18;
+  return 1.1;
+}
+function partidasBaselineTemporada(idade) {
+  return idade >= 23 && idade <= 32 ? 50 : 40;
+}
+function tetoDrainPartidaPct(idade, posicao) {
+  if (posicao === 'GOL') return 8;
+  if (idade >= 23 && idade <= 32) return 16;
+  if (idade < 23) return 14;
+  return 20;
+}
+function multiplicadorDensidadeCalendario(d) {
+  if (d <= 0) return 1.55;
+  if (d === 1) return 1.42;
+  if (d === 2) return 1.28;
+  if (d === 3) return 1.16;
+  if (d <= 5) return 1.06;
+  return 1.0;
 }
 
 assert.equal(multRiscoPorEnergia(90), 0.8);
@@ -47,8 +64,16 @@ assert.equal(multChanceLesaoFisiologista(20), 0.3);
 assert.ok(Math.abs(multDuracaoFisioterapeuta(20) - 0.6) < 1e-9);
 assert.equal(multiplicadorXpPorTeto(80, 80), 0);
 assert.equal(multiplicadorXpPorTeto(70, 90), 1);
-assert.equal(multiplicadorDrainPosicao('GOL'), 0.25);
-assert.equal(multiplicadorDrainPosicao('MEI'), 1.18);
+assert.equal(multiplicadorDrainPosicao('GOL'), 0.45);
+assert.equal(multiplicadorDrainPosicao('MEI'), 1.1);
+assert.equal(partidasBaselineTemporada(27), 50);
+assert.equal(partidasBaselineTemporada(34), 40);
+assert.equal(tetoDrainPartidaPct(27, 'ATA'), 16);
+assert.equal(tetoDrainPartidaPct(27, 'GOL'), 8);
+assert.equal(tetoDrainPartidaPct(35, 'MEI'), 20);
+assert.equal(multiplicadorDensidadeCalendario(7), 1.0);
+assert.equal(multiplicadorDensidadeCalendario(3), 1.16);
+assert.ok(multiplicadorDensidadeCalendario(3) > multiplicadorDensidadeCalendario(7));
 
 // Seed DB has genetica
 import fs from 'node:fs';
