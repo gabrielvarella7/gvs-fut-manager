@@ -50,7 +50,7 @@ function FormaPills({ forma }: { forma: string }) {
       {forma.split('').map((letra, i) => {
         const cls =
           letra === 'V'
-            ? 'border-emerald-700 bg-emerald-950/60 text-emerald-300'
+            ? 'border-green-700 bg-green-950/60 text-green-300'
             : letra === 'D'
               ? 'border-rose-800 bg-rose-950/50 text-rose-300'
               : 'border-zinc-600 bg-zinc-800 text-zinc-300';

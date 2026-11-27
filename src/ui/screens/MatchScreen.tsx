@@ -54,6 +54,20 @@ function coresTimeFicticio(timeId: string): { primaria: string; secundaria: stri
   return CORES_FIC_FALLBACK[timeId] ?? { primaria: '#0a2748', secundaria: '#74acdf' };
 }
 
+/** Resultado explícito do clube do usuário a partir do placar (mandante × visitante). */
+function rotuloResultadoUsuario(
+  golsMandante: number,
+  golsVisitante: number,
+  usuarioEMandante: boolean | null,
+): 'Vitória' | 'Empate' | 'Derrota' | null {
+  if (usuarioEMandante == null) return null;
+  const gp = usuarioEMandante ? golsMandante : golsVisitante;
+  const gc = usuarioEMandante ? golsVisitante : golsMandante;
+  if (gp > gc) return 'Vitória';
+  if (gp < gc) return 'Derrota';
+  return 'Empate';
+}
+
 /** Só titulares + reservas relacionados entram no plantel da partida. */
 function elencoRelacionado(
   elenco: Jogador[],
@@ -505,6 +519,29 @@ export function MatchScreen() {
   const idPartida = modoLiga ? partidaLiga?.id : jogo?.id;
   const emTransmissao = !!partidaAtual && partidaJogoId === idPartida;
 
+  const usuarioEMandante = useMemo(() => {
+    if (modoLiga && partidaLiga && clubeRealId) {
+      if (partidaLiga.mandanteId === clubeRealId) return true;
+      if (partidaLiga.visitanteId === clubeRealId) return false;
+      return null;
+    }
+    if (faseTorneioAmador && jogo && timeUsuarioId) {
+      if (jogo.mandanteId === timeUsuarioId) return true;
+      if (jogo.visitanteId === timeUsuarioId) return false;
+      return null;
+    }
+    return null;
+  }, [modoLiga, partidaLiga, clubeRealId, faseTorneioAmador, jogo, timeUsuarioId]);
+
+  const resultadoAuxiliar = useMemo(() => {
+    if (!partidaAtual) return null;
+    return rotuloResultadoUsuario(
+      partidaAtual.golsMandante,
+      partidaAtual.golsVisitante,
+      usuarioEMandante,
+    );
+  }, [partidaAtual, usuarioEMandante]);
+
   const dadosH2H = useMemo(() => {
     if (modoLiga && brasileirao && partidaLiga && campeonato) {
       return montarH2HLiga({
@@ -797,7 +834,24 @@ export function MatchScreen() {
       {partidaModoAuxiliar && partidaAtual && emTransmissao && (
         <CmPanel className="mb-4 border-emerald-800/60">
           <p className="text-lg font-semibold text-emerald-200">
-            Auxiliar: placar final {partidaAtual.golsMandante} x {partidaAtual.golsVisitante}
+            Auxiliar:{' '}
+            {resultadoAuxiliar ? (
+              <>
+                <span
+                  className={
+                    resultadoAuxiliar === 'Vitória'
+                      ? 'text-green-300'
+                      : resultadoAuxiliar === 'Derrota'
+                        ? 'text-rose-300'
+                        : 'text-zinc-200'
+                  }
+                >
+                  {resultadoAuxiliar}
+                </span>
+                {' — '}
+              </>
+            ) : null}
+            placar final {partidaAtual.golsMandante} x {partidaAtual.golsVisitante}
           </p>
           <p className="mt-2 text-sm text-zinc-400">
             O jogo foi simulado sem transmissão. Resultado já foi registrado na tabela.
