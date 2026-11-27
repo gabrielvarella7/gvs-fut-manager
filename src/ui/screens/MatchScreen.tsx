@@ -74,6 +74,7 @@ export function MatchScreen() {
   const progressRef = useRef<PlaybackProgress>({ idx: 0, golsM: 0, golsV: 0, minuto: 0 });
   const [resumePlayback, setResumePlayback] = useState<PlaybackProgress | null>(null);
   const [playbackKey, setPlaybackKey] = useState('0');
+  const [skipToEndNonce, setSkipToEndNonce] = useState(0);
   const [erroSim, setErroSim] = useState<string | null>(null);
   const [aguardandoSegundoTempo, setAguardandoSegundoTempo] = useState(false);
 
@@ -340,6 +341,7 @@ export function MatchScreen() {
       }
       setPausado(false);
       setMinuto(0);
+      setSkipToEndNonce(0);
     } catch (e) {
       const msg = e instanceof Error ? e.message : 'Falha ao simular a partida.';
       setErroSim(msg);
@@ -618,10 +620,12 @@ export function MatchScreen() {
               setAguardandoSegundoTempo(false);
               setPausado(false);
             }}
+            skipToEndNonce={skipToEndNonce}
+            onIrProFimDoJogo={() => {
+              setAguardandoSegundoTempo(false);
+              setSkipToEndNonce((n) => n + 1);
+            }}
           />
-          <div className="mt-4">
-            <CmBtn onClick={voltarHub}>Continuar</CmBtn>
-          </div>
         </>
       )}
     </CmShell>

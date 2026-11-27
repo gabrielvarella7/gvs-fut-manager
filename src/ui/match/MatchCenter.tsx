@@ -32,6 +32,8 @@ type Props = {
   aguardandoSegundoTempo?: boolean;
   onIniciarSegundoTempo?: () => void;
   onIntervalo?: () => void;
+  skipToEndNonce?: number;
+  onIrProFimDoJogo?: () => void;
 };
 
 export function MatchCenter({
@@ -52,6 +54,8 @@ export function MatchCenter({
   aguardandoSegundoTempo = false,
   onIniciarSegundoTempo,
   onIntervalo,
+  skipToEndNonce = 0,
+  onIrProFimDoJogo,
 }: Props) {
   const [aba, setAba] = useState<Aba>('comentario');
   const [minuto, setMinuto] = useState(0);
@@ -105,6 +109,7 @@ export function MatchCenter({
           resumeFrom={resumePlayback}
           playbackKey={playbackKey}
           onIntervalo={onIntervalo}
+          skipToEndNonce={skipToEndNonce}
         />
       </div>
 
@@ -200,6 +205,9 @@ export function MatchCenter({
         </label>
         {aoVivo && (
           <span className="text-xs text-red-400 animate-pulse">● {minuto}&apos;</span>
+        )}
+        {aoVivo && onIrProFimDoJogo && (
+          <CmBtn onClick={onIrProFimDoJogo}>ir pro fim do jogo</CmBtn>
         )}
       </div>
     </div>
