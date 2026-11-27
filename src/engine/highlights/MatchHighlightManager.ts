@@ -1,3 +1,4 @@
+import { CM04_TICKS_PER_SECOND } from './gerarLanceCM04';
 import type {
   HighlightClip,
   HighlightEventType,
@@ -5,15 +6,15 @@ import type {
   SimulationFrame,
 } from './types';
 
-const TICKS_PER_SECOND = 10;
-/** ~12s circular buffer at 10 Hz. */
-const BUFFER_CAPACITY = 12 * TICKS_PER_SECOND;
+/** ~12s circular buffer at 20 Hz (idle pitch motion between clips). */
+const BUFFER_CAPACITY = 12 * CM04_TICKS_PER_SECOND;
 
 export type PlayHighlightHandler = (clip: HighlightClip) => void | Promise<void>;
 
 /**
  * Headless circular replay buffer + event gate for CM 03/04-style 2D clips.
- * Port of Gabriel’s MatchHighlightManager (integration guide).
+ * Live match clock is frozen by the UI while `playing` is true; frames themselves
+ * carry a constant `clock` (minuto congelado) for the whole highlight.
  */
 export class MatchHighlightManager {
   private mode: HighlightMode;
@@ -60,10 +61,15 @@ export class MatchHighlightManager {
 
   /** Snapshot current buffer as a clip (does not clear). */
   snapshotClip(event: HighlightEventType, clockAtEvent: number): HighlightClip {
+    const frozen = Math.floor(clockAtEvent);
     return {
       event,
-      frames: this.buffer.map(cloneFrame),
-      clockAtEvent,
+      frames: this.buffer.map((f) => {
+        const c = cloneFrame(f);
+        c.clock = frozen;
+        return c;
+      }),
+      clockAtEvent: frozen,
     };
   }
 
@@ -74,8 +80,37 @@ export class MatchHighlightManager {
   }
 
   /**
+   * Play a pre-built CM04 clip (preferred). Freezes live match via onPlay
+   * until the overlay signals done; then playback resumes at the next minute.
+   */
+  async playClip(clip: HighlightClip): Promise<boolean> {
+    if (this.mode === 'OFF') return false;
+    if (this.playing) return false;
+    if (clip.frames.length === 0) return false;
+
+    const frozen = Math.floor(clip.clockAtEvent);
+    const normalized: HighlightClip = {
+      ...clip,
+      clockAtEvent: frozen,
+      frames: clip.frames.map((f) => {
+        const c = cloneFrame(f);
+        c.clock = frozen;
+        return c;
+      }),
+    };
+
+    this.playing = true;
+    try {
+      await this.onPlay?.(normalized);
+    } finally {
+      this.playing = false;
+    }
+    return true;
+  }
+
+  /**
    * If mode allows, snapshot the buffer and invoke onPlayHighlight.
-   * Returns true when a clip was started.
+   * Prefer `playClip` with `buildCm04HighlightClip` for organic motion.
    */
   async evaluateAndTriggerEvent(
     event: HighlightEventType,
@@ -83,16 +118,10 @@ export class MatchHighlightManager {
   ): Promise<boolean> {
     if (!this.shouldTrigger(event)) return false;
     if (this.playing) return false;
-    if (this.buffer.length < TICKS_PER_SECOND) return false;
+    if (this.buffer.length < CM04_TICKS_PER_SECOND) return false;
 
     const clip = this.snapshotClip(event, clockAtEvent);
-    this.playing = true;
-    try {
-      await this.onPlay?.(clip);
-    } finally {
-      this.playing = false;
-    }
-    return true;
+    return this.playClip(clip);
   }
 
   /** Playback speed multiplier for requestAnimationFrame loops. */
@@ -101,7 +130,7 @@ export class MatchHighlightManager {
   }
 
   getTicksPerSecond(): number {
-    return TICKS_PER_SECOND;
+    return CM04_TICKS_PER_SECOND;
   }
 
   getBufferLength(): number {
@@ -115,5 +144,6 @@ function cloneFrame(f: SimulationFrame): SimulationFrame {
     ball: { ...f.ball },
     entities: f.entities.map((e) => ({ ...e })),
     ...(f.banner ? { banner: f.banner } : {}),
+    ...(f.faseOrganica ? { faseOrganica: f.faseOrganica } : {}),
   };
 }

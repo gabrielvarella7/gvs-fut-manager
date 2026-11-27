@@ -4,6 +4,13 @@ export type HighlightMode = 'ON' | 'ONLY_GOALS' | 'OFF';
 
 export type HighlightEventType = 'GOAL' | 'DANGEROUS_CHANCE';
 
+export type HighlightFaseOrganica =
+  | 'CONSTRUCAO'
+  | 'PROGRESSAO'
+  | 'ULTIMO_TERCO'
+  | 'FINALIZACAO'
+  | 'ENCERRAMENTO';
+
 export interface HighlightEntity {
   id: number;
   nome: string;
@@ -12,20 +19,27 @@ export interface HighlightEntity {
   lado: 'H' | 'A';
   x: number;
   y: number;
+  /** Ball carrier — used for label priority / glow. */
+  temBola?: boolean;
 }
 
 export interface SimulationFrame {
-  /** Match clock minutes (may include fraction). */
+  /**
+   * Frozen match minute for the whole clip (e.g. 4 during a chance at 4').
+   * Live clock only advances again AFTER ENCERRAMENTO when playback resumes.
+   */
   clock: number;
-  ball: { x: number; y: number };
+  ball: { x: number; y: number; z?: number };
   entities: HighlightEntity[];
-  /** Optional label under the clock (e.g. GOL!). */
+  /** Optional narration under the pitch (e.g. GOL!). */
   banner?: string;
+  faseOrganica?: HighlightFaseOrganica;
 }
 
 export interface HighlightClip {
   event: HighlightEventType;
   frames: SimulationFrame[];
+  /** Match minute at which the live clock was frozen for this clip. */
   clockAtEvent: number;
 }
 

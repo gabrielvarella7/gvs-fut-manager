@@ -14,9 +14,9 @@ import type { PacotePreJogoEquipes } from '../../career/preJogoEquipeStats';
 import {
   MatchHighlightManager,
   bindHighlightControls,
+  buildCm04HighlightClip,
   isDangerousChance,
   rosterFromEscalacao,
-  synthesizeBuildupClip,
   synthesizeFrame,
   type HighlightClip,
   type HighlightMode,
@@ -281,50 +281,30 @@ export function MatchCenter({
 
       if (manager.getMode() === 'OFF') return;
 
-      if (manager.getBufferLength() < 40) {
-        const frames = synthesizeBuildupClip({
-          clockAtEvent: l.minuto,
-          roster,
-          attackingHome,
-          focusPlayerId: l.jogadorId,
-          banner:
-            l.tipo === 'gol'
-              ? 'GOL!'
-              : l.highlight?.woodwork
-                ? 'TRAVESSÃO!'
-                : l.highlight?.hardSave
-                  ? 'GRANDE DEFESA!'
-                  : undefined,
-        });
-        for (const f of frames) manager.recordFrame(f);
-      } else {
-        manager.recordFrame(
-          synthesizeFrame({
-            clock: l.minuto,
-            roster,
-            attackingHome,
-            phase: 0.92,
-            focusPlayerId: l.jogadorId,
-            banner: l.tipo === 'gol' ? 'GOL!' : undefined,
-          }),
-        );
-      }
-
-      if (l.tipo === 'gol' && manager.shouldTrigger('GOAL')) {
-        pausedForClipRef.current = true;
-        onPausado(true);
-        await manager.evaluateAndTriggerEvent('GOAL', l.minuto);
-        return;
-      }
-      if (
+      const triggerGoal = l.tipo === 'gol' && manager.shouldTrigger('GOAL');
+      const triggerChance =
         (l.tipo === 'chance' || l.tipo === 'defesa' || l.tipo === 'cartao_amarelo') &&
         isDangerousChance(l.highlight) &&
-        manager.shouldTrigger('DANGEROUS_CHANCE')
-      ) {
-        pausedForClipRef.current = true;
-        onPausado(true);
-        await manager.evaluateAndTriggerEvent('DANGEROUS_CHANCE', l.minuto);
-      }
+        manager.shouldTrigger('DANGEROUS_CHANCE');
+
+      if (!triggerGoal && !triggerChance) return;
+
+      // Freeze live match clock for the whole clip; resume after ENCERRAMENTO.
+      pausedForClipRef.current = true;
+      onPausado(true);
+
+      const event = triggerGoal ? 'GOAL' : 'DANGEROUS_CHANCE';
+      const clip = buildCm04HighlightClip({
+        event,
+        minuto: l.minuto,
+        roster,
+        attackingHome,
+        autorId: l.jogadorId,
+        assistenteNome: l.assistenteNome,
+        highlight: l.highlight,
+        tipoLance: l.tipo,
+      });
+      await manager.playClip(clip);
     },
     [manager, onPausado, result.mandanteId, roster],
   );

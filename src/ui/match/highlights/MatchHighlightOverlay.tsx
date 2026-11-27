@@ -46,6 +46,7 @@ export function MatchHighlightOverlay({
   if (!clip) return null;
 
   const titulo = clip.event === 'GOAL' ? 'GOL!' : 'Chance perigosa';
+  const minutoCongelado = Math.floor(clip.clockAtEvent);
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 p-4">
@@ -54,7 +55,9 @@ export function MatchHighlightOverlay({
           <p className="text-xs font-semibold uppercase tracking-wide text-amber-300">
             Replay · {titulo}
           </p>
-          <p className="text-[10px] text-zinc-500">CM 03/04 · 2D</p>
+          <p className="text-[10px] text-zinc-400">
+            Minuto {minutoCongelado}&apos; congelado · CM 03/04
+          </p>
         </div>
         <canvas
           ref={canvasRef}
