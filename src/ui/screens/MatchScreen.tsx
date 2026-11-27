@@ -75,6 +75,7 @@ export function MatchScreen() {
   const [resumePlayback, setResumePlayback] = useState<PlaybackProgress | null>(null);
   const [playbackKey, setPlaybackKey] = useState('0');
   const [erroSim, setErroSim] = useState<string | null>(null);
+  const [aguardandoSegundoTempo, setAguardandoSegundoTempo] = useState(false);
 
   const faseTorneioAmador = !clubeRealId;
   const partidaLiga = useMemo(() => {
@@ -331,6 +332,7 @@ export function MatchScreen() {
       salvarCheckpoint(null);
       setResumePlayback(null);
       setPlaybackKey(String(seed));
+      setAguardandoSegundoTempo(false);
       if (modoLiga && partidaLiga) {
         registrarLiga(partidaLiga.id, result);
       } else if (jogo) {
@@ -368,6 +370,7 @@ export function MatchScreen() {
     setPausado(false);
     setMinuto(0);
     setResumePlayback(null);
+    setAguardandoSegundoTempo(false);
   }, [partidaAtual, partidaJogoId, checkpoint?.partidaJogoId, idPartida]);
 
   const hashTaticaAtual = useMemo(
@@ -606,6 +609,15 @@ export function MatchScreen() {
             }}
             resumePlayback={resumePlayback}
             playbackKey={playbackKey}
+            aguardandoSegundoTempo={aguardandoSegundoTempo}
+            onIntervalo={() => {
+              setPausado(true);
+              setAguardandoSegundoTempo(true);
+            }}
+            onIniciarSegundoTempo={() => {
+              setAguardandoSegundoTempo(false);
+              setPausado(false);
+            }}
           />
           <div className="mt-4">
             <CmBtn onClick={voltarHub}>Continuar</CmBtn>

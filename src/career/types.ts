@@ -168,6 +168,8 @@ export interface EstadoCarreira {
   /** Proposta confirmada com "Salvar escolha" */
   propostaSelecionadaId: string | null;
   noticias: NoticiaCarreira[];
+  /** IDs de notícias já vistas (badge limpa ao abrir Notícias). */
+  noticiasVistasIds: string[];
   tela: TelaJogo;
   /** Brasileirão após assumir clube profissional */
   brasileirao: EstadoTemporada | null;

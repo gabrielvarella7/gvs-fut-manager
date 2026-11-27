@@ -1,5 +1,5 @@
 @echo off
-title GVS Manager - servidor local
+title Mestre Mou - servidor local
 cd /d "%~dp0"
 
 where node >nul 2>&1

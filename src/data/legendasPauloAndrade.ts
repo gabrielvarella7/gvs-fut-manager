@@ -1,4 +1,4 @@
-/** Legendas dinâmicas — estilo Paulo Andrade (GVS Manager). */
+/** Legendas dinâmicas — estilo Paulo Andrade (Mestre Mou). */
 export type CategoriaNarracao =
   | 'abertura'
   | 'posse'

@@ -52,6 +52,10 @@ export function CmCareerShell({
   const sair = useGameStore((s) => s.sairParaMenu);
   const avisoSalvo = useGameStore((s) => s.avisoSalvo);
   const limparAviso = useGameStore((s) => s.limparAvisoSalvo);
+  const noticias = useGameStore((s) => s.noticias);
+  const noticiasVistasIds = useGameStore((s) => s.noticiasVistasIds);
+  const vistas = new Set(noticiasVistasIds);
+  const noticiasNovas = noticias.filter((n) => !vistas.has(n.id)).length;
 
   const nav = clubeRealId ? NAV_PRO : NAV_AMADOR;
 
@@ -74,13 +78,21 @@ export function CmCareerShell({
                   key={item.tela}
                   type="button"
                   onClick={() => irPara(item.tela)}
-                  className={`rounded px-2 py-1 text-xs font-medium ${
+                  className={`relative rounded px-2 py-1 text-xs font-medium ${
                     tela === item.tela
                       ? 'bg-emerald-900 text-emerald-100'
                       : 'text-zinc-400 hover:bg-zinc-800 hover:text-zinc-200'
                   }`}
                 >
                   {item.label}
+                  {item.tela === 'noticias' && noticiasNovas > 0 && (
+                    <span
+                      className="absolute -right-1 -top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-sky-400 px-1 text-[9px] font-bold text-slate-950"
+                      aria-label={`${noticiasNovas} notícias novas`}
+                    >
+                      {noticiasNovas > 9 ? '9+' : noticiasNovas}
+                    </span>
+                  )}
                 </button>
               ))}
             </nav>

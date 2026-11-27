@@ -1,9 +1,9 @@
-# GVS FUT Manager — pasta oficial
+# Mestre Mou — pasta oficial
 
 Este diretório é o **jogo**. No Cursor:
 
 1. **File → Open Folder** → `C:\Users\gcarn\Projects\gvs-fut-manager`
-2. No painel **Projects**, vincule este folder ao projeto **GVS FUT Manager** (se ainda não estiver).
+2. No painel **Projects**, vincule este folder ao projeto **Mestre Mou** (se ainda não estiver).
 
 Git remoto: `origin` → https://github.com/gabrielvarella7/gvs-fut-manager  
 

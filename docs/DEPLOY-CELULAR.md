@@ -15,7 +15,7 @@ No PowerShell, na pasta do projeto:
 cd C:\Users\gcarn\Projects\gvs-manager
 git init -b main
 git add -A
-git commit -m "GVS Manager — base para deploy"
+git commit -m "Mestre Mou — base para deploy"
 ```
 
 Crie um repositório **privado** em GitHub chamado `gvs-manager` (sem README). Depois:

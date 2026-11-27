@@ -57,10 +57,14 @@ export function TacticPitch({
   const pitchRef = useRef<HTMLDivElement>(null);
   const origemRef = useRef<number | null>(null);
   const ignorarClickRef = useRef(false);
+  const pointerIdRef = useRef<number | null>(null);
   const [selecionado, setSelecionado] = useState<number | null>(null);
   const [arrastando, setArrastando] = useState<number | null>(null);
   const [hover, setHover] = useState<CelulaGrade | null>(null);
   const [hoverSlotExterno, setHoverSlotExterno] = useState<number | null>(null);
+  const [dragPos, setDragPos] = useState<{ x: number; y: number } | null>(null);
+  const coarsePointer =
+    typeof window !== 'undefined' && window.matchMedia('(pointer: coarse)').matches;
   const esquemaKey = esquemaOuPadrao(esquema);
   const slots = SLOTS_POR_ESQUEMA[esquemaKey];
   const coords = coordsDeGrade(grade11);
@@ -119,7 +123,7 @@ export function TacticPitch({
       const pt = pontoTela(clientX, clientY);
       if (!pt) return null;
       let melhor: number | null = null;
-      let menorDist = 14;
+      let menorDist = coarsePointer ? 22 : 14;
       for (let i = 0; i < coords.length; i++) {
         const d = Math.hypot(pt.px - coords[i].x, pt.py - coords[i].y);
         if (d < menorDist) {
@@ -129,7 +133,7 @@ export function TacticPitch({
       }
       return melhor;
     },
-    [coords, pontoTela],
+    [coarsePointer, coords, pontoTela],
   );
 
   const celulaNoPonto = useCallback(
@@ -152,8 +156,10 @@ export function TacticPitch({
     (clientX: number, clientY: number) => {
       const origem = origemRef.current;
       origemRef.current = null;
+      pointerIdRef.current = null;
       setArrastando(null);
       setHover(null);
+      setDragPos(null);
       if (origem == null) return;
 
       if (grade11[origem]?.gol) {
@@ -235,15 +241,25 @@ export function TacticPitch({
     if (grade11[i]?.gol) return;
     e.preventDefault();
     e.stopPropagation();
+    try {
+      e.currentTarget.setPointerCapture(e.pointerId);
+    } catch {
+      /* ignore */
+    }
+    pointerIdRef.current = e.pointerId;
     origemRef.current = i;
     setArrastando(i);
     setHover(grade11[i] ?? null);
     setSelecionado(null);
+    const pt = pontoTela(e.clientX, e.clientY);
+    if (pt) setDragPos({ x: pt.px, y: pt.py });
   };
 
   const onPointerMove = (e: React.PointerEvent) => {
     if (origemRef.current == null) return;
     setHover(celulaNoPonto(e.clientX, e.clientY));
+    const pt = pontoTela(e.clientX, e.clientY);
+    if (pt) setDragPos({ x: pt.px, y: pt.py });
   };
 
   const onClickSlot = (i: number) => {
@@ -275,6 +291,7 @@ export function TacticPitch({
           style={{
             transform: `rotateX(${CAMPO_PERSPECTIVA.rotateX}deg) scale(${CAMPO_PERSPECTIVA.scale})`,
             transformOrigin: `50% ${CAMPO_PERSPECTIVA.originY}`,
+            touchAction: 'none',
           }}
           onPointerMove={onPointerMove}
         >
@@ -292,16 +309,23 @@ export function TacticPitch({
                 mesmaCelula(hover, cel)) ||
               (arrastandoJogadorId != null && hoverSlotExterno === i);
             const alvoReserva = arrastandoJogadorId != null && hoverSlotExterno === i;
+            const fantasmaAtivo = arrastando === i && dragPos != null;
             return (
               <div
                 key={`slot-${i}-${slotIds[i]}`}
                 className="absolute flex -translate-x-1/2 -translate-y-1/2 flex-col items-center transition-[left,top] duration-150 ease-out"
-                style={{ left: `${c.x}%`, top: `${c.y}%`, zIndex: ativo ? 20 : 1 }}
+                style={{
+                  left: `${c.x}%`,
+                  top: `${c.y}%`,
+                  zIndex: ativo ? 20 : 1,
+                  opacity: fantasmaAtivo ? 0.35 : 1,
+                }}
               >
                 <button
                   type="button"
                   onPointerDown={(e) => onPointerDownSlot(i, e)}
                   onClick={() => onClickSlot(i)}
+                  style={{ touchAction: 'none' }}
                   className={`flex h-11 w-11 cursor-pointer items-center justify-center rounded-full border-2 bg-zinc-900 text-[10px] font-bold shadow-md ${
                     ativo
                       ? 'scale-110 border-amber-400 text-amber-100'
@@ -311,9 +335,9 @@ export function TacticPitch({
                           ? 'scale-105 border-sky-400 text-sky-100'
                           : 'border-emerald-400 text-emerald-100 hover:border-emerald-300'
                   }`}
-              title={`${j.nome} (${j.rotulo})${j.dicaDesvio ? ` · ${j.dicaDesvio}` : ''} — arraste do elenco, outra posição ou clique em dois`}
-            >
-              {j.rotulo}
+                  title={`${j.nome} (${j.rotulo})${j.dicaDesvio ? ` · ${j.dicaDesvio}` : ''} — arraste do elenco, outra posição ou clique em dois`}
+                >
+                  {j.rotulo}
                 </button>
                 <span
                   className={`mt-0.5 block min-w-[5.25rem] whitespace-nowrap text-center text-[8px] font-medium drop-shadow sm:text-[9px] ${
@@ -329,11 +353,21 @@ export function TacticPitch({
               </div>
             );
           })}
+          {arrastando != null && dragPos && (
+            <div
+              className="pointer-events-none absolute z-40 flex -translate-x-1/2 -translate-y-1/2 flex-col items-center"
+              style={{ left: `${dragPos.x}%`, top: `${dragPos.y}%` }}
+            >
+              <div className="flex h-12 w-12 scale-110 items-center justify-center rounded-full border-2 border-amber-300 bg-zinc-900 text-[11px] font-bold text-amber-100 shadow-lg ring-2 ring-amber-400/40">
+                {slotJogador(arrastando).rotulo}
+              </div>
+            </div>
+          )}
         </div>
       </div>
       <div className="flex shrink-0 items-center justify-between gap-2 px-1 text-[10px] text-zinc-500">
         <span>
-          Do elenco → campo · do campo → reserva (solte fora) · no campo, arraste ou clique em dois
+          Arraste a bolinha (celular ou PC) · elenco → campo · solte fora para reserva · ou toque em dois
         </span>
         <span className="text-zinc-600">{rotulo}</span>
       </div>
