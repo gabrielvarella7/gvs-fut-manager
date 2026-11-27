@@ -34,6 +34,8 @@ type Props = {
   onIntervalo?: () => void;
   skipToEndNonce?: number;
   onIrProFimDoJogo?: () => void;
+  /** Final score only: leave transmission and return to escritório / hub. */
+  onFinalizarJogo?: () => void;
 };
 
 export function MatchCenter({
@@ -56,6 +58,7 @@ export function MatchCenter({
   onIntervalo,
   skipToEndNonce = 0,
   onIrProFimDoJogo,
+  onFinalizarJogo,
 }: Props) {
   const [aba, setAba] = useState<Aba>('comentario');
   const [minuto, setMinuto] = useState(0);
@@ -208,6 +211,11 @@ export function MatchCenter({
         )}
         {aoVivo && onIrProFimDoJogo && (
           <CmBtn onClick={onIrProFimDoJogo}>ir pro fim do jogo</CmBtn>
+        )}
+        {!aoVivo && onFinalizarJogo && (
+          <CmBtn variant="primary" onClick={onFinalizarJogo}>
+            Finalizar jogo
+          </CmBtn>
         )}
       </div>
     </div>
