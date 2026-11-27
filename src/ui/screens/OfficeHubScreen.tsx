@@ -203,7 +203,7 @@ export function OfficeHubScreen() {
                           key={`${f.dataISO}-${i}`}
                           className={`flex h-9 w-9 items-center justify-center rounded-md text-sm font-bold shadow-sm ${
                             f.sigla === 'V'
-                              ? 'bg-emerald-700 text-emerald-50'
+                              ? 'bg-green-600 text-green-50'
                               : f.sigla === 'D'
                                 ? 'bg-red-900 text-red-100'
                                 : 'bg-zinc-600 text-zinc-100'

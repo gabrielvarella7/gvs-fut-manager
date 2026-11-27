@@ -37,7 +37,7 @@ function Crest({
 function ResultPill({ r }: { r: PartidaRecenteH2H['resultado'] }) {
   const cls =
     r === 'V'
-      ? 'bg-emerald-600 text-white'
+      ? 'bg-green-600 text-white'
       : r === 'D'
         ? 'bg-rose-700 text-white'
         : 'bg-zinc-600 text-zinc-100';

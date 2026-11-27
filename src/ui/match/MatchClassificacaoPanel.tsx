@@ -44,7 +44,7 @@ function FormaPills({ forma }: { forma: FormaJogo[] }) {
         }
         const cls =
           r === 'V'
-            ? 'bg-emerald-600 text-white'
+            ? 'bg-green-600 text-white'
             : r === 'D'
               ? 'bg-rose-600 text-white'
               : 'bg-zinc-500 text-white';
