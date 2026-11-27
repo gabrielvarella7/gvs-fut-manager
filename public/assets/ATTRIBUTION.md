@@ -2,11 +2,12 @@
 
 ## mourinho-welcome.jpg
 
-Foto de José Mourinho de terno sorrindo (com Eden Hazard à esquerda) usada na tela de boas-vindas.
+Foto de José Mourinho (rosto sorridente / “grin”, primeira passagem no Chelsea) usada na tela de boas-vindas.
 
-- **Arquivo original:** [Chelsea 2 Spurs 0 Capital One Cup winners 2015 (16507117799).jpg](https://commons.wikimedia.org/wiki/File:Chelsea_2_Spurs_0_Capital_One_Cup_winners_2015_(16507117799).jpg) (Wikimedia Commons)
-- **Autor:** [@cfcunofficial (Chelsea Debs)](https://www.flickr.com/people/121676765@N07) via Flickr
-- **Licença:** [Creative Commons Attribution-ShareAlike 2.0 Generic (CC BY-SA 2.0)](https://creativecommons.org/licenses/by-sa/2.0/)
-- **Alterações:** recorte horizontal focado nos rostos; redimensionamento para uso na web
+- **Arquivo:** [JoseMourinho.jpg](https://commons.wikimedia.org/wiki/File:JoseMourinho.jpg) (Wikimedia Commons)
+- **Fonte Flickr:** [Jose Mourinho - Chelsea on Tour - 20/FEB/2007](https://www.flickr.com/photos/46357488@N00/398904339/)
+- **Autor:** Mark Freeman (Free-ers) — Hornchurch, UK
+- **Licença:** [Creative Commons Attribution 2.0 Generic (CC BY 2.0)](https://creativecommons.org/licenses/by/2.0/)
+- **Alterações:** uso do recorte já publicado no Commons; ampliação/leve contraste para a web
 
-A obra derivada permanece sob CC BY-SA 2.0.
+**Nota:** a foto icônica da apresentação “Special One” (conferência de imprensa do Chelsea, junho de 2004 — tipicamente Andrew Parsons / PA / Getty) **não está disponível** sob licença livre no Commons. Esta é a alternativa Commons mais próxima daquela era (rosto claro, sorriso/grin, Chelsea 1ª passagem).

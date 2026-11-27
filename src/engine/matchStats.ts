@@ -24,9 +24,16 @@ export interface EstatisticasTime {
 
 export interface MomentoAtaque {
   minuto: number;
+  /** Net momentum (−100..100): + home attack, − away attack. */
   valor: number;
+  /** Home attack intensity 0..1 (Sofascore-style dual channel; UI pending ref). */
+  pressaoMandante?: number;
+  /** Away attack intensity 0..1. */
+  pressaoVisitante?: number;
   golMandante?: boolean;
   golVisitante?: boolean;
+  chanceMandante?: boolean;
+  chanceVisitante?: boolean;
 }
 
 export interface PreJogoInfo {
