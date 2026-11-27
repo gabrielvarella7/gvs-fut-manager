@@ -5,7 +5,7 @@ import { corClasseEnergia, overallEfetivoPorEnergia } from '../../career/energia
 import { ordenarElenco } from '../../career/ordenarElenco';
 import { formatarDinheiro, salarioMensal, valorMercado } from '../../career/playerUtils';
 import { plantelProfissionalCount } from '../../career/youthAcademy';
-import { TETO_PLANTEL_PRO_SUB23 } from '../../types/aspirantesS23';
+import { MSG_PLANTEL_CHEIO_SUBIR, TETO_PLANTEL_PRO_SUB23 } from '../../types/aspirantesS23';
 import type { OfertaDispensa } from '../../types/aspirantesS23';
 import { useGameStore } from '../../store/useGameStore';
 import { CmCareerShell } from '../cm/CmCareerShell';
@@ -38,6 +38,7 @@ export function SquadScreen() {
   const titulo = timeReal?.nome_completo ?? timeFic?.nome ?? 'Elenco';
   const elenco = clubeRealId ? elencoReal : ordenarElenco(elencoFic);
   const plantel = clubeRealId ? plantelProfissionalCount(jogadoresReais, clubeRealId) : 0;
+  const plantelCheio = plantel >= TETO_PLANTEL_PRO_SUB23;
 
   return (
     <CmCareerShell
@@ -51,14 +52,30 @@ export function SquadScreen() {
       {clubeRealId && (
         <CmPanel className="mb-4">
           <p className="text-xs text-zinc-500">Gestão de plantel</p>
-          <p className="mt-1 text-sm text-zinc-300">
-            Para liberar vaga e subir alguém do Sub-23, venda ou dispense um atleta.
-          </p>
-          <div className="mt-2">
-            <CmBtn variant="ghost" onClick={() => irPara('sub23')}>
-              Abrir Sub-23
-            </CmBtn>
-          </div>
+          {plantelCheio ? (
+            <>
+              <p className="mt-1 text-sm text-zinc-300">{MSG_PLANTEL_CHEIO_SUBIR}</p>
+              <div className="mt-2 flex flex-wrap gap-2">
+                <CmBtn variant="ghost" disabled>
+                  Plantel cheio
+                </CmBtn>
+                <CmBtn variant="ghost" onClick={() => irPara('sub23')}>
+                  Abrir Sub-23
+                </CmBtn>
+              </div>
+            </>
+          ) : (
+            <>
+              <p className="mt-1 text-sm text-zinc-300">
+                Há vaga no plantel ({plantel}/{TETO_PLANTEL_PRO_SUB23}). Suba um atleta do Sub-23.
+              </p>
+              <div className="mt-2">
+                <CmBtn variant="primary" onClick={() => irPara('sub23')}>
+                  Subir Sub-23
+                </CmBtn>
+              </div>
+            </>
+          )}
           {aviso && <p className="mt-2 text-sm text-amber-200">{aviso}</p>}
           {oferta && (
             <div className="mt-3 rounded border border-amber-800/50 bg-amber-950/20 p-3 text-sm">
