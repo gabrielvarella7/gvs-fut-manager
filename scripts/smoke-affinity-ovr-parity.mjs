@@ -22,6 +22,8 @@ function media(...ns) {
 
 function temParidadeOvr(natural, escalada, m, opts = {}) {
   if (natural === escalada) return true;
+  const colAsa =
+    opts.col === 0 || opts.col === 1 || opts.col === 3 || opts.col === 4;
   if (
     (natural === 'VOL' && escalada === 'MEI') ||
     (natural === 'MEI' && escalada === 'VOL')
@@ -60,6 +62,7 @@ function temParidadeOvr(natural, escalada, m, opts = {}) {
   if (
     escalada === 'ATA' &&
     (natural === 'LAT' || natural === 'MEI') &&
+    !colAsa &&
     (m.chute >= L.paraAcChuteOuCabeca || m.cabeceio >= L.paraAcChuteOuCabeca)
   ) {
     return true;
@@ -67,6 +70,7 @@ function temParidadeOvr(natural, escalada, m, opts = {}) {
   if (
     natural === 'MEI' &&
     escalada === 'ATA' &&
+    !colAsa &&
     (m.chute >= L.meiAtaChuteOuPasse || m.passe >= L.meiAtaChuteOuPasse)
   ) {
     return true;

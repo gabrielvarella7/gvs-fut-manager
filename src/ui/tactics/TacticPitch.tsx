@@ -5,6 +5,7 @@ import {
   COL_X_GRADE,
   COLS_LINHA,
   coordsDeGrade,
+  linhaDaCelula,
   LINHAS_CAMPO,
   mesmaCelula,
   posicaoNaCelula,
@@ -85,6 +86,7 @@ export function TacticPitch({
     const pos = posicaoNaCelula(cel);
     const r = PositionRecalculator.multiplicadorNaPosicaoSchema(jogadorArrasto, pos, {
       col: cel.col,
+      linha: linhaDaCelula(cel),
     });
     return r.nativa === true;
   };
@@ -121,6 +123,7 @@ export function TacticPitch({
       j != null
         ? overallEfetivoEmCampo(j.overall, j.posicao, pos, j, {
             col: cel?.col,
+            linha: cel != null ? linhaDaCelula(cel) : undefined,
           })
         : undefined;
     const ovrEfetivo =

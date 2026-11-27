@@ -105,15 +105,27 @@ export function finasParaSlotSchema(
     case 'VOL':
       return ['VOL'];
     case 'MEI': {
-      if (col === 0) return ['ME', 'MD', 'MC', 'MEI'];
-      if (col === 4) return ['MD', 'ME', 'MC', 'MEI'];
-      if (linha === 'MO') return ['MEI', 'ST', 'MC'];
+      // Ponta na faixa MO ainda MEI (fallback): incluir PE/AE para não penalizar.
+      if (col === 0) {
+        if (linha === 'MO' || linha === 'ATA') return ['PE', 'AE', 'ME', 'MEI', 'MC'];
+        return ['ME', 'MD', 'MC', 'MEI'];
+      }
+      if (col === 4) {
+        if (linha === 'MO' || linha === 'ATA') return ['PD', 'AD', 'MD', 'MEI', 'MC'];
+        return ['MD', 'ME', 'MC', 'MEI'];
+      }
+      if (linha === 'MO') return ['ST', 'CA', 'MEI', 'MC'];
       return ['MC', 'MEI', 'ST'];
     }
     case 'ATA': {
-      if (col === 0) return ['AE', 'PE', 'CA', 'ST', 'AD'];
-      if (col === 4) return ['AD', 'PD', 'CA', 'ST', 'AE'];
-      return ['CA', 'ST'];
+      // Asas: só papéis de ponta/ala — evita meia com chute “herdar” OVR via ST/CA.
+      if (col === 0) return ['PE', 'AE'];
+      if (col === 4) return ['PD', 'AD'];
+      if (col === 1) return ['AE', 'PE'];
+      if (col === 3) return ['AD', 'PD'];
+      // Centro: CA na linha ATA; ST atrás do CA (MO) — separados p/ pena de ponta leve.
+      if (linha === 'MO') return ['ST'];
+      return ['CA'];
     }
   }
 }
@@ -355,10 +367,30 @@ export class PositionRecalculator {
       }
     }
 
-    // PD ↔ PE auto
+    // ATA/ST/CA com perfil de ponta (vel alta) → asas nativas (wing freely)
+    if (orig === 'CA' || orig === 'ST' || nativas.has('CA') || nativas.has('ST')) {
+      if (attr.velocidade >= 80 && (attr.drible >= 68 || attr.ataque >= 70)) {
+        nativas.add('AE');
+        nativas.add('AD');
+        nativas.add('PE');
+        nativas.add('PD');
+      }
+    }
+
+    // PD ↔ PE auto (lados opostos da mesma profundidade)
     if (orig === 'PD' || orig === 'PE' || nativas.has('PD') || nativas.has('PE')) {
       nativas.add('PD');
       nativas.add('PE');
+    }
+
+    // AE ↔ PE / AD ↔ PD — mesma ponta, altura avançada vs recuada (100% OVR)
+    if (orig === 'AE' || orig === 'PE' || nativas.has('AE') || nativas.has('PE')) {
+      nativas.add('AE');
+      nativas.add('PE');
+    }
+    if (orig === 'AD' || orig === 'PD' || nativas.has('AD') || nativas.has('PD')) {
+      nativas.add('AD');
+      nativas.add('PD');
     }
 
     // MEI → PD/PE (Vel≥78 Drible≥78)
@@ -366,14 +398,90 @@ export class PositionRecalculator {
       if (attr.velocidade >= 78 && attr.drible >= 78) {
         nativas.add('PD');
         nativas.add('PE');
+        nativas.add('AD');
+        nativas.add('AE');
+      }
+    }
+
+    const ehPonta =
+      orig === 'AE' ||
+      orig === 'AD' ||
+      orig === 'PE' ||
+      orig === 'PD' ||
+      nativas.has('AE') ||
+      nativas.has('AD') ||
+      nativas.has('PE') ||
+      nativas.has('PD');
+    // Ponta rápida e leve (ex.: Kevin vel17 / força13) — CA não é nativo grátis.
+    const pontaLeveCa =
+      ehPonta && attr.velocidade >= 78 && attr.forca < 70;
+
+    // ST ↔ CA — segundo atacante / centro (ponta leve: ST ok, CA só adaptado)
+    if (orig === 'ST' || orig === 'CA' || nativas.has('ST') || nativas.has('CA')) {
+      if (pontaLeveCa) {
+        nativas.add('ST');
+        nativas.delete('CA');
+      } else {
+        nativas.add('ST');
+        nativas.add('CA');
       }
     }
 
     // ——— B Adapted ———
-    // ST/AE/AD → CA
-    if (nativas.has('ST') || nativas.has('AE') || nativas.has('AD')) {
-      const fatorCA = attr.forca >= 75 || attr.finalizacao >= 78 ? 0.97 : 0.95;
-      addAdaptada('CA', fatorCA);
+    // ST/AE/AD/PE/PD → CA (força baixa + vel alta → pena leve ~−6%)
+    if (
+      nativas.has('ST') ||
+      nativas.has('AE') ||
+      nativas.has('AD') ||
+      nativas.has('PE') ||
+      nativas.has('PD') ||
+      orig === 'AE' ||
+      orig === 'AD' ||
+      orig === 'PE' ||
+      orig === 'PD'
+    ) {
+      if (!nativas.has('CA')) {
+        if (attr.forca >= 75 || attr.finalizacao >= 78) {
+          addAdaptada('CA', 0.97);
+        } else if (attr.velocidade >= 78 && attr.forca < 70) {
+          addAdaptada('CA', 0.94);
+        } else {
+          addAdaptada('CA', 0.95);
+        }
+      }
+    }
+
+    // Meias (MC/ME/MD/MEI/VOL) → AE/AD: chute sozinho NÃO libera ala.
+    // Vel+drible ok → −4%; chute ok + vel baixa → −6% (ex.: Paulo vel12/drible10).
+    {
+      const ehMeia =
+        orig === 'MC' ||
+        orig === 'MEI' ||
+        orig === 'ME' ||
+        orig === 'MD' ||
+        orig === 'VOL' ||
+        nativas.has('MC') ||
+        nativas.has('MEI') ||
+        nativas.has('ME') ||
+        nativas.has('MD') ||
+        nativas.has('VOL');
+      const jaAla =
+        nativas.has('AE') ||
+        nativas.has('AD') ||
+        nativas.has('PE') ||
+        nativas.has('PD');
+      if (ehMeia && !jaAla) {
+        if (attr.velocidade >= 74 && attr.drible >= 70) {
+          addAdaptada('AE', 0.96);
+          addAdaptada('AD', 0.96);
+        } else if (attr.finalizacao >= 70 && attr.velocidade < 70) {
+          addAdaptada('AE', 0.94);
+          addAdaptada('AD', 0.94);
+        } else if (attr.finalizacao >= 72 || attr.ataque >= 72) {
+          addAdaptada('AE', 0.95);
+          addAdaptada('AD', 0.95);
+        }
+      }
     }
 
     // MC → ST/MEI (Fin≥76 Ataque≥74 → −4%)

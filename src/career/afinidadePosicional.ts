@@ -133,12 +133,16 @@ export function temParidadeOvr(
   natural: Posicao,
   escalada: Posicao,
   m: MetricasParidade,
-  opts: { linhaNatural?: LinhaCampinho; linhaEscalada?: LinhaCampinho } = {},
+  opts: { linhaNatural?: LinhaCampinho; linhaEscalada?: LinhaCampinho; col?: number } = {},
 ): boolean {
   if (natural === escalada) {
     // PD/PE (ou qualquer papel) em profundidade diferente na mesma posição: OVR intacto.
+    // Exceto: meia schema MEI em célula AE/AD (ATA) — ver regras 6/7 com col de asa.
     return true;
   }
+
+  const colAsa =
+    opts.col === 0 || opts.col === 1 || opts.col === 3 || opts.col === 4;
 
   // 1) Volantes ↔ MC (MEI): sempre o mesmo OVR.
   if (
@@ -190,21 +194,24 @@ export function temParidadeOvr(
     return true;
   }
 
-  // 6) ST / AE / AD → AC (ATA): finalização ou cabeceio altos.
-  //    ST/AE/AD podem estar como LAT (ala) ou MEI (segundo); destino AC = ATA.
+  // 6) ST / AE / AD → AC (ATA centro): finalização ou cabeceio.
+  //    NÃO cobre AE/AD/PE/PD (cols de asa) — meia lento não ganha ala de graça.
   if (
     escalada === 'ATA' &&
     (natural === 'LAT' || natural === 'MEI') &&
+    !colAsa &&
     (m.chute >= LIMIARES_PARIDADE.paraAcChuteOuCabeca ||
       m.cabeceio >= LIMIARES_PARIDADE.paraAcChuteOuCabeca)
   ) {
     return true;
   }
 
-  // 7) MC (MEI) → ST (ATA) com boa finalização ou passe.
+  // 7) MC (MEI) → ST/CA (ATA centro) com boa finalização ou passe.
+  //    Asas AE/AD/PE/PD exigem velocidade (PositionRecalculator), sem paridade livre.
   if (
     natural === 'MEI' &&
     escalada === 'ATA' &&
+    !colAsa &&
     (m.chute >= LIMIARES_PARIDADE.meiAtaChuteOuPasse ||
       m.passe >= LIMIARES_PARIDADE.meiAtaChuteOuPasse)
   ) {
@@ -304,10 +311,15 @@ export function calcularAfinidadePosicional(
   const paridadeLegacy = temParidadeOvr(natural, posicaoEscalada, m, {
     linhaNatural: opts.linhaNatural,
     linhaEscalada: opts.linhaEscalada,
+    col: opts.col,
   });
 
   // Native / paridade legada → 100% OVR.
-  const paridadeOvr = matriz.nativa || paridadeLegacy || natural === posicaoEscalada;
+  // Mesma schema (ex. ATA→ATA) NÃO zera pena fina quando há col/linha de slot
+  // (ponta leve em CA, meia lento em AE, etc.).
+  const mesmaSchemaSemSlotFino =
+    natural === posicaoEscalada && opts.col == null && opts.linhaEscalada == null;
+  const paridadeOvr = matriz.nativa || paridadeLegacy || mesmaSchemaSemSlotFino;
 
   let multiplicador = matriz.mult;
   if (paridadeOvr) {
