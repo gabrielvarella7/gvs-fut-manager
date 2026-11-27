@@ -1,17 +1,17 @@
 import { montarEscalacao } from '../engine/matchEngine';
+import { filtrarAptosParaJogar } from './aptidaoEscalacao';
 import { valorMercado } from './playerUtils';
 import { ordenarElenco } from './ordenarElenco';
-import { jogadorDisponivel } from './mundoParalelo';
 import type { NoticiaCarreira } from './types';
 import type { EsquemaTatico, Jogador, Posicao, Time } from '../types/schema';
 import { criarRng } from '../engine/matchEngine';
 
-/** 11 ids: maior OVR em cada slot do esquema (ignora lesionados). */
+/** 11 ids: maior OVR em cada slot (ignora lesão+energia &lt;60%). */
 export function escalacaoAssistenteMelhorOverall(
   elenco: Jogador[],
   esquema: EsquemaTatico,
 ): number[] {
-  const aptos = elenco.filter(jogadorDisponivel);
+  const aptos = filtrarAptosParaJogar(elenco);
   try {
     return montarEscalacao(aptos, esquema).map((e) => e.jogador.id);
   } catch {

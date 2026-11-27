@@ -10,6 +10,12 @@ import {
 } from './narracao';
 import { metricasMotorDeAtributos } from '../career/atributosJogador';
 import {
+  bloqueadoPorLesaoComEnergiaBaixa,
+  ENERGIA_MINIMA_COM_LESAO,
+  jogadorPodeJogar,
+  mensagemBloqueioLesaoEnergia,
+} from '../career/aptidaoEscalacao';
+import {
   chanceLesaoPorFadiga,
   escolherReservaParaSub,
   energiaInicialPartida,
@@ -218,19 +224,25 @@ export interface OpcoesForcaSetores {
   rnd?: () => number;
 }
 
-function jogadorAptoEscalacao(j: Jogador): boolean {
-  return !j.lesao || j.lesao.diasRestantes <= 0;
+/** Preferência: saudáveis primeiro; lesionados com energia ≥60% só como emergência. */
+function jogadorPreferencialEscalacao(j: Jogador): boolean {
+  return jogadorPodeJogar(j) && (!j.lesao || j.lesao.diasRestantes <= 0);
 }
 
 export function montarEscalacao(elenco: Jogador[], esquema: EsquemaTatico): JogadorEmCampo[] {
   const elencoAf = PositionRecalculator.processarElenco(elenco);
   const slots = SLOTS_POR_ESQUEMA[esquemaOuPadrao(esquema)];
-  const aptos = [...elencoAf].filter(jogadorAptoEscalacao).sort((a, b) => b.overall - a.overall);
-  /** Lesionados só entram se não houver 11 aptos (evita crash mid-season / rodada ~19). */
-  const lesionados = [...elencoAf]
-    .filter((j) => !jogadorAptoEscalacao(j))
+  const aptos = [...elencoAf]
+    .filter(jogadorPreferencialEscalacao)
     .sort((a, b) => b.overall - a.overall);
-  const ordenado = [...aptos, ...lesionados];
+  /**
+   * Emergência: lesionados leves com energia ≥60% podem completar o XI.
+   * Nunca: lesão (contusão+) com energia &lt;60% — regra dura de escalação.
+   */
+  const emergencia = [...elencoAf]
+    .filter((j) => jogadorPodeJogar(j) && !jogadorPreferencialEscalacao(j))
+    .sort((a, b) => b.overall - a.overall);
+  const ordenado = [...aptos, ...emergencia];
   const usados = new Set<number>();
   const escalacao: JogadorEmCampo[] = [];
 
@@ -241,7 +253,13 @@ export function montarEscalacao(elenco: Jogador[], esquema: EsquemaTatico): Joga
       ordenado.find((j) => !usados.has(j.id) && j.status_escalacao === 'TITULAR');
     let fallback = improvisado ?? ordenado.find((j) => !usados.has(j.id));
     if (!fallback && elencoAf.length > 0) {
-      // Último recurso: reutiliza o mais forte já listado (nunca lança — evita trava na rodada).
+      // Último recurso entre quem PODE jogar (nunca bloqueado por lesão+energia).
+      fallback = [...elencoAf]
+        .filter(jogadorPodeJogar)
+        .sort((a, b) => b.overall - a.overall)[0];
+    }
+    if (!fallback && elencoAf.length > 0) {
+      // Elenco inviável: reutiliza o mais forte (evita crash), mas a UI/partida devem avisar.
       fallback = [...elencoAf].sort((a, b) => b.overall - a.overall)[0]!;
     }
     if (!fallback) {
@@ -475,12 +493,28 @@ export function simularPartida(input: MatchSimInput): MatchSimResult {
     posicoesSecundarias: jogador.posicoes_secundarias,
   });
 
-  let mandanteEsc =
+  const sanitizarEscalacaoInicial = (
+    esc: JogadorEmCampo[],
+    elenco: Jogador[],
+    esquema: EsquemaTatico,
+  ): JogadorEmCampo[] => {
+    if (esc.every((s) => jogadorPodeJogar(s.jogador))) return esc;
+    // Reconstrói XI sem quem está lesionado com energia < 60%.
+    return montarEscalacao(elenco, esquema);
+  };
+
+  let mandanteEsc = sanitizarEscalacaoInicial(
     input.mandante.escalacao ??
-    montarEscalacao(input.mandante.elenco, input.mandante.esquema);
-  let visitanteEsc =
+      montarEscalacao(input.mandante.elenco, input.mandante.esquema),
+    input.mandante.elenco,
+    input.mandante.esquema,
+  );
+  let visitanteEsc = sanitizarEscalacaoInicial(
     input.visitante.escalacao ??
-    montarEscalacao(input.visitante.elenco, input.visitante.esquema);
+      montarEscalacao(input.visitante.elenco, input.visitante.esquema),
+    input.visitante.elenco,
+    input.visitante.esquema,
+  );
 
   const rnd = criarRng(input.seed ?? Date.now());
   const energia = new Map<number, number>();
@@ -938,6 +972,119 @@ export function simularPartida(input: MatchSimInput): MatchSimResult {
     return false;
   };
 
+  const processarBloqueioLesaoEnergia = (
+    minuto: number,
+    casa: boolean,
+  ): boolean /* wo */ => {
+    const esc = casa ? mandanteEsc : visitanteEsc;
+    const fora = casa ? foraMandante : foraVisitante;
+    const timeId = casa ? input.mandante.timeId : input.visitante.timeId;
+    const nomeTime = casa ? input.mandante.nomeCurto : input.visitante.nomeCurto;
+    const elenco = casa ? input.mandante.elenco : input.visitante.elenco;
+    const idsUsados = casa ? idsUsadosBancoM : idsUsadosBancoV;
+    let subsRestantes = casa ? subsRestantesM : subsRestantesV;
+
+    for (const slot of esc) {
+      const j = slot.jogador;
+      if (fora.has(j.id)) continue;
+      const eAgora = energia.get(j.id) ?? j.energia;
+      const snapshot = { ...j, energia: eAgora };
+      if (!bloqueadoPorLesaoComEnergiaBaixa(snapshot)) continue;
+
+      const motivo =
+        mensagemBloqueioLesaoEnergia(snapshot) ??
+        `${j.nome} está lesionado com energia abaixo de ${ENERGIA_MINIMA_COM_LESAO}% e precisa sair.`;
+
+      const idsEmCampo = new Set(
+        esc.filter((x) => !fora.has(x.jogador.id)).map((x) => x.jogador.id),
+      );
+      const reserva =
+        subsRestantes > 0
+          ? escolherReservaParaSub(
+              elenco,
+              idsEmCampo,
+              idsUsados,
+              slot.posicaoEscalada,
+              rnd,
+            )
+          : null;
+
+      if (reserva) {
+        const idx = esc.findIndex((x) => x.jogador.id === j.id);
+        if (idx >= 0) {
+          esc[idx] = {
+            jogador: reserva,
+            posicaoEscalada: slot.posicaoEscalada,
+            celulaCampo: slot.celulaCampo,
+          };
+        }
+        idsUsados.add(reserva.id);
+        idsUsados.add(j.id);
+        energia.set(reserva.id, energiaInicialPartida(reserva.energia, rnd));
+        registrarFadiga(
+          reserva,
+          slot.posicaoEscalada,
+          (casa
+            ? input.mandante.fadigaPorMinutoMult
+            : input.visitante.fadigaPorMinutoMult) ?? 1,
+          casa ? modsM.desgaste_fisico : modsV.desgaste_fisico,
+          casa ? vetoresM : vetoresV,
+          (casa ? input.mandante.nivelPreparador : input.visitante.nivelPreparador) ?? 10,
+        );
+        fadigaPorJogador.delete(j.id);
+        subsRestantes -= 1;
+        if (casa) {
+          subsRestantesM = subsRestantes;
+          mandanteEsc = [...esc];
+        } else {
+          subsRestantesV = subsRestantes;
+          visitanteEsc = [...esc];
+        }
+        corpo.push({
+          minuto,
+          tipo: 'lesao',
+          timeId,
+          jogadorId: j.id,
+          texto: motivo,
+        });
+        corpo.push({
+          minuto,
+          tipo: 'substituicao',
+          timeId,
+          jogadorId: j.id,
+          jogadorIdEntrada: reserva.id,
+          texto: `Substituição médica em ${nomeTime}: sai ${j.nome} (lesão + energia ${Math.round(eAgora)}%), entra ${reserva.nome}.`,
+        });
+      } else {
+        fora.add(j.id);
+        fadigaPorJogador.delete(j.id);
+        if (casa) mandanteEsc = [...esc];
+        else visitanteEsc = [...esc];
+        corpo.push({
+          minuto,
+          tipo: 'lesao',
+          timeId,
+          jogadorId: j.id,
+          texto: `${motivo} Sem substituições — ${nomeTime} fica com um a menos.`,
+        });
+      }
+
+      minutosOcupados.add(minuto);
+      if (timeEmWO(casa ? mandanteEsc : visitanteEsc, fora)) {
+        woTimeId = timeId;
+        corpo.push({
+          minuto,
+          tipo: 'wo',
+          timeId,
+          texto: `W.O.: ${nomeTime} não tem jogadores suficientes em campo (mínimo 6 de linha + goleiro). Partida encerrada em 3 a 0.`,
+        });
+        return true;
+      }
+      return false;
+    }
+    return false;
+  };
+
   let minutoFinal = 90;
   for (let minuto = 1; minuto <= 90; minuto++) {
     const aHomemMenosM = foraMandante.size > 0;
@@ -965,6 +1112,15 @@ export function simularPartida(input: MatchSimInput): MatchSimResult {
     }
 
     if (processarLesaoFadiga(minuto, true) || processarLesaoFadiga(minuto, false)) {
+      minutoFinal = minuto;
+      break;
+    }
+
+    // Lesionado (contusão+) com energia caindo abaixo de 60% → saída forçada.
+    if (
+      processarBloqueioLesaoEnergia(minuto, true) ||
+      processarBloqueioLesaoEnergia(minuto, false)
+    ) {
       minutoFinal = minuto;
       break;
     }

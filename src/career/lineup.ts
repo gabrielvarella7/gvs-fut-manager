@@ -4,6 +4,10 @@ import { SLOTS_POR_ESQUEMA, esquemaOuPadrao } from '../data/esquemasTaticos';
 import { montarEscalacao, type JogadorEmCampo } from '../engine/matchEngine';
 import { PositionRecalculator } from './positionRecalculator';
 import type { EsquemaTatico, Jogador, StatusEscalacao } from '../types/schema';
+import {
+  jogadorPodeJogar,
+  sanitizarAlinhamento11,
+} from './aptidaoEscalacao';
 
 export const TITULARES_PARTIDA = 11;
 export const RESERVAS_PARTIDA = 11;
@@ -17,7 +21,7 @@ export function idsEscalacaoPadrao(elenco: Jogador[], esquema: EsquemaTatico): n
   try {
     return montarEscalacao(enriquecerElencoAfinidade(elenco), esquema).map((e) => e.jogador.id);
   } catch {
-    return elenco.slice(0, 11).map((j) => j.id);
+    return elenco.filter(jogadorPodeJogar).slice(0, 11).map((j) => j.id);
   }
 }
 
@@ -25,7 +29,7 @@ export function idsEscalacaoPadrao(elenco: Jogador[], esquema: EsquemaTatico): n
 export function idsBancoPadrao(elenco: Jogador[], titularesIds: number[]): number[] {
   const setTit = new Set(titularesIds.filter((id) => id > 0));
   return [...elenco]
-    .filter((j) => !setTit.has(j.id) && (!j.lesao || j.lesao.diasRestantes <= 0))
+    .filter((j) => !setTit.has(j.id) && jogadorPodeJogar(j))
     .sort((a, b) => b.overall - a.overall)
     .slice(0, RESERVAS_PARTIDA)
     .map((j) => j.id);
@@ -119,14 +123,15 @@ export function escalacaoDeIds(
   grade?: CelulaGrade[] | null,
 ): JogadorEmCampo[] {
   const elencoAf = enriquecerElencoAfinidade(elenco);
+  const { ids: idsLimpos } = sanitizarAlinhamento11(elencoAf, ids);
   const slots = SLOTS_POR_ESQUEMA[esquemaOuPadrao(esquema)];
   const map = new Map(elencoAf.map((j) => [j.id, j]));
   const lista: JogadorEmCampo[] = [];
-  for (let i = 0; i < Math.min(11, ids.length); i++) {
-    const jogador = map.get(ids[i]);
-    if (!jogador) continue;
+  for (let i = 0; i < Math.min(11, idsLimpos.length); i++) {
+    const jogador = map.get(idsLimpos[i]!);
+    if (!jogador || !jogadorPodeJogar(jogador)) continue;
     const posicaoEscalada =
-      grade?.[i] != null ? posicaoNaCelula(grade[i]) : (slots[i] ?? jogador.posicao);
+      grade?.[i] != null ? posicaoNaCelula(grade[i]!) : (slots[i] ?? jogador.posicao);
     lista.push({
       jogador,
       posicaoEscalada,

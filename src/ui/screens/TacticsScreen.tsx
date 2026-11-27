@@ -1,5 +1,10 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { getTimeFicticio } from '../../career/fictionalLeague';
+import {
+  bloqueadoPorLesaoComEnergiaBaixa,
+  mensagemBloqueioLesaoEnergia,
+  sanitizarAlinhamento11,
+} from '../../career/aptidaoEscalacao';
 import { escalacaoAssistenteMelhorOverall } from '../../career/assistenteTecnico';
 import {
   idsBancoPadrao,
@@ -237,6 +242,12 @@ export function TacticsScreen() {
         persistirLineup(slotIds, next, grade11, selecao, esquemaBase, selecao === 'PERSONALIZADO');
         return next;
       }
+      const entrando = elenco.find((j) => j.id === jogadorId);
+      if (entrando && bloqueadoPorLesaoComEnergiaBaixa(entrando)) {
+        const msg = mensagemBloqueioLesaoEnergia(entrando);
+        if (msg) useGameStore.setState({ avisoSalvo: msg });
+        return prev;
+      }
       if (prev.length >= RESERVAS_PARTIDA) return prev;
       const next = [...prev, jogadorId];
       persistirLineup(slotIds, next, grade11, selecao, esquemaBase, selecao === 'PERSONALIZADO');
@@ -245,6 +256,12 @@ export function TacticsScreen() {
   };
 
   const aplicarSubstituicao = (slot: number, jogadorId: number) => {
+    const entrando = elenco.find((j) => j.id === jogadorId);
+    if (entrando && bloqueadoPorLesaoComEnergiaBaixa(entrando)) {
+      const msg = mensagemBloqueioLesaoEnergia(entrando);
+      if (msg) useGameStore.setState({ avisoSalvo: msg });
+      return;
+    }
     const next = [...slotIds];
     const outroSlot = next.indexOf(jogadorId);
     const saida = next[slot];
@@ -344,15 +361,24 @@ export function TacticsScreen() {
   const salvarEscolha = () => {
     const personalizado = selecao === 'PERSONALIZADO';
     const esq = personalizado ? esquemaBase : (selecao as EsquemaTatico);
+    const { ids: alinhamentoLimpo, trocas } = sanitizarAlinhamento11(elenco, slotIds);
+    if (trocas.length > 0) {
+      useGameStore.setState({
+        avisoSalvo: trocas
+          .map((t) => `${t.saiu} → ${t.entrou}: ${t.motivo}`)
+          .join(' '),
+      });
+      setSlotIds(alinhamentoLimpo);
+    }
     commitEscolha({
       esquema: esq,
-      alinhamento11: slotIds,
+      alinhamento11: alinhamentoLimpo,
       banco11: bancoIds,
       gradeTatica11: personalizado ? grade11 : null,
       personalizado,
       configTatica: configParaEsquema(esq, configLocal),
     });
-    const ok = validarRelacionadosPartida(slotIds, bancoIds).ok;
+    const ok = validarRelacionadosPartida(alinhamentoLimpo, bancoIds).ok;
     if (partidaRetorno && ok) voltarPartida();
   };
 
@@ -556,7 +582,7 @@ export function TacticsScreen() {
             Assistente escolhe os melhores (11+11)
           </CmBtn>
           <span className="self-center text-xs text-zinc-500">
-            11 titulares por posição + 11 reservas por OVR ({rotuloCampo}).
+            11 titulares + 11 reservas ({rotuloCampo}); exclui lesão com energia &lt;60%.
           </span>
         </div>
       )}
