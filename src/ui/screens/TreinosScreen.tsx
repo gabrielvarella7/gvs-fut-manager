@@ -187,6 +187,12 @@ export function TreinosScreen() {
 
       <CmPanel className="mb-4">
         <h2 className="mb-2 text-sm font-semibold text-emerald-400">Regime de intensidade</h2>
+        <p className="mb-2 text-xs text-zinc-500">
+          Alerta do fisiologista (perfil frágil): use regime{' '}
+          <span className="text-zinc-300">Regenerativo</span>, sessão{' '}
+          <span className="text-zinc-300">Prevenção Muscular</span> e/ou o plano individual
+          homônimo no elenco.
+        </p>
         <MotionRegimes
           regimes={dbTreinos.regimes_intensidade}
           selecionado={prog.regime_id}
@@ -217,7 +223,8 @@ export function TreinosScreen() {
         <h2 className="mb-2 text-sm font-semibold text-emerald-400">Plano individual (elenco)</h2>
         <p className="mb-2 text-xs text-zinc-500">
           XP acumula entre rodadas; a 100 XP sobe +1 no atributo. Polivalência reduz improvisação
-          na partida.
+          na partida. Prevenção Muscular corta risco de lesão e ajuda a recuperar carga em atletas
+          frágeis.
         </p>
         <div className="max-h-64 space-y-1 overflow-y-auto">
           {elenco.slice(0, 22).map((j) => {

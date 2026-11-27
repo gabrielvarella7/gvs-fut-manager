@@ -1,12 +1,19 @@
 import { useState } from 'react';
+import type { EstadoTemporada } from '../../career/brasileirao';
+import type { DadosH2H } from '../../career/h2hMatch';
 import {
   estatisticasParciais,
   type PeriodoEstatisticas,
 } from '../../engine/matchStats';
 import type { MatchSimResult } from '../../engine/matchEngine';
+import type { InfoJogadorPartida } from '../../engine/jogadorDaPartida';
+import type { CampeonatoConfig, Time } from '../../types/schema';
+import { MatchEventTimeline } from './MatchEventTimeline';
+import { MatchH2HPanel } from './MatchH2HPanel';
 import { MatchMomentum } from './MatchMomentum';
 import { MatchPreGame } from './MatchPreGame';
 import { MatchStatsPanel } from './MatchStatsPanel';
+import { MatchClassificacaoPanel } from './MatchClassificacaoPanel';
 import {
   MatchPlayback,
   type PlaybackProgress,
@@ -14,13 +21,14 @@ import {
 } from '../MatchPlayback';
 import { CmBtn } from '../cm/CmShell';
 
-type Aba = 'comentario' | 'estatisticas' | 'prejogo' | 'detalhes';
+type Aba = 'comentario' | 'estatisticas' | 'classificacao' | 'prejogo' | 'detalhes' | 'h2h';
 
 type Props = {
   result: MatchSimResult;
   mandanteNome: string;
   visitanteNome: string;
   estadio?: string;
+  jogadoresInfo?: ReadonlyMap<number, InfoJogadorPartida> | Readonly<Record<number, InfoJogadorPartida>>;
   velocidade: VelocidadePlayback;
   onVelocidade: (v: VelocidadePlayback) => void;
   pausado: boolean;
@@ -37,6 +45,19 @@ type Props = {
   onIntervalo?: () => void;
   skipToEndNonce?: number;
   onIrProFimDoJogo?: () => void;
+  /** Final score only: leave transmission and return to escritório / hub. */
+  onFinalizarJogo?: () => void;
+  /** Classificação ao vivo do campeonato (modo liga). */
+  classificacao?: {
+    estado: EstadoTemporada;
+    campeonato: CampeonatoConfig;
+    times: Time[];
+    partidaAoVivoId: number;
+    mandanteId: string;
+    visitanteId: string;
+  } | null;
+  /** Head-to-head panel data (liga ou torneio). */
+  h2h?: DadosH2H | null;
 };
 
 export function MatchCenter({
@@ -44,6 +65,7 @@ export function MatchCenter({
   mandanteNome,
   visitanteNome,
   estadio,
+  jogadoresInfo,
   velocidade,
   onVelocidade,
   pausado,
@@ -59,20 +81,37 @@ export function MatchCenter({
   onIntervalo,
   skipToEndNonce = 0,
   onIrProFimDoJogo,
+  onFinalizarJogo,
+  classificacao = null,
+  h2h = null,
 }: Props) {
   const [aba, setAba] = useState<Aba>('comentario');
-  const [minuto, setMinuto] = useState(0);
+  const [minuto, setMinuto] = useState(resumePlayback?.minuto ?? 0);
   const [periodoStats, setPeriodoStats] = useState<PeriodoEstatisticas>('todos');
+  const [progresso, setProgresso] = useState<PlaybackProgress>(
+    resumePlayback ?? { idx: 0, golsM: 0, golsV: 0, minuto: 0 },
+  );
+  const [syncKey, setSyncKey] = useState(playbackKey ?? '0');
+  if ((playbackKey ?? '0') !== syncKey) {
+    const base = resumePlayback ?? { idx: 0, golsM: 0, golsV: 0, minuto: 0 };
+    setSyncKey(playbackKey ?? '0');
+    setProgresso(base);
+    setMinuto(base.minuto);
+  }
 
   const stats =
     result.estatisticas &&
     estatisticasParciais(result, minuto, result.mandanteId, periodoStats);
 
+  const lancamentosVisiveis = result.lancamentos.slice(0, progresso.idx);
+
   const abas: { id: Aba; label: string }[] = [
     { id: 'detalhes', label: 'Detalhes' },
     { id: 'estatisticas', label: 'Estatísticas' },
+    ...(classificacao ? [{ id: 'classificacao' as const, label: 'Classificação' }] : []),
     { id: 'comentario', label: 'Comentário' },
     { id: 'prejogo', label: 'Pré-jogo' },
+    ...(h2h ? [{ id: 'h2h' as const, label: 'H2H' }] : []),
   ];
 
   const mostrarPlayback = aba === 'comentario' || aba === 'detalhes';
@@ -96,12 +135,21 @@ export function MatchCenter({
         ))}
       </nav>
 
+      {aba === 'comentario' && (
+        <MatchEventTimeline
+          lancamentos={lancamentosVisiveis}
+          mandanteId={result.mandanteId}
+          placarAtual={{ m: progresso.golsM, v: progresso.golsV }}
+        />
+      )}
+
       {/* Mantém montado para não resetar placar/tempo ao trocar de aba */}
       <div className={mostrarPlayback ? undefined : 'hidden'} aria-hidden={!mostrarPlayback}>
         <MatchPlayback
           result={result}
           mandanteNome={mandanteNome}
           visitanteNome={visitanteNome}
+          jogadoresInfo={jogadoresInfo}
           velocidade={velocidade}
           pausado={pausado}
           onPausado={onPausado}
@@ -109,7 +157,17 @@ export function MatchCenter({
             setMinuto(m);
             onMinuto(m);
           }}
-          onProgress={onPlaybackProgress}
+          onProgress={(p) => {
+            setProgresso((prev) =>
+              prev.idx === p.idx &&
+              prev.golsM === p.golsM &&
+              prev.golsV === p.golsV &&
+              prev.minuto === p.minuto
+                ? prev
+                : p,
+            );
+            onPlaybackProgress?.(p);
+          }}
           resumeFrom={resumePlayback}
           playbackKey={playbackKey}
           onIntervalo={onIntervalo}
@@ -118,22 +176,27 @@ export function MatchCenter({
       </div>
 
       {aba === 'estatisticas' && stats && (
-        <>
-          <MatchStatsPanel
-            mandante={stats.mandante}
-            visitante={stats.visitante}
-            mandanteNome={mandanteNome}
-            visitanteNome={visitanteNome}
-            periodo={periodoStats}
-            onPeriodo={setPeriodoStats}
-          />
-          <MatchMomentum
-            momento={result.estatisticas.momento}
-            minutoAtual={minuto}
-            mandanteNome={mandanteNome}
-            visitanteNome={visitanteNome}
-          />
-        </>
+        <MatchStatsPanel
+          mandante={stats.mandante}
+          visitante={stats.visitante}
+          mandanteNome={mandanteNome}
+          visitanteNome={visitanteNome}
+          periodo={periodoStats}
+          onPeriodo={setPeriodoStats}
+        />
+      )}
+
+      {aba === 'classificacao' && classificacao && (
+        <MatchClassificacaoPanel
+          estado={classificacao.estado}
+          campeonato={classificacao.campeonato}
+          times={classificacao.times}
+          partidaAoVivoId={classificacao.partidaAoVivoId}
+          resultAoVivo={result}
+          minuto={minuto}
+          mandanteId={classificacao.mandanteId}
+          visitanteId={classificacao.visitanteId}
+        />
       )}
 
       {aba === 'prejogo' && (
@@ -145,6 +208,8 @@ export function MatchCenter({
         />
       )}
 
+      {aba === 'h2h' && h2h && <MatchH2HPanel dados={h2h} />}
+
       {aba === 'detalhes' && stats && (
         <MatchStatsPanel
           mandante={stats.mandante}
@@ -153,6 +218,15 @@ export function MatchCenter({
           visitanteNome={visitanteNome}
           periodo={periodoStats}
           onPeriodo={setPeriodoStats}
+        />
+      )}
+
+      {result.estatisticas?.momento && (
+        <MatchMomentum
+          momento={result.estatisticas.momento}
+          minutoAtual={minuto}
+          mandanteNome={mandanteNome}
+          visitanteNome={visitanteNome}
         />
       )}
 
@@ -216,6 +290,11 @@ export function MatchCenter({
         )}
         {aoVivo && onIrProFimDoJogo && (
           <CmBtn onClick={onIrProFimDoJogo}>ir pro fim do jogo</CmBtn>
+        )}
+        {!aoVivo && onFinalizarJogo && (
+          <CmBtn variant="primary" onClick={onFinalizarJogo}>
+            Finalizar jogo
+          </CmBtn>
         )}
       </div>
     </div>

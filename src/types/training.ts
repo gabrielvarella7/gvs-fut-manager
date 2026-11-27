@@ -17,6 +17,7 @@ export type PlanoIndividualId =
   | 'MATADOR_FINALIZACAO'
   | 'ACELERACAO_EXPLOSAO'
   | 'MANUTENCAO_VETERANO'
+  | 'PREVENCAO_MUSCULAR'
   | 'ADAPTACAO_POLIVALENCIA';
 
 export type GravidadeLesaoTreino = 'LEVE' | 'MODERADA' | 'SERIA' | 'GRAVE';
@@ -51,7 +52,7 @@ export interface DefinicaoSessaoColetiva {
 export interface DefinicaoPlanoIndividual {
   id: PlanoIndividualId;
   nome: string;
-  atributo_alvo: AtributoTreinoXp | 'longevidade' | 'polivalencia';
+  atributo_alvo: AtributoTreinoXp | 'longevidade' | 'prevencao' | 'polivalencia';
   peso_distribuicao: Record<AtributoTreinoXp, number>;
   descricao: string;
 }

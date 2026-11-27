@@ -1,3 +1,4 @@
+import { getGeneticaSegura } from './genetica';
 import type { Jogador } from '../types/schema';
 import type {
   EstadoTreinoJogador,
@@ -7,6 +8,8 @@ import type {
 
 export function planoPadraoJogador(j: Jogador): PlanoIndividualId {
   if (j.idade >= 31) return 'MANUTENCAO_VETERANO';
+  // Perfil frágil: fisiologista recomenda Prevenção Muscular (qualquer idade).
+  if (getGeneticaSegura(j).propensao_lesao >= 1.45) return 'PREVENCAO_MUSCULAR';
   if (j.idade <= 21) return 'MATADOR_FINALIZACAO';
   if (j.posicao === 'ZAG' || j.posicao === 'VOL') return 'EVOLUCAO_DEFENSIVA';
   if (j.posicao === 'ATA') return 'MATADOR_FINALIZACAO';
