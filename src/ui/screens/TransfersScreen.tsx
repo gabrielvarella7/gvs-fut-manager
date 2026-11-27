@@ -12,24 +12,21 @@ import { obterNivelRivalidade } from '../../career/mercadoTransferencias';
 import { pretensaoClubeVendedor, pretensaoSalarioJogador } from '../../career/transfers';
 import { rotuloTendenciaSaida, rumorPendenteResposta } from '../../career/sondagemMercado';
 import type { NegociacaoTransferencia } from '../../career/types';
-import type { Jogador, Posicao } from '../../types/schema';
+import type { Jogador } from '../../types/schema';
 import { useGameStore } from '../../store/useGameStore';
 import { CmCareerShell } from '../cm/CmCareerShell';
 import { CmBtn, CmPanel } from '../cm/CmShell';
+import {
+  PlayerListToolbar,
+  SORT_MERCADO,
+  SORT_VENDER,
+  jogadorAccessors,
+  usePlayerListQuery,
+} from '../playerList';
 
 type Aba = 'comprar' | 'vender' | 'negociacoes';
 
 const ITENS_POR_PAGINA = 7;
-
-const POSICOES: Array<Posicao | 'TODAS'> = [
-  'TODAS',
-  'GOL',
-  'ZAG',
-  'LAT',
-  'VOL',
-  'MEI',
-  'ATA',
-];
 
 export function TransfersScreen() {
   const clubeRealId = useGameStore((s) => s.clubeRealId);
@@ -49,8 +46,6 @@ export function TransfersScreen() {
   const rumores = useGameStore((s) => s.mundoClube?.rumoresOfertas ?? []);
 
   const [aba, setAba] = useState<Aba>('comprar');
-  const [busca, setBusca] = useState('');
-  const [posicao, setPosicao] = useState<Posicao | 'TODAS'>('TODAS');
   const [negociacaoAtiva, setNegociacaoAtiva] = useState<string | null>(null);
   const [visiveisCompra, setVisiveisCompra] = useState(ITENS_POR_PAGINA);
   const [visiveisVenda, setVisiveisVenda] = useState(ITENS_POR_PAGINA);
@@ -65,30 +60,35 @@ export function TransfersScreen() {
     [clubeRealId, jogadoresReais],
   );
 
-  const mercado = useMemo(() => {
-    const q = busca.trim().toLowerCase();
-    return ordenarElenco(
-      jogadoresReais.filter((j) => {
-        if (!clubeRealId || j.time_id === clubeRealId) return false;
-        if (posicao !== 'TODAS' && j.posicao !== posicao) return false;
-        if (q && !j.nome.toLowerCase().includes(q)) return false;
-        return true;
-      }),
-    );
-  }, [busca, clubeRealId, jogadoresReais, posicao]);
+  const mercadoBase = useMemo(
+    () =>
+      clubeRealId
+        ? ordenarElenco(jogadoresReais.filter((j) => j.time_id !== clubeRealId))
+        : [],
+    [clubeRealId, jogadoresReais],
+  );
+
+  const compraQuery = usePlayerListQuery(mercadoBase, jogadorAccessors, SORT_MERCADO, {
+    id: 'ovr',
+    dir: 'desc',
+  });
+  const vendaQuery = usePlayerListQuery(elencoProprio, jogadorAccessors, SORT_VENDER, {
+    id: 'ovr',
+    dir: 'desc',
+  });
 
   useEffect(() => {
     setVisiveisCompra(ITENS_POR_PAGINA);
-  }, [busca, posicao]);
+  }, [compraQuery.filters, compraQuery.sort]);
 
   useEffect(() => {
     setVisiveisVenda(ITENS_POR_PAGINA);
-  }, [elencoProprio.length]);
+  }, [vendaQuery.filters, vendaQuery.sort, elencoProprio.length]);
 
-  const mercadoVisivel = mercado.slice(0, visiveisCompra);
-  const restantesCompra = mercado.length - visiveisCompra;
-  const elencoVendaVisivel = elencoProprio.slice(0, visiveisVenda);
-  const restantesVenda = elencoProprio.length - visiveisVenda;
+  const mercadoVisivel = compraQuery.result.slice(0, visiveisCompra);
+  const restantesCompra = compraQuery.result.length - visiveisCompra;
+  const elencoVendaVisivel = vendaQuery.result.slice(0, visiveisVenda);
+  const restantesVenda = vendaQuery.result.length - visiveisVenda;
 
   const negAtiva = negociacoes.find((n) => n.id === negociacaoAtiva) ?? negociacoes[0] ?? null;
 
@@ -190,26 +190,17 @@ export function TransfersScreen() {
 
       {aba === 'comprar' && (
         <>
-          <div className="mb-3 flex flex-wrap gap-2">
-            <input
-              type="search"
-              placeholder="Buscar jogador…"
-              value={busca}
-              onChange={(e) => setBusca(e.target.value)}
-              className="min-w-[200px] flex-1 rounded border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm text-zinc-100"
-            />
-            <select
-              value={posicao}
-              onChange={(e) => setPosicao(e.target.value as Posicao | 'TODAS')}
-              className="rounded border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm"
-            >
-              {POSICOES.map((p) => (
-                <option key={p} value={p}>
-                  {p === 'TODAS' ? 'Todas posições' : p}
-                </option>
-              ))}
-            </select>
-          </div>
+          <PlayerListToolbar
+            filters={compraQuery.filters}
+            onFiltersChange={compraQuery.setFilters}
+            enabledFilters={['busca', 'posicao', 'ovr', 'valor', 'idade']}
+            sortOptions={SORT_MERCADO}
+            sort={compraQuery.sort}
+            onSortKeyChange={compraQuery.setSortKey}
+            onSortDirChange={compraQuery.setSortDir}
+            shown={compraQuery.shown}
+            total={compraQuery.total}
+          />
           <ListaMercado
             jogadores={mercadoVisivel}
             timesReais={timesReais}
@@ -233,6 +224,17 @@ export function TransfersScreen() {
 
       {aba === 'vender' && (
         <>
+          <PlayerListToolbar
+            filters={vendaQuery.filters}
+            onFiltersChange={vendaQuery.setFilters}
+            enabledFilters={['busca', 'posicao', 'ovr', 'valor']}
+            sortOptions={SORT_VENDER}
+            sort={vendaQuery.sort}
+            onSortKeyChange={vendaQuery.setSortKey}
+            onSortDirChange={vendaQuery.setSortDir}
+            shown={vendaQuery.shown}
+            total={vendaQuery.total}
+          />
           <ListaVenda
             elenco={elencoVendaVisivel}
             onVender={(id, valor) => {
@@ -243,6 +245,9 @@ export function TransfersScreen() {
               }
             }}
           />
+          {vendaQuery.total > 0 && vendaQuery.shown === 0 && (
+            <p className="mt-3 text-sm text-zinc-500">Nenhum jogador com esses filtros.</p>
+          )}
           {restantesVenda > 0 && (
             <div className="mt-4 flex justify-center">
               <CmBtn variant="ghost" onClick={() => setVisiveisVenda((v) => v + ITENS_POR_PAGINA)}>

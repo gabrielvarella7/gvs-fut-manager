@@ -12,6 +12,12 @@ import type {
 import { useGameStore } from '../../store/useGameStore';
 import { CmCareerShell } from '../cm/CmCareerShell';
 import { CmBtn, CmPanel } from '../cm/CmShell';
+import {
+  PlayerListToolbar,
+  SORT_MERCADO,
+  jogadorAccessors,
+  usePlayerListQuery,
+} from '../playerList';
 
 export function TreinosScreen() {
   const clubeRealId = useGameStore((s) => s.clubeRealId);
@@ -56,14 +62,13 @@ export function TreinosScreen() {
   }, [brasileirao, clubeRealId, timesReais]);
 
   const elenco = useMemo(
-    () =>
-      clubeRealId
-        ? [...jogadores.filter((j) => j.time_id === clubeRealId)].sort(
-            (a, b) => b.overall - a.overall,
-          )
-        : [],
+    () => (clubeRealId ? jogadores.filter((j) => j.time_id === clubeRealId) : []),
     [jogadores, clubeRealId],
   );
+  const elencoQuery = usePlayerListQuery(elenco, jogadorAccessors, SORT_MERCADO, {
+    id: 'ovr',
+    dir: 'desc',
+  });
 
   const executar = () => {
     const err = aplicar();
@@ -247,8 +252,19 @@ export function TreinosScreen() {
           na partida. Prevenção Muscular corta risco de lesão e ajuda a recuperar carga em atletas
           frágeis.
         </p>
+        <PlayerListToolbar
+          filters={elencoQuery.filters}
+          onFiltersChange={elencoQuery.setFilters}
+          enabledFilters={['busca', 'posicao', 'ovr']}
+          sortOptions={SORT_MERCADO}
+          sort={elencoQuery.sort}
+          onSortKeyChange={elencoQuery.setSortKey}
+          onSortDirChange={elencoQuery.setSortDir}
+          shown={Math.min(elencoQuery.shown, 40)}
+          total={elencoQuery.total}
+        />
         <div className="max-h-64 space-y-1 overflow-y-auto">
-          {elenco.slice(0, 22).map((j) => {
+          {elencoQuery.result.slice(0, 40).map((j) => {
             const est = mundo?.estadosTreino?.find((e) => e.jogador_id === j.id);
             const plano = est?.plano_individual_id ?? 'MAESTRO_DISTRIBUICAO';
             const lesao = j.lesao && j.lesao.diasRestantes > 0;
