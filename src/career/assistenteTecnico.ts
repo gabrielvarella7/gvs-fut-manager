@@ -1,4 +1,7 @@
-import { montarEscalacao } from '../engine/matchEngine';
+import {
+  montarEscalacao,
+  montarEscalacaoPorSlots,
+} from '../engine/matchEngine';
 import {
   filtrarAptosAssistente,
   jogadorAptoAssistente,
@@ -6,6 +9,8 @@ import {
 } from './aptidaoEscalacao';
 import { valorMercado } from './playerUtils';
 import { ordenarElenco } from './ordenarElenco';
+import type { CelulaGrade } from '../data/gradeCampinho';
+import { posicaoNaCelula } from '../data/gradeCampinho';
 import type { NoticiaCarreira } from './types';
 import type { EsquemaTatico, Jogador, Posicao, Time } from '../types/schema';
 import { criarRng } from '../engine/matchEngine';
@@ -14,15 +19,24 @@ import { criarRng } from '../engine/matchEngine';
  * 11 ids: maior OVR em cada slot.
  * Exclui a mesma trava manual (lesão+energia &lt;60%) e qualquer lesão ativa
  * (indisponível no plantel) — o Assistente não escala quem a UI marca fora.
+ *
+ * Se `grade` (11 células) for passada, preenche pelos papéis atuais do campinho
+ * (`posicaoNaCelula`) — não redefine a geometria; só escolhe jogadores.
  */
 export function escalacaoAssistenteMelhorOverall(
   elenco: Jogador[],
   esquema: EsquemaTatico,
+  grade?: CelulaGrade[] | null,
 ): number[] {
   const aptos = filtrarAptosAssistente(elenco);
   let ids: number[];
   try {
-    ids = montarEscalacao(aptos, esquema).map((e) => e.jogador.id);
+    if (grade?.length === 11) {
+      const slots = grade.map(posicaoNaCelula);
+      ids = montarEscalacaoPorSlots(aptos, slots).map((e) => e.jogador.id);
+    } else {
+      ids = montarEscalacao(aptos, esquema).map((e) => e.jogador.id);
+    }
   } catch {
     ids = ordenarElenco(aptos)
       .slice(0, 11)

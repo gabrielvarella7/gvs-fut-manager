@@ -246,15 +246,24 @@ function TacticsScreenPro() {
 
   const aplicarMelhorOverall = () => {
     const esq = esquemaGrafico;
-    const bruto = escalacaoAssistenteMelhorOverall(elenco, esq);
+    const personalizado = selecao === 'PERSONALIZADO';
+    // Mantém geometria atual; nunca volta ao template só porque o Assistente preencheu.
+    const grade =
+      grade11.length === 11
+        ? grade11.map((c) => ({ ...c }))
+        : gradePadrao(esq);
+    // Personalizado: papéis = células atuais. Esquema fixo: slots do template.
+    const bruto = escalacaoAssistenteMelhorOverall(
+      elenco,
+      esq,
+      personalizado ? grade : null,
+    );
     const { ids } = sanitizarAlinhamento11(elenco, bruto);
     if (ids.length < 11) return;
-    const grade = gradePadrao(esq);
     const banco = idsBancoPadrao(elenco, ids);
     setSlotIds(ids);
     setBancoIds(banco);
     setGrade11(grade);
-    const personalizado = selecao === 'PERSONALIZADO';
     if (personalizado) entrarPersonalizado();
     persistirLineup(
       ids,

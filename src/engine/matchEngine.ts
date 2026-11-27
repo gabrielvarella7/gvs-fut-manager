@@ -256,9 +256,12 @@ function jogadorPreferencialEscalacao(j: Jogador): boolean {
   return jogadorPodeJogar(j) && (!j.lesao || j.lesao.diasRestantes <= 0);
 }
 
-export function montarEscalacao(elenco: Jogador[], esquema: EsquemaTatico): JogadorEmCampo[] {
+/** Preenche XI pelo array de posições (schema) — usado por esquemas e grade personalizada. */
+export function montarEscalacaoPorSlots(
+  elenco: Jogador[],
+  slots: Posicao[],
+): JogadorEmCampo[] {
   const elencoAf = PositionRecalculator.processarElenco(elenco);
-  const slots = SLOTS_POR_ESQUEMA[esquemaOuPadrao(esquema)];
   const aptos = [...elencoAf]
     .filter(jogadorPreferencialEscalacao)
     .sort((a, b) => b.overall - a.overall);
@@ -297,6 +300,11 @@ export function montarEscalacao(elenco: Jogador[], esquema: EsquemaTatico): Joga
   }
 
   return escalacao;
+}
+
+export function montarEscalacao(elenco: Jogador[], esquema: EsquemaTatico): JogadorEmCampo[] {
+  const slots = SLOTS_POR_ESQUEMA[esquemaOuPadrao(esquema)];
+  return montarEscalacaoPorSlots(elenco, slots);
 }
 
 function setorDaPosicao(pos: Posicao): keyof ForcaSetores {
