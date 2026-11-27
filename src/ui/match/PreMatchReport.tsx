@@ -213,6 +213,8 @@ export function PreMatchReport({ relatorio: r, acoes }: Props) {
         </div>
       </div>
 
+      {acoes && <div className="flex flex-wrap gap-2">{acoes}</div>}
+
       <div className="flex flex-wrap gap-1 rounded-lg border border-zinc-800 bg-zinc-900/80 p-1">
         {TABS.map((t) => (
           <button
@@ -411,8 +413,6 @@ export function PreMatchReport({ relatorio: r, acoes }: Props) {
           )}
         </div>
       )}
-
-      {acoes && <div className="flex flex-wrap gap-2 pt-2">{acoes}</div>}
     </div>
   );
 }

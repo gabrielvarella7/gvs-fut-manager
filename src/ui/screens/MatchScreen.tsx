@@ -883,6 +883,17 @@ export function MatchScreen() {
             />
           ) : (
             <>
+              <div className="mb-4 flex flex-wrap gap-2">
+                <CmBtn
+                  onClick={() => void iniciarPartida()}
+                  disabled={busy || !checkRelacionados.ok}
+                >
+                  {busy ? 'Preparando…' : 'Iniciar partida'}
+                </CmBtn>
+                <CmBtn variant="ghost" onClick={abrirTatica}>
+                  Táticas (pré-jogo)
+                </CmBtn>
+              </div>
               <MatchPreGame
                 mandanteNome={mandanteNome ?? ''}
                 visitanteNome={visitanteNome ?? ''}
@@ -896,17 +907,6 @@ export function MatchScreen() {
                 equipes={equipesPreJogo}
                 infoPartida={infoPartidaPreJogo}
               />
-              <div className="mt-4 flex flex-wrap gap-2">
-                <CmBtn
-                  onClick={() => void iniciarPartida()}
-                  disabled={busy || !checkRelacionados.ok}
-                >
-                  {busy ? 'Preparando…' : 'Iniciar partida'}
-                </CmBtn>
-                <CmBtn variant="ghost" onClick={abrirTatica}>
-                  Táticas (pré-jogo)
-                </CmBtn>
-              </div>
             </>
           )}
         </>
