@@ -478,7 +478,18 @@ export function processarSemanaTreinos(params: {
     }
     jogador.energia = Math.max(10, Math.min(100, Math.round(energiaFinal)));
 
-    const riscoPlano = plano.id === 'MANUTENCAO_VETERANO' ? 0.65 : 1.0;
+    // Prevenção Muscular / Gestão de Carga: cortam risco de sobrecarga no treino.
+    const riscoPlano =
+      plano.id === 'PREVENCAO_MUSCULAR'
+        ? 0.5
+        : plano.id === 'MANUTENCAO_VETERANO'
+          ? 0.65
+          : 1.0;
+    const energiaComPrevencao =
+      plano.id === 'PREVENCAO_MUSCULAR'
+        ? Math.min(100, jogador.energia + 4)
+        : jogador.energia;
+    jogador.energia = energiaComPrevencao;
     const probLesaoSemana =
       probabilidadeLesaoSobrecargaSemanal({
         energia: jogador.energia,
