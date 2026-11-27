@@ -293,6 +293,56 @@ export function MatchScreen() {
     taticaUsuario,
   ]);
 
+  const formacoesTimes = useMemo(() => {
+    if (!simInput) return null;
+    const timeUsuario = clubeRealId ?? timeUsuarioId;
+    const nomeTreinador = perfil?.nome?.trim() || null;
+    const corM = modoLiga
+      ? {
+          corPrimaria: mandanteLiga?.cor_primaria,
+          corSecundaria: mandanteLiga?.cor_secundaria,
+        }
+      : {};
+    const corV = modoLiga
+      ? {
+          corPrimaria: visitanteLiga?.cor_primaria,
+          corSecundaria: visitanteLiga?.cor_secundaria,
+        }
+      : {};
+    return {
+      mandante: {
+        timeId: simInput.mandante.timeId,
+        nome: mandanteNome ?? simInput.mandante.nomeCurto,
+        esquema: simInput.mandante.esquema,
+        elenco: simInput.mandante.elenco,
+        escalacao: simInput.mandante.escalacao,
+        treinadorNome:
+          timeUsuario && simInput.mandante.timeId === timeUsuario ? nomeTreinador : null,
+        ...corM,
+      },
+      visitante: {
+        timeId: simInput.visitante.timeId,
+        nome: visitanteNome ?? simInput.visitante.nomeCurto,
+        esquema: simInput.visitante.esquema,
+        elenco: simInput.visitante.elenco,
+        escalacao: simInput.visitante.escalacao,
+        treinadorNome:
+          timeUsuario && simInput.visitante.timeId === timeUsuario ? nomeTreinador : null,
+        ...corV,
+      },
+    };
+  }, [
+    simInput,
+    clubeRealId,
+    timeUsuarioId,
+    perfil?.nome,
+    modoLiga,
+    mandanteLiga,
+    visitanteLiga,
+    mandanteNome,
+    visitanteNome,
+  ]);
+
   const preJogo = useMemo(
     () => (simInput ? previsaoPreJogo(simInput) : null),
     [simInput],
@@ -783,6 +833,9 @@ export function MatchScreen() {
               setMinuto(90);
               setSkipToEndNonce((n) => n + 1);
             }}
+            formacoesMandante={formacoesTimes?.mandante}
+            formacoesVisitante={formacoesTimes?.visitante}
+            arbitro={null}
             onFinalizarJogo={voltarHub}
             classificacao={
               modoLiga && brasileirao && campeonato && partidaLiga
