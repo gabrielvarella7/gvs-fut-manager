@@ -6,6 +6,7 @@ import {
   type PeriodoEstatisticas,
 } from '../../engine/matchStats';
 import type { Lancamento, MatchSimResult } from '../../engine/matchEngine';
+import type { TimeNotasInput } from '../../engine/matchNotas';
 import type { InfoJogadorPartida } from '../../engine/jogadorDaPartida';
 import type { CampeonatoConfig, Time } from '../../types/schema';
 import type { InfoPartidaPreJogo } from '../../career/infoPartidaPreJogo';
@@ -24,6 +25,7 @@ import {
 import { MatchEventTimeline } from './MatchEventTimeline';
 import { MatchH2HPanel } from './MatchH2HPanel';
 import { MatchMomentum } from './MatchMomentum';
+import { MatchNotasPitch } from './MatchNotasPitch';
 import { MatchPreGame } from './MatchPreGame';
 import { MatchStatsPanel } from './MatchStatsPanel';
 import { MatchClassificacaoPanel } from './MatchClassificacaoPanel';
@@ -47,6 +49,7 @@ type Aba =
   | 'prejogo'
   | 'detalhes'
   | 'h2h'
+  | 'notas'
   | 'formacoes';
 
 type Props = {
@@ -54,6 +57,9 @@ type Props = {
   mandanteNome: string;
   visitanteNome: string;
   estadio?: string;
+  /** Dados de escalação/cores para a aba Notas. */
+  notasMandante?: TimeNotasInput;
+  notasVisitante?: TimeNotasInput;
   jogadoresInfo?: ReadonlyMap<number, InfoJogadorPartida> | Readonly<Record<number, InfoJogadorPartida>>;
   velocidade: VelocidadePlayback;
   onVelocidade: (v: VelocidadePlayback) => void;
@@ -104,6 +110,8 @@ export function MatchCenter({
   mandanteNome,
   visitanteNome,
   estadio,
+  notasMandante,
+  notasVisitante,
   jogadoresInfo,
   velocidade,
   onVelocidade,
@@ -295,6 +303,7 @@ export function MatchCenter({
     { id: 'estatisticas', label: 'Estatísticas' },
     ...(classificacao ? [{ id: 'classificacao' as const, label: 'Classificação' }] : []),
     { id: 'comentario', label: 'Comentário' },
+    { id: 'notas', label: 'Notas' },
     { id: 'prejogo', label: 'Pré-jogo' },
     ...(h2h ? [{ id: 'h2h' as const, label: 'H2H' }] : []),
   ];
@@ -396,6 +405,15 @@ export function MatchCenter({
           preJogo={result.preJogo}
           equipes={equipesPreJogo}
           infoPartida={infoPartida}
+        />
+      )}
+
+      {aba === 'notas' && notasMandante && notasVisitante && (
+        <MatchNotasPitch
+          result={result}
+          minuto={minuto}
+          mandante={notasMandante}
+          visitante={notasVisitante}
         />
       )}
 

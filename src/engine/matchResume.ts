@@ -85,5 +85,7 @@ export function mesclarPartidaAposMinuto(
       ),
     },
     simSeed: nova.simSeed ?? anterior.simSeed,
+    /** Mantém histórico tático do trecho já jogado; o caller pode acrescentar o novo segmento. */
+    historicoTatico: anterior.historicoTatico ?? nova.historicoTatico,
   };
 }
