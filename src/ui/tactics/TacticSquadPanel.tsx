@@ -169,7 +169,7 @@ export function TacticSquadPanel({
         <h3 className="mb-1.5 text-xs font-semibold text-emerald-400">
           Titulares ({slotIds.filter((id) => id > 0).length}/11)
         </h3>
-        <ul className={`space-y-1 ${compact ? '' : 'grid gap-1 sm:grid-cols-2'}`}>
+        <ul className="space-y-1">
           {slotIds.map((id, i) => {
             const j = porId.get(id);
             const cel = grade11[i];
@@ -181,7 +181,7 @@ export function TacticSquadPanel({
             return (
               <li key={`slot-${i}`}>
                 <MiniJogador
-                  nome={j ? nomeCurto(j.nome) : '—'}
+                  nome={j ? j.nome : '—'}
                   detalhe={
                     bloqueado
                       ? `⚠ ${aviso ?? 'Indisponível'}`
