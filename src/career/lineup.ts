@@ -5,6 +5,7 @@ import { montarEscalacao, type JogadorEmCampo } from '../engine/matchEngine';
 import { PositionRecalculator } from './positionRecalculator';
 import type { EsquemaTatico, Jogador, StatusEscalacao } from '../types/schema';
 import {
+  jogadorAptoAssistente,
   jogadorPodeJogar,
   sanitizarAlinhamento11,
 } from './aptidaoEscalacao';
@@ -19,9 +20,10 @@ export function enriquecerElencoAfinidade(elenco: Jogador[]): Jogador[] {
 
 export function idsEscalacaoPadrao(elenco: Jogador[], esquema: EsquemaTatico): number[] {
   try {
-    return montarEscalacao(enriquecerElencoAfinidade(elenco), esquema).map((e) => e.jogador.id);
+    const aptos = enriquecerElencoAfinidade(elenco).filter(jogadorAptoAssistente);
+    return montarEscalacao(aptos, esquema).map((e) => e.jogador.id);
   } catch {
-    return elenco.filter(jogadorPodeJogar).slice(0, 11).map((j) => j.id);
+    return elenco.filter(jogadorAptoAssistente).slice(0, 11).map((j) => j.id);
   }
 }
 
@@ -29,7 +31,7 @@ export function idsEscalacaoPadrao(elenco: Jogador[], esquema: EsquemaTatico): n
 export function idsBancoPadrao(elenco: Jogador[], titularesIds: number[]): number[] {
   const setTit = new Set(titularesIds.filter((id) => id > 0));
   return [...elenco]
-    .filter((j) => !setTit.has(j.id) && jogadorPodeJogar(j))
+    .filter((j) => !setTit.has(j.id) && jogadorAptoAssistente(j))
     .sort((a, b) => b.overall - a.overall)
     .slice(0, RESERVAS_PARTIDA)
     .map((j) => j.id);

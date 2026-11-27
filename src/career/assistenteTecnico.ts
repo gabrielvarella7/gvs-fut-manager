@@ -1,24 +1,36 @@
 import { montarEscalacao } from '../engine/matchEngine';
-import { filtrarAptosParaJogar } from './aptidaoEscalacao';
+import {
+  filtrarAptosAssistente,
+  jogadorAptoAssistente,
+  sanitizarAlinhamento11,
+} from './aptidaoEscalacao';
 import { valorMercado } from './playerUtils';
 import { ordenarElenco } from './ordenarElenco';
 import type { NoticiaCarreira } from './types';
 import type { EsquemaTatico, Jogador, Posicao, Time } from '../types/schema';
 import { criarRng } from '../engine/matchEngine';
 
-/** 11 ids: maior OVR em cada slot (ignora lesão+energia &lt;60%). */
+/**
+ * 11 ids: maior OVR em cada slot.
+ * Exclui a mesma trava manual (lesão+energia &lt;60%) e qualquer lesão ativa
+ * (indisponível no plantel) — o Assistente não escala quem a UI marca fora.
+ */
 export function escalacaoAssistenteMelhorOverall(
   elenco: Jogador[],
   esquema: EsquemaTatico,
 ): number[] {
-  const aptos = filtrarAptosParaJogar(elenco);
+  const aptos = filtrarAptosAssistente(elenco);
+  let ids: number[];
   try {
-    return montarEscalacao(aptos, esquema).map((e) => e.jogador.id);
+    ids = montarEscalacao(aptos, esquema).map((e) => e.jogador.id);
   } catch {
-    return ordenarElenco(aptos)
+    ids = ordenarElenco(aptos)
       .slice(0, 11)
       .map((j) => j.id);
   }
+  const { ids: limpos } = sanitizarAlinhamento11(aptos, ids);
+  const setAptos = new Set(aptos.map((j) => j.id));
+  return limpos.filter((id) => setAptos.has(id));
 }
 
 function mediaOvrPorPosicao(elenco: Jogador[]): Partial<Record<Posicao, number>> {
@@ -38,7 +50,9 @@ function mediaOvrPorPosicao(elenco: Jogador[]): Partial<Record<Posicao, number>>
 }
 
 function piorTitular(elenco: Jogador[]): Jogador | null {
-  const titulares = elenco.filter((j) => j.status_escalacao === 'TITULAR' && jogadorDisponivel(j));
+  const titulares = elenco.filter(
+    (j) => j.status_escalacao === 'TITULAR' && jogadorAptoAssistente(j),
+  );
   if (titulares.length === 0) return null;
   return titulares.reduce((a, b) => (a.overall <= b.overall ? a : b));
 }
@@ -61,7 +75,9 @@ export function gerarNoticiaAssistenteMercado(params: {
   if (rnd() > 0.22 + params.nivelAssistente / 80) return null;
 
   const elenco = params.jogadores.filter((j) => j.time_id === params.clubeId);
-  const mercado = params.jogadores.filter((j) => j.time_id !== params.clubeId && jogadorDisponivel(j));
+  const mercado = params.jogadores.filter(
+    (j) => j.time_id !== params.clubeId && jogadorAptoAssistente(j),
+  );
   if (mercado.length < 8 || elenco.length < 14) return null;
 
   const medias = mediaOvrPorPosicao(elenco);
