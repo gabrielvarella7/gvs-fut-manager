@@ -12,24 +12,21 @@ import { obterNivelRivalidade } from '../../career/mercadoTransferencias';
 import { pretensaoClubeVendedor, pretensaoSalarioJogador } from '../../career/transfers';
 import { rotuloTendenciaSaida, rumorPendenteResposta } from '../../career/sondagemMercado';
 import type { NegociacaoTransferencia } from '../../career/types';
-import type { Jogador, Posicao } from '../../types/schema';
+import type { Jogador } from '../../types/schema';
 import { useGameStore } from '../../store/useGameStore';
 import { CmCareerShell } from '../cm/CmCareerShell';
 import { CmBtn, CmPanel } from '../cm/CmShell';
+import {
+  PlayerListToolbar,
+  SORT_MERCADO,
+  SORT_VENDER,
+  jogadorAccessors,
+  usePlayerListQuery,
+} from '../playerList';
 
 type Aba = 'comprar' | 'vender' | 'negociacoes';
 
 const ITENS_POR_PAGINA = 7;
-
-const POSICOES: Array<Posicao | 'TODAS'> = [
-  'TODAS',
-  'GOL',
-  'ZAG',
-  'LAT',
-  'VOL',
-  'MEI',
-  'ATA',
-];
 
 export function TransfersScreen() {
   const clubeRealId = useGameStore((s) => s.clubeRealId);
@@ -40,6 +37,7 @@ export function TransfersScreen() {
   const modoSub23 = useGameStore((s) => s.modoSub23);
   const iniciarCompra = useGameStore((s) => s.iniciarNegociacaoCompra);
   const iniciarVenda = useGameStore((s) => s.iniciarNegociacaoVenda);
+  const abrirPerfil = useGameStore((s) => s.abrirPerfilJogador);
   const atualizarOferta = useGameStore((s) => s.atualizarOfertaNegociacao);
   const enviarOferta = useGameStore((s) => s.enviarOfertaTransferencia);
   const aceitarContra = useGameStore((s) => s.aceitarContraproposta);
@@ -49,8 +47,6 @@ export function TransfersScreen() {
   const rumores = useGameStore((s) => s.mundoClube?.rumoresOfertas ?? []);
 
   const [aba, setAba] = useState<Aba>('comprar');
-  const [busca, setBusca] = useState('');
-  const [posicao, setPosicao] = useState<Posicao | 'TODAS'>('TODAS');
   const [negociacaoAtiva, setNegociacaoAtiva] = useState<string | null>(null);
   const [visiveisCompra, setVisiveisCompra] = useState(ITENS_POR_PAGINA);
   const [visiveisVenda, setVisiveisVenda] = useState(ITENS_POR_PAGINA);
@@ -65,30 +61,35 @@ export function TransfersScreen() {
     [clubeRealId, jogadoresReais],
   );
 
-  const mercado = useMemo(() => {
-    const q = busca.trim().toLowerCase();
-    return ordenarElenco(
-      jogadoresReais.filter((j) => {
-        if (!clubeRealId || j.time_id === clubeRealId) return false;
-        if (posicao !== 'TODAS' && j.posicao !== posicao) return false;
-        if (q && !j.nome.toLowerCase().includes(q)) return false;
-        return true;
-      }),
-    );
-  }, [busca, clubeRealId, jogadoresReais, posicao]);
+  const mercadoBase = useMemo(
+    () =>
+      clubeRealId
+        ? ordenarElenco(jogadoresReais.filter((j) => j.time_id !== clubeRealId))
+        : [],
+    [clubeRealId, jogadoresReais],
+  );
+
+  const compraQuery = usePlayerListQuery(mercadoBase, jogadorAccessors, SORT_MERCADO, {
+    id: 'ovr',
+    dir: 'desc',
+  });
+  const vendaQuery = usePlayerListQuery(elencoProprio, jogadorAccessors, SORT_VENDER, {
+    id: 'ovr',
+    dir: 'desc',
+  });
 
   useEffect(() => {
     setVisiveisCompra(ITENS_POR_PAGINA);
-  }, [busca, posicao]);
+  }, [compraQuery.filters, compraQuery.sort]);
 
   useEffect(() => {
     setVisiveisVenda(ITENS_POR_PAGINA);
-  }, [elencoProprio.length]);
+  }, [vendaQuery.filters, vendaQuery.sort, elencoProprio.length]);
 
-  const mercadoVisivel = mercado.slice(0, visiveisCompra);
-  const restantesCompra = mercado.length - visiveisCompra;
-  const elencoVendaVisivel = elencoProprio.slice(0, visiveisVenda);
-  const restantesVenda = elencoProprio.length - visiveisVenda;
+  const mercadoVisivel = compraQuery.result.slice(0, visiveisCompra);
+  const restantesCompra = compraQuery.result.length - visiveisCompra;
+  const elencoVendaVisivel = vendaQuery.result.slice(0, visiveisVenda);
+  const restantesVenda = vendaQuery.result.length - visiveisVenda;
 
   const negAtiva = negociacoes.find((n) => n.id === negociacaoAtiva) ?? negociacoes[0] ?? null;
 
@@ -190,29 +191,21 @@ export function TransfersScreen() {
 
       {aba === 'comprar' && (
         <>
-          <div className="mb-3 flex flex-wrap gap-2">
-            <input
-              type="search"
-              placeholder="Buscar jogador…"
-              value={busca}
-              onChange={(e) => setBusca(e.target.value)}
-              className="min-w-[200px] flex-1 rounded border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm text-zinc-100"
-            />
-            <select
-              value={posicao}
-              onChange={(e) => setPosicao(e.target.value as Posicao | 'TODAS')}
-              className="rounded border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm"
-            >
-              {POSICOES.map((p) => (
-                <option key={p} value={p}>
-                  {p === 'TODAS' ? 'Todas posições' : p}
-                </option>
-              ))}
-            </select>
-          </div>
+          <PlayerListToolbar
+            filters={compraQuery.filters}
+            onFiltersChange={compraQuery.setFilters}
+            enabledFilters={['busca', 'posicao', 'ovr', 'valor', 'idade']}
+            sortOptions={SORT_MERCADO}
+            sort={compraQuery.sort}
+            onSortKeyChange={compraQuery.setSortKey}
+            onSortDirChange={compraQuery.setSortDir}
+            shown={compraQuery.shown}
+            total={compraQuery.total}
+          />
           <ListaMercado
             jogadores={mercadoVisivel}
             timesReais={timesReais}
+            onPerfil={abrirPerfil}
             onComprar={(id) => {
               const nid = iniciarCompra(id);
               if (nid) {
@@ -233,8 +226,20 @@ export function TransfersScreen() {
 
       {aba === 'vender' && (
         <>
+          <PlayerListToolbar
+            filters={vendaQuery.filters}
+            onFiltersChange={vendaQuery.setFilters}
+            enabledFilters={['busca', 'posicao', 'ovr', 'valor']}
+            sortOptions={SORT_VENDER}
+            sort={vendaQuery.sort}
+            onSortKeyChange={vendaQuery.setSortKey}
+            onSortDirChange={vendaQuery.setSortDir}
+            shown={vendaQuery.shown}
+            total={vendaQuery.total}
+          />
           <ListaVenda
             elenco={elencoVendaVisivel}
+            onPerfil={abrirPerfil}
             onVender={(id, valor) => {
               const nid = iniciarVenda(id, valor);
               if (nid) {
@@ -243,6 +248,9 @@ export function TransfersScreen() {
               }
             }}
           />
+          {vendaQuery.total > 0 && vendaQuery.shown === 0 && (
+            <p className="mt-3 text-sm text-zinc-500">Nenhum jogador com esses filtros.</p>
+          )}
           {restantesVenda > 0 && (
             <div className="mt-4 flex justify-center">
               <CmBtn variant="ghost" onClick={() => setVisiveisVenda((v) => v + ITENS_POR_PAGINA)}>
@@ -285,6 +293,7 @@ export function TransfersScreen() {
               jogadores={jogadoresReais}
               times={timesReais}
               caixa={financas.saldo_caixa}
+              onPerfil={abrirPerfil}
               onAtualizar={(patch) => atualizarOferta(negAtiva.id, patch)}
               onEnviar={() => enviarOferta(negAtiva.id)}
               onAceitar={() => aceitarContra(negAtiva.id)}
@@ -318,10 +327,12 @@ function rotuloNegociacao(
 function ListaMercado({
   jogadores,
   timesReais,
+  onPerfil,
   onComprar,
 }: {
   jogadores: Jogador[];
   timesReais: { id: string; nome: string }[];
+  onPerfil: (id: number) => void;
   onComprar: (id: number) => void;
 }) {
   if (jogadores.length === 0) {
@@ -336,15 +347,22 @@ function ListaMercado({
         const tier = tierPropensao(g.propensao_lesao);
         return (
           <li key={j.id} className="flex flex-wrap items-center justify-between gap-2 px-3 py-2 text-sm">
-            <div>
-              <p className="font-medium text-zinc-100">{j.nome}</p>
+            <button
+              type="button"
+              onClick={() => onPerfil(j.id)}
+              className="min-w-0 flex-1 text-left hover:bg-zinc-900/60"
+            >
+              <p className="font-medium text-emerald-100 underline-offset-2 hover:underline">
+                {j.nome}
+              </p>
               <p className="text-xs text-zinc-500">
-                {time?.nome} · {j.posicao} · OVR {j.overall} · {formatarDinheiro(valorMercado(j))}
+                {time?.nome} · {j.posicao} · {j.idade} anos · OVR {j.overall} ·{' '}
+                {formatarDinheiro(valorMercado(j))}
                 {tier === 'DE_VIDRO' ? ' · risco físico' : ''}
                 {j.idade <= 22 && g.potencial_maximo - j.overall >= 8 ? ' · teto alto' : ''}
               </p>
               {risco && <p className="text-[10px] text-amber-500/90">{risco}</p>}
-            </div>
+            </button>
             <CmBtn variant="primary" onClick={() => onComprar(j.id)}>
               Negociar
             </CmBtn>
@@ -357,9 +375,11 @@ function ListaMercado({
 
 function ListaVenda({
   elenco,
+  onPerfil,
   onVender,
 }: {
   elenco: Jogador[];
+  onPerfil: (id: number) => void;
   onVender: (id: number, valor: number) => void;
 }) {
   const [valores, setValores] = useState<Record<number, string>>({});
@@ -370,12 +390,19 @@ function ListaVenda({
         const bruto = valores[j.id] ?? formatarDinheiroExtenso(sugerido);
         return (
           <li key={j.id} className="flex flex-col gap-2 px-3 py-3 sm:flex-row sm:items-center sm:justify-between">
-            <div className="text-sm">
-              <p className="font-medium text-zinc-100">{j.nome}</p>
-              <p className="text-xs text-zinc-500">
-                {j.posicao} · OVR {j.overall} · Mercado {formatarDinheiroExtenso(valorMercado(j))}
+            <button
+              type="button"
+              onClick={() => onPerfil(j.id)}
+              className="min-w-0 flex-1 text-left text-sm hover:bg-zinc-900/60"
+            >
+              <p className="font-medium text-emerald-100 underline-offset-2 hover:underline">
+                {j.nome}
               </p>
-            </div>
+              <p className="text-xs text-zinc-500">
+                {j.posicao} · {j.idade} anos · OVR {j.overall} · Mercado{' '}
+                {formatarDinheiroExtenso(valorMercado(j))}
+              </p>
+            </button>
             <div className="flex flex-wrap items-center gap-2">
               <label className="text-xs text-zinc-500">
                 Valor mínimo
@@ -418,7 +445,8 @@ function PainelNegociacao({
   neg,
   jogadores,
   times,
-  caixa,
+  caixa: _caixa,
+  onPerfil,
   onAtualizar,
   onEnviar,
   onAceitar,
@@ -429,6 +457,7 @@ function PainelNegociacao({
   jogadores: Jogador[];
   times: { id: string; nome: string }[];
   caixa: number;
+  onPerfil: (id: number) => void;
   onAtualizar: (p: Partial<NegociacaoTransferencia['ofertaAtual']>) => void;
   onEnviar: () => void;
   onAceitar: () => void;
@@ -454,7 +483,13 @@ function PainelNegociacao({
 
   return (
     <CmPanel>
-      <h2 className="text-lg font-semibold text-emerald-100">{j.nome}</h2>
+      <button
+        type="button"
+        onClick={() => onPerfil(j.id)}
+        className="text-left text-lg font-semibold text-emerald-100 underline-offset-2 hover:underline"
+      >
+        {j.nome}
+      </button>
       {rivalidade !== 'NENHUMA' && (
         <p className="mt-1 text-xs text-amber-300/90">{rotuloRival[rivalidade]}</p>
       )}
@@ -464,8 +499,8 @@ function PainelNegociacao({
         </p>
       )}
       <p className="mt-1 text-sm text-zinc-400">
-        {neg.tipo === 'compra' ? `Clube: ${vendedor?.nome ?? '—'}` : `Comprador: ${comprador?.nome ?? 'a definir'}`} · OVR{' '}
-        {j.overall}
+        {neg.tipo === 'compra' ? `Clube: ${vendedor?.nome ?? '—'}` : `Comprador: ${comprador?.nome ?? 'a definir'}`} ·{' '}
+        {j.idade} anos · OVR {j.overall}
         {j.suscetibilidade && (
           <>
             {' '}

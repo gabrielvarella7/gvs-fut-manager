@@ -16,6 +16,12 @@ import type { FocoCategoriaBase, NivelInvestimentoBase } from '../../types/mundo
 import { useGameStore } from '../../store/useGameStore';
 import { CmCareerShell } from '../cm/CmCareerShell';
 import { CmBtn, CmPanel } from '../cm/CmShell';
+import {
+  PlayerListToolbar,
+  SORT_JOVEM,
+  jovemAccessors,
+  usePlayerListQuery,
+} from '../playerList';
 
 const NIVEIS: { nivel: NivelInvestimentoBase; rotulo: string }[] = [
   { nivel: 0, rotulo: 'Mínimo' },
@@ -60,6 +66,10 @@ export function BaseScreen() {
   const plantel = clubeId ? plantelProfissionalCount(jogadores, clubeId) : 0;
   const pesos = base ? pesosTierBase(base.qualidade, diretor) : null;
   const ct5 = base ? ctBaseNivel5(base.qualidade) : false;
+  const sub20Query = usePlayerListQuery(sub20, jovemAccessors, SORT_JOVEM, {
+    id: 'ovr',
+    dir: 'desc',
+  });
 
   return (
     <CmCareerShell titulo="Categorias de base" subtitulo="Sub-20, safras e promoção ao profissional">
@@ -162,11 +172,20 @@ export function BaseScreen() {
               (veja Notícias).
             </CmPanel>
           ) : (
-            <ul className="space-y-2">
-              {sub20
-                .slice()
-                .sort((a, b) => b.overall - a.overall)
-                .map((j) => (
+            <>
+              <PlayerListToolbar
+                filters={sub20Query.filters}
+                onFiltersChange={sub20Query.setFilters}
+                enabledFilters={['busca', 'posicao', 'ovr', 'idade']}
+                sortOptions={SORT_JOVEM}
+                sort={sub20Query.sort}
+                onSortKeyChange={sub20Query.setSortKey}
+                onSortDirChange={sub20Query.setSortDir}
+                shown={sub20Query.shown}
+                total={sub20Query.total}
+              />
+              <ul className="space-y-2">
+                {sub20Query.result.map((j) => (
                   <CmPanel key={j.id}>
                     <div className="flex flex-wrap items-start justify-between gap-2">
                       <div>
@@ -195,7 +214,11 @@ export function BaseScreen() {
                     </div>
                   </CmPanel>
                 ))}
-            </ul>
+              </ul>
+              {sub20Query.shown === 0 && (
+                <p className="mt-3 text-sm text-zinc-500">Nenhum jovem com esses filtros.</p>
+              )}
+            </>
           )}
         </>
       )}

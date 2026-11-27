@@ -1,4 +1,4 @@
-import { useRef, type PointerEvent as ReactPointerEvent } from 'react';
+import { useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react';
 import {
   bloqueadoPorLesaoComEnergiaBaixa,
   rotuloBloqueioLesaoEnergia,
@@ -9,7 +9,14 @@ import { rotuloPosicao } from '../../career/perfilJogador';
 import { rotuloPosicaoCampinho } from '../../data/gradeCampinho';
 import type { CelulaGrade } from '../../data/gradeCampinho';
 import { SLOTS_POR_ESQUEMA, esquemaOuPadrao } from '../../data/esquemasTaticos';
-import type { EsquemaTatico, Jogador } from '../../types/schema';
+import type { EsquemaTatico, Jogador, Posicao } from '../../types/schema';
+import {
+  FILTERS_VAZIOS,
+  POSICOES_FILTRO,
+  aplicarPlayerListQuery,
+  jogadorAccessors,
+  SORT_MERCADO,
+} from '../playerList';
 
 /** Movimento mínimo (px) para tratar o gesto como arraste e não como clique. */
 const LIMIAR_ARRASTO_PX = 8;
@@ -172,13 +179,36 @@ export function TacticSquadPanel({
 }: Props) {
   const porId = new Map(elenco.map((j) => [j.id, j]));
   const slots = SLOTS_POR_ESQUEMA[esquemaOuPadrao(esquema)];
-  const titularesIds = new Set(slotIds.filter((id) => id > 0));
-  const bancoSet = new Set(bancoIds.filter((id) => id > 0 && !titularesIds.has(id)));
+  const titularesIds = useMemo(
+    () => new Set(slotIds.filter((id) => id > 0)),
+    [slotIds],
+  );
+  const bancoSet = useMemo(
+    () => new Set(bancoIds.filter((id) => id > 0 && !titularesIds.has(id))),
+    [bancoIds, titularesIds],
+  );
   const reservas = bancoIds
     .map((id) => porId.get(id))
     .filter((j): j is Jogador => j != null && !titularesIds.has(j.id));
-  const foraDaLista = elenco.filter((j) => !titularesIds.has(j.id) && !bancoSet.has(j.id));
+  const foraDaLista = useMemo(
+    () => elenco.filter((j) => !titularesIds.has(j.id) && !bancoSet.has(j.id)),
+    [elenco, titularesIds, bancoSet],
+  );
   const bancoCompleto = reservas.length >= RESERVAS_PARTIDA;
+
+  const [foraPos, setForaPos] = useState<Posicao | 'TODAS'>('TODAS');
+  const [foraSort, setForaSort] = useState('ovr');
+  const foraFiltrado = useMemo(
+    () =>
+      aplicarPlayerListQuery(
+        foraDaLista,
+        jogadorAccessors,
+        { ...FILTERS_VAZIOS, posicao: foraPos },
+        { id: foraSort, dir: 'desc' },
+        SORT_MERCADO,
+      ),
+    [foraDaLista, foraPos, foraSort],
+  );
 
   return (
     <div
@@ -289,13 +319,44 @@ export function TacticSquadPanel({
 
       <section className="min-h-0 flex-1 overflow-y-auto border-t border-zinc-800 pt-2">
         <h3 className="mb-1.5 text-xs font-semibold text-zinc-400">
-          Fora da lista ({foraDaLista.length})
+          Fora da lista ({foraFiltrado.length}
+          {foraFiltrado.length !== foraDaLista.length ? `/${foraDaLista.length}` : ''})
         </h3>
+        {foraDaLista.length > 0 && (
+          <div className="mb-1.5 flex flex-wrap gap-1">
+            <select
+              value={foraPos}
+              onChange={(e) => setForaPos(e.target.value as Posicao | 'TODAS')}
+              className="rounded border border-zinc-700 bg-zinc-900 px-1.5 py-1 text-[10px] text-zinc-300"
+              aria-label="Filtrar posição"
+            >
+              {POSICOES_FILTRO.map((p) => (
+                <option key={p} value={p}>
+                  {p === 'TODAS' ? 'Posição' : p}
+                </option>
+              ))}
+            </select>
+            <select
+              value={foraSort}
+              onChange={(e) => setForaSort(e.target.value)}
+              className="rounded border border-zinc-700 bg-zinc-900 px-1.5 py-1 text-[10px] text-zinc-300"
+              aria-label="Ordenar fora da lista"
+            >
+              {SORT_MERCADO.map((o) => (
+                <option key={o.id} value={o.id}>
+                  {o.label}
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
         <ul className="space-y-1">
           {foraDaLista.length === 0 ? (
             <li className="text-xs text-zinc-500">Todos relacionados.</li>
+          ) : foraFiltrado.length === 0 ? (
+            <li className="text-xs text-zinc-500">Nenhum com esse filtro.</li>
           ) : (
-            foraDaLista.map((j) => {
+            foraFiltrado.map((j) => {
               const bloqueado = bloqueadoPorLesaoComEnergiaBaixa(j);
               const aviso = rotuloBloqueioLesaoEnergia(j);
               return (

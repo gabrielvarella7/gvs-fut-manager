@@ -2,7 +2,13 @@ import { useMemo, useState } from 'react';
 import { getTimeFicticio } from '../../career/fictionalLeague';
 import { mediaAtributosGrupo } from '../../career/atributosJogador';
 import { corClasseEnergia, overallEfetivoPorEnergia } from '../../career/energia';
-import { ordenarElenco } from '../../career/ordenarElenco';
+import {
+  direcaoInicialColuna,
+  ordenarElenco,
+  ordenarElencoPorColuna,
+  type ElencoSortColuna,
+  type ElencoSortDirecao,
+} from '../../career/ordenarElenco';
 import { formatarDinheiro, salarioMensal, valorMercado } from '../../career/playerUtils';
 import { plantelProfissionalCount, rotuloTierBase } from '../../career/youthAcademy';
 import { elencoSub23DoClube } from '../../career/aspirantesS23';
@@ -15,6 +21,17 @@ import type { OfertaDispensa } from '../../types/aspirantesS23';
 import { useGameStore } from '../../store/useGameStore';
 import { CmCareerShell } from '../cm/CmCareerShell';
 import { CmBtn, CmPanel } from '../cm/CmShell';
+import {
+  FILTERS_VAZIOS,
+  PlayerListToolbar,
+  SortableTh,
+  filtrarPlayerList,
+  jogadorAccessors,
+  jovemAccessors,
+  SORT_JOVEM,
+  usePlayerListQuery,
+  type PlayerListFiltersState,
+} from '../playerList';
 import type { Jogador } from '../../types/schema';
 
 export function SquadScreen() {
@@ -48,12 +65,14 @@ export function SquadScreen() {
   const plantelCheio = plantel >= TETO_PLANTEL_PRO_SUB23;
 
   const elencoS23 = useMemo(
-    () =>
-      clubeRealId
-        ? [...elencoSub23DoClube(aspirantes, clubeRealId)].sort((a, b) => b.overall - a.overall)
-        : [],
+    () => (clubeRealId ? elencoSub23DoClube(aspirantes, clubeRealId) : []),
     [aspirantes, clubeRealId],
   );
+
+  const s23Query = usePlayerListQuery(elencoS23, jovemAccessors, SORT_JOVEM, {
+    id: 'ovr',
+    dir: 'desc',
+  });
 
   if (modoSub23 && clubeRealId) {
     return (
@@ -77,8 +96,20 @@ export function SquadScreen() {
           {aviso && <p className="mt-2 text-sm text-amber-200">{aviso}</p>}
         </CmPanel>
 
+        <PlayerListToolbar
+          filters={s23Query.filters}
+          onFiltersChange={s23Query.setFilters}
+          enabledFilters={['busca', 'posicao', 'ovr', 'idade']}
+          sortOptions={SORT_JOVEM}
+          sort={s23Query.sort}
+          onSortKeyChange={s23Query.setSortKey}
+          onSortDirChange={s23Query.setSortDir}
+          shown={s23Query.shown}
+          total={s23Query.total}
+        />
+
         <ul className="space-y-2">
-          {elencoS23.map((a) => (
+          {s23Query.result.map((a) => (
             <CmPanel key={a.id}>
               <div className="flex flex-wrap items-start justify-between gap-2">
                 <div>
@@ -114,6 +145,9 @@ export function SquadScreen() {
         </ul>
         {elencoS23.length === 0 && (
           <p className="mt-4 text-sm text-amber-200/90">Nenhum atleta no Sub-23 deste clube.</p>
+        )}
+        {elencoS23.length > 0 && s23Query.shown === 0 && (
+          <p className="mt-4 text-sm text-zinc-500">Nenhum atleta com esses filtros.</p>
         )}
       </CmCareerShell>
     );
@@ -240,90 +274,208 @@ function SquadTable({
   onJogador: (id: number) => void;
   onDispensa?: (id: number) => void;
 }) {
+  const [filters, setFilters] = useState<PlayerListFiltersState>(FILTERS_VAZIOS);
+  const [sortCol, setSortCol] = useState<ElencoSortColuna | null>(null);
+  const [sortDir, setSortDir] = useState<ElencoSortDirecao>('asc');
+
+  const filtrados = useMemo(
+    () => filtrarPlayerList(elenco, jogadorAccessors, filters),
+    [elenco, filters],
+  );
+
+  const ordenados = useMemo(() => {
+    if (!sortCol) return filtrados;
+    return ordenarElencoPorColuna(filtrados, sortCol, sortDir);
+  }, [filtrados, sortCol, sortDir]);
+
+  const onSort = (coluna: ElencoSortColuna) => {
+    if (sortCol === coluna) {
+      setSortDir((d) => (d === 'asc' ? 'desc' : 'asc'));
+      return;
+    }
+    setSortCol(coluna);
+    setSortDir(direcaoInicialColuna(coluna));
+  };
+
   return (
-    <div className="overflow-x-auto rounded border border-zinc-700">
-      <table className="w-full min-w-[640px] text-left text-xs">
-        <thead className="bg-zinc-800 text-zinc-400">
-          <tr>
-            <th className="p-2">Nome</th>
-            <th>Pos</th>
-            <th>Id</th>
-            <th>OVR</th>
-            <th>Energia</th>
-            <th>Téc</th>
-            <th>Men</th>
-            <th>Fís</th>
-            {showFinance && (
-              <>
-                <th>Valor</th>
-                <th>Salário/mês</th>
-              </>
-            )}
-            <th>Status</th>
-            {showDispensa && <th>Ação</th>}
-          </tr>
-        </thead>
-        <tbody>
-          {elenco.map((j) => (
-            <tr key={j.id} className="border-t border-zinc-800 hover:bg-zinc-900">
-              <td className="p-2">
-                <button
-                  type="button"
-                  onClick={() => onJogador(j.id)}
-                  className="font-medium text-emerald-100 underline-offset-2 hover:text-emerald-50 hover:underline"
-                >
-                  {j.nome}
-                </button>
-              </td>
-              <td>{j.posicao}</td>
-              <td>{j.idade}</td>
-              <td className="text-emerald-400">
-                {j.overall}
-                {j.energia < 92 && (
-                  <span className="ml-1 text-[10px] text-zinc-500" title="OVR efetivo pela energia">
-                    →{overallEfetivoPorEnergia(j.overall, j.energia)}
-                  </span>
-                )}
-              </td>
-              <td className={corClasseEnergia(j.energia)}>{Math.round(j.energia)}%</td>
-              <td>{mediaAtributosGrupo(j.atributos, 'tecnicos')}</td>
-              <td>{mediaAtributosGrupo(j.atributos, 'mentais')}</td>
-              <td>{mediaAtributosGrupo(j.atributos, 'fisicos')}</td>
+    <div>
+      <PlayerListToolbar
+        filters={filters}
+        onFiltersChange={setFilters}
+        enabledFilters={
+          showFinance
+            ? ['busca', 'posicao', 'ovr', 'idade', 'valor']
+            : ['busca', 'posicao', 'ovr', 'idade']
+        }
+        hideSortControls
+        shown={ordenados.length}
+        total={elenco.length}
+      />
+      <div className="overflow-x-auto rounded border border-zinc-700">
+        <table className="w-full min-w-[640px] text-left text-xs">
+          <thead className="bg-zinc-800 text-zinc-400">
+            <tr>
+              <SortableTh
+                sortId="nome"
+                ativa={sortCol === 'nome'}
+                direcao={sortDir}
+                onSort={() => onSort('nome')}
+                className="p-2"
+              >
+                Nome
+              </SortableTh>
+              <SortableTh
+                sortId="pos"
+                ativa={sortCol === 'pos'}
+                direcao={sortDir}
+                onSort={() => onSort('pos')}
+              >
+                Pos
+              </SortableTh>
+              <SortableTh
+                sortId="idade"
+                ativa={sortCol === 'idade'}
+                direcao={sortDir}
+                onSort={() => onSort('idade')}
+              >
+                Id
+              </SortableTh>
+              <SortableTh
+                sortId="ovr"
+                ativa={sortCol === 'ovr'}
+                direcao={sortDir}
+                onSort={() => onSort('ovr')}
+              >
+                OVR
+              </SortableTh>
+              <SortableTh
+                sortId="energia"
+                ativa={sortCol === 'energia'}
+                direcao={sortDir}
+                onSort={() => onSort('energia')}
+              >
+                Energia
+              </SortableTh>
+              <SortableTh
+                sortId="tec"
+                ativa={sortCol === 'tec'}
+                direcao={sortDir}
+                onSort={() => onSort('tec')}
+              >
+                Téc
+              </SortableTh>
+              <SortableTh
+                sortId="men"
+                ativa={sortCol === 'men'}
+                direcao={sortDir}
+                onSort={() => onSort('men')}
+              >
+                Men
+              </SortableTh>
+              <SortableTh
+                sortId="fis"
+                ativa={sortCol === 'fis'}
+                direcao={sortDir}
+                onSort={() => onSort('fis')}
+              >
+                Fís
+              </SortableTh>
               {showFinance && (
                 <>
-                  <td>{formatarDinheiro(valorMercado(j))}</td>
-                  <td>{formatarDinheiro(salarioMensal(j))}</td>
+                  <SortableTh
+                    sortId="valor"
+                    ativa={sortCol === 'valor'}
+                    direcao={sortDir}
+                    onSort={() => onSort('valor')}
+                  >
+                    Valor
+                  </SortableTh>
+                  <SortableTh
+                    sortId="salario"
+                    ativa={sortCol === 'salario'}
+                    direcao={sortDir}
+                    onSort={() => onSort('salario')}
+                  >
+                    Salário/mês
+                  </SortableTh>
                 </>
               )}
-              <td className="text-zinc-500">
-                {j.lesao && j.lesao.diasRestantes > 0 && j.energia < 60 ?
-                  <span
-                    className="text-rose-400"
-                    title={`${j.lesao.descricao} · energia ${Math.round(j.energia)}% — não pode jogar`}
-                  >
-                    FORA
-                  </span>
-                : j.lesao && j.lesao.diasRestantes > 0 ?
-                  <span className="text-amber-400" title={j.lesao.descricao}>
-                    LES {j.lesao.diasRestantes}d
-                  </span>
-                : j.status_escalacao.slice(0, 3)}
-              </td>
-              {showDispensa && onDispensa && (
-                <td>
+              <SortableTh
+                sortId="status"
+                ativa={sortCol === 'status'}
+                direcao={sortDir}
+                onSort={() => onSort('status')}
+              >
+                Status
+              </SortableTh>
+              {showDispensa && <th>Ação</th>}
+            </tr>
+          </thead>
+          <tbody>
+            {ordenados.map((j) => (
+              <tr key={j.id} className="border-t border-zinc-800 hover:bg-zinc-900">
+                <td className="p-2">
                   <button
                     type="button"
-                    className="text-rose-300 hover:text-rose-200"
-                    onClick={() => onDispensa(j.id)}
+                    onClick={() => onJogador(j.id)}
+                    className="font-medium text-emerald-100 underline-offset-2 hover:text-emerald-50 hover:underline"
                   >
-                    Dispensar
+                    {j.nome}
                   </button>
                 </td>
-              )}
-            </tr>
-          ))}
-        </tbody>
-      </table>
+                <td>{j.posicao}</td>
+                <td>{j.idade}</td>
+                <td className="text-emerald-400">
+                  {j.overall}
+                  {j.energia < 92 && (
+                    <span className="ml-1 text-[10px] text-zinc-500" title="OVR efetivo pela energia">
+                      →{overallEfetivoPorEnergia(j.overall, j.energia)}
+                    </span>
+                  )}
+                </td>
+                <td className={corClasseEnergia(j.energia)}>{Math.round(j.energia)}%</td>
+                <td>{mediaAtributosGrupo(j.atributos, 'tecnicos')}</td>
+                <td>{mediaAtributosGrupo(j.atributos, 'mentais')}</td>
+                <td>{mediaAtributosGrupo(j.atributos, 'fisicos')}</td>
+                {showFinance && (
+                  <>
+                    <td>{formatarDinheiro(valorMercado(j))}</td>
+                    <td>{formatarDinheiro(salarioMensal(j))}</td>
+                  </>
+                )}
+                <td className="text-zinc-500">
+                  {j.lesao && j.lesao.diasRestantes > 0 && j.energia < 60 ?
+                    <span
+                      className="text-rose-400"
+                      title={`${j.lesao.descricao} · energia ${Math.round(j.energia)}% — não pode jogar`}
+                    >
+                      FORA
+                    </span>
+                  : j.lesao && j.lesao.diasRestantes > 0 ?
+                    <span className="text-amber-400" title={j.lesao.descricao}>
+                      LES {j.lesao.diasRestantes}d
+                    </span>
+                  : j.status_escalacao.slice(0, 3)}
+                </td>
+                {showDispensa && onDispensa && (
+                  <td>
+                    <button
+                      type="button"
+                      className="text-rose-300 hover:text-rose-200"
+                      onClick={() => onDispensa(j.id)}
+                    >
+                      Dispensar
+                    </button>
+                  </td>
+                )}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      {elenco.length > 0 && ordenados.length === 0 && (
+        <p className="mt-3 text-sm text-zinc-500">Nenhum jogador com esses filtros.</p>
+      )}
     </div>
   );
 }

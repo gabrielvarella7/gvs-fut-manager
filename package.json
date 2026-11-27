@@ -24,6 +24,7 @@
     "smoke:sub23-ovr": "npx --yes tsx scripts/smoke-sub23-ovr-plantel.mjs",
     "smoke:elenco-campo": "node scripts/smoke-lineup-elenco-campo.mjs",
     "smoke:assistente-grade": "npx --yes tsx scripts/smoke-assistente-keep-grade.mjs",
+    "smoke:elenco-sort": "npx --yes tsx scripts/smoke-elenco-sort.mjs",
     "sync": "powershell -NoProfile -ExecutionPolicy Bypass -File ./scripts/sync-nuvem.ps1"
   },
   "dependencies": {
