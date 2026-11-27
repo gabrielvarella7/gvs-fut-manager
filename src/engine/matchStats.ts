@@ -129,7 +129,42 @@ export function previsaoPreJogo(
   };
 }
 
-export function estatisticasParciais(
+/** Filtro de período na aba Estatísticas: partida inteira, 1º ou 2º tempo. */
+export type PeriodoEstatisticas = 'todos' | '1' | '2';
+
+function statsZeradas(): EstatisticasTime {
+  return {
+    possePercent: 50,
+    xg: 0,
+    finalizacoes: 0,
+    finalizacoesNoGol: 0,
+    defesasGoleiro: 0,
+    escanteios: 0,
+    faltas: 0,
+    passes: 0,
+    desarmes: 0,
+    cartoesAmarelos: 0,
+  };
+}
+
+function subtrairStats(a: EstatisticasTime, b: EstatisticasTime): EstatisticasTime {
+  const finalizacoes = Math.max(0, a.finalizacoes - b.finalizacoes);
+  const finalizacoesNoGol = Math.max(0, a.finalizacoesNoGol - b.finalizacoesNoGol);
+  return {
+    possePercent: a.possePercent,
+    xg: Math.max(0, Math.round((a.xg - b.xg) * 100) / 100),
+    finalizacoes,
+    finalizacoesNoGol: Math.min(finalizacoes, finalizacoesNoGol),
+    defesasGoleiro: Math.max(0, a.defesasGoleiro - b.defesasGoleiro),
+    escanteios: Math.max(0, a.escanteios - b.escanteios),
+    faltas: Math.max(0, a.faltas - b.faltas),
+    passes: Math.max(0, a.passes - b.passes),
+    desarmes: Math.max(0, a.desarmes - b.desarmes),
+    cartoesAmarelos: Math.max(0, a.cartoesAmarelos - b.cartoesAmarelos),
+  };
+}
+
+function estatisticasAteMinuto(
   result: MatchSimResult,
   minuto: number,
   mandanteId: string,
@@ -143,12 +178,15 @@ export function estatisticasParciais(
   const blend = (total: number, parc: number) =>
     Math.round(parc + (total - parc) * fator * 0.15);
 
+  const posseM = Math.round(
+    parcial.mandante.posseWeight +
+      (base.mandante.possePercent - parcial.mandante.posseWeight) * fator,
+  );
+
   return {
     mandante: {
       ...base.mandante,
-      possePercent: Math.round(
-        parcial.mandante.posseWeight + (base.mandante.possePercent - parcial.mandante.posseWeight) * fator,
-      ),
+      possePercent: posseM,
       finalizacoes: blend(base.mandante.finalizacoes, parcial.mandante.finalizacoes),
       finalizacoesNoGol: blend(base.mandante.finalizacoesNoGol, parcial.mandante.finalizacoesNoGol),
       defesasGoleiro: blend(base.mandante.defesasGoleiro, parcial.mandante.defesasGoleiro),
@@ -161,9 +199,7 @@ export function estatisticasParciais(
     },
     visitante: {
       ...base.visitante,
-      possePercent: 100 - Math.round(
-        parcial.mandante.posseWeight + (base.mandante.possePercent - parcial.mandante.posseWeight) * fator,
-      ),
+      possePercent: 100 - posseM,
       finalizacoes: blend(base.visitante.finalizacoes, parcial.visitante.finalizacoes),
       finalizacoesNoGol: blend(base.visitante.finalizacoesNoGol, parcial.visitante.finalizacoesNoGol),
       defesasGoleiro: blend(base.visitante.defesasGoleiro, parcial.visitante.defesasGoleiro),
@@ -175,6 +211,50 @@ export function estatisticasParciais(
       cartoesAmarelos: parcial.visitante.cartoes,
     },
   };
+}
+
+export function estatisticasParciais(
+  result: MatchSimResult,
+  minuto: number,
+  mandanteId: string,
+  periodo: PeriodoEstatisticas = 'todos',
+): { mandante: EstatisticasTime; visitante: EstatisticasTime } {
+  if (periodo === 'todos') {
+    return estatisticasAteMinuto(result, minuto, mandanteId);
+  }
+
+  if (periodo === '1') {
+    // Mesma base que TODOS até o 45' — no 1º tempo vivo, TODOS === 1º.
+    const fim = Math.min(Math.max(minuto, 0), 45);
+    if (fim <= 0) {
+      return { mandante: statsZeradas(), visitante: statsZeradas() };
+    }
+    return estatisticasAteMinuto(result, fim, mandanteId);
+  }
+
+  // 2º tempo = acumulado até agora − 1º tempo (aditivo com TODOS).
+  if (minuto <= 45) {
+    return { mandante: statsZeradas(), visitante: statsZeradas() };
+  }
+  const ateAgora = estatisticasAteMinuto(result, minuto, mandanteId);
+  const ate45 = estatisticasAteMinuto(result, 45, mandanteId);
+  const mandante = subtrairStats(ateAgora.mandante, ate45.mandante);
+  const visitante = subtrairStats(ateAgora.visitante, ate45.visitante);
+
+  const lanc2 = result.lancamentos.filter(
+    (l) => l.minuto > 45 && l.minuto <= minuto && l.minuto > 0,
+  );
+  const parcial2 = contarDeLancamentos(lanc2, mandanteId, result.visitanteId);
+  const temAcao = parcial2.mandante.posseWeight !== 50 || parcial2.visitante.posseWeight !== 50
+    || lanc2.length > 0;
+  if (temAcao) {
+    mandante.possePercent = parcial2.mandante.posseWeight;
+    visitante.possePercent = parcial2.visitante.posseWeight;
+  } else {
+    mandante.possePercent = 50;
+    visitante.possePercent = 50;
+  }
+  return { mandante, visitante };
 }
 
 function contarDeLancamentos(

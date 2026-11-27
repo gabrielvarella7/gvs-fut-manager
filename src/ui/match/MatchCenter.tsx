@@ -1,7 +1,10 @@
 import { useState } from 'react';
 import type { EstadoTemporada } from '../../career/brasileirao';
 import type { DadosH2H } from '../../career/h2hMatch';
-import { estatisticasParciais } from '../../engine/matchStats';
+import {
+  estatisticasParciais,
+  type PeriodoEstatisticas,
+} from '../../engine/matchStats';
 import type { MatchSimResult } from '../../engine/matchEngine';
 import type { InfoJogadorPartida } from '../../engine/jogadorDaPartida';
 import type { CampeonatoConfig, Time } from '../../types/schema';
@@ -84,6 +87,7 @@ export function MatchCenter({
 }: Props) {
   const [aba, setAba] = useState<Aba>('comentario');
   const [minuto, setMinuto] = useState(resumePlayback?.minuto ?? 0);
+  const [periodoStats, setPeriodoStats] = useState<PeriodoEstatisticas>('todos');
   const [progresso, setProgresso] = useState<PlaybackProgress>(
     resumePlayback ?? { idx: 0, golsM: 0, golsV: 0, minuto: 0 },
   );
@@ -97,7 +101,7 @@ export function MatchCenter({
 
   const stats =
     result.estatisticas &&
-    estatisticasParciais(result, minuto, result.mandanteId);
+    estatisticasParciais(result, minuto, result.mandanteId, periodoStats);
 
   const lancamentosVisiveis = result.lancamentos.slice(0, progresso.idx);
 
@@ -177,6 +181,8 @@ export function MatchCenter({
           visitante={stats.visitante}
           mandanteNome={mandanteNome}
           visitanteNome={visitanteNome}
+          periodo={periodoStats}
+          onPeriodo={setPeriodoStats}
         />
       )}
 
@@ -210,6 +216,8 @@ export function MatchCenter({
           visitante={stats.visitante}
           mandanteNome={mandanteNome}
           visitanteNome={visitanteNome}
+          periodo={periodoStats}
+          onPeriodo={setPeriodoStats}
         />
       )}
 
