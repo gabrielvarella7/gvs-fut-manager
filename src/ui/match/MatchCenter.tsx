@@ -1,10 +1,13 @@
 import { useState } from 'react';
+import type { EstadoTemporada } from '../../career/brasileirao';
 import { estatisticasParciais } from '../../engine/matchStats';
 import type { MatchSimResult } from '../../engine/matchEngine';
+import type { CampeonatoConfig, Time } from '../../types/schema';
 import { MatchEventTimeline } from './MatchEventTimeline';
 import { MatchMomentum } from './MatchMomentum';
 import { MatchPreGame } from './MatchPreGame';
 import { MatchStatsPanel } from './MatchStatsPanel';
+import { MatchClassificacaoPanel } from './MatchClassificacaoPanel';
 import {
   MatchPlayback,
   type PlaybackProgress,
@@ -12,7 +15,7 @@ import {
 } from '../MatchPlayback';
 import { CmBtn } from '../cm/CmShell';
 
-type Aba = 'comentario' | 'estatisticas' | 'prejogo' | 'detalhes';
+type Aba = 'comentario' | 'estatisticas' | 'classificacao' | 'prejogo' | 'detalhes';
 
 type Props = {
   result: MatchSimResult;
@@ -37,6 +40,15 @@ type Props = {
   onIrProFimDoJogo?: () => void;
   /** Final score only: leave transmission and return to escritório / hub. */
   onFinalizarJogo?: () => void;
+  /** Classificação ao vivo do campeonato (modo liga). */
+  classificacao?: {
+    estado: EstadoTemporada;
+    campeonato: CampeonatoConfig;
+    times: Time[];
+    partidaAoVivoId: number;
+    mandanteId: string;
+    visitanteId: string;
+  } | null;
 };
 
 export function MatchCenter({
@@ -60,6 +72,7 @@ export function MatchCenter({
   skipToEndNonce = 0,
   onIrProFimDoJogo,
   onFinalizarJogo,
+  classificacao = null,
 }: Props) {
   const [aba, setAba] = useState<Aba>('comentario');
   const [minuto, setMinuto] = useState(resumePlayback?.minuto ?? 0);
@@ -83,6 +96,7 @@ export function MatchCenter({
   const abas: { id: Aba; label: string }[] = [
     { id: 'detalhes', label: 'Detalhes' },
     { id: 'estatisticas', label: 'Estatísticas' },
+    ...(classificacao ? [{ id: 'classificacao' as const, label: 'Classificação' }] : []),
     { id: 'comentario', label: 'Comentário' },
     { id: 'prejogo', label: 'Pré-jogo' },
   ];
@@ -162,6 +176,19 @@ export function MatchCenter({
             visitanteNome={visitanteNome}
           />
         </>
+      )}
+
+      {aba === 'classificacao' && classificacao && (
+        <MatchClassificacaoPanel
+          estado={classificacao.estado}
+          campeonato={classificacao.campeonato}
+          times={classificacao.times}
+          partidaAoVivoId={classificacao.partidaAoVivoId}
+          resultAoVivo={result}
+          minuto={minuto}
+          mandanteId={classificacao.mandanteId}
+          visitanteId={classificacao.visitanteId}
+        />
       )}
 
       {aba === 'prejogo' && (

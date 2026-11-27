@@ -16,6 +16,9 @@ export interface PartidaCampeonato {
   finalizado: boolean;
   golsMandante?: number;
   golsVisitante?: number;
+  /** Minutos dos gols (para classificação ao vivo na mesma rodada). */
+  minutosGolsMandante?: number[];
+  minutosGolsVisitante?: number[];
   ehDoUsuario: boolean;
   /** Clássico / campo neutro — não conta na sequência mandante/visitante */
   campoNeutro?: boolean;
@@ -428,10 +431,18 @@ export function registrarPlacarPartida(
   golsMandante: number,
   golsVisitante: number,
   campeonato: CampeonatoConfig,
+  minutosGols?: { mandante?: number[]; visitante?: number[] },
 ): EstadoTemporada {
   const partidas = estado.partidas.map((p) =>
     p.id === partidaId
-      ? { ...p, finalizado: true, golsMandante, golsVisitante }
+      ? {
+          ...p,
+          finalizado: true,
+          golsMandante,
+          golsVisitante,
+          ...(minutosGols?.mandante ? { minutosGolsMandante: minutosGols.mandante } : {}),
+          ...(minutosGols?.visitante ? { minutosGolsVisitante: minutosGols.visitante } : {}),
+        }
       : p,
   );
   const p = partidas.find((x) => x.id === partidaId);
@@ -544,14 +555,30 @@ export function simularRestanteRodada(
       );
       seed = (s * 1103515245 + 12345) >>> 0;
       const r = simularPartidaCpu({ ...input, seed: s, indicePartidaTemporada: indice });
-      next = registrarPlacarPartida(next, p.id, r.golsMandante, r.golsVisitante, campeonato);
+      const minutosM: number[] = [];
+      const minutosV: number[] = [];
+      for (const l of r.lancamentos) {
+        if (l.tipo !== 'gol') continue;
+        if (l.timeId === r.mandanteId) minutosM.push(l.minuto);
+        else minutosV.push(l.minuto);
+      }
+      next = registrarPlacarPartida(next, p.id, r.golsMandante, r.golsVisitante, campeonato, {
+        mandante: minutosM,
+        visitante: minutosV,
+      });
       indice += 1;
     } catch (err) {
       // Evita truncar a temporada se um confronto CPU falhar (ex.: elenco dizimado por lesões).
       console.error('Falha ao simular partida CPU', p.id, err);
       const gm = (seed >>> 3) % 3;
       const gv = (seed >>> 7) % 3;
-      next = registrarPlacarPartida(next, p.id, gm, gv, campeonato);
+      // Timeline sintética determinística para a tabela ao vivo.
+      const minutosM = Array.from({ length: gm }, (_, i) => 10 + i * 17 + (p.id % 7));
+      const minutosV = Array.from({ length: gv }, (_, i) => 12 + i * 19 + (p.id % 5));
+      next = registrarPlacarPartida(next, p.id, gm, gv, campeonato, {
+        mandante: minutosM,
+        visitante: minutosV,
+      });
       seed = (seed * 1103515245 + 12345) >>> 0;
       indice += 1;
     }
