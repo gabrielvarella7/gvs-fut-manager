@@ -108,41 +108,67 @@ export function SquadScreen() {
           total={s23Query.total}
         />
 
-        <ul className="space-y-2">
-          {s23Query.result.map((a) => (
-            <CmPanel key={a.id}>
-              <div className="flex flex-wrap items-start justify-between gap-2">
-                <div>
-                  <p className="font-medium text-zinc-100">
-                    {a.nome}{' '}
-                    <span className="text-xs font-normal text-zinc-500">
-                      {a.idade} · {a.posicao}
-                    </span>
-                  </p>
-                  <p className="mt-1 text-xs text-zinc-400">
-                    OVR {a.overall} · teto ~{a.potencialOvr} · {rotuloTierBase(a.tier)}
+        <div className="overflow-x-auto rounded border border-zinc-700">
+          <table className="w-full min-w-[720px] text-left text-xs">
+            <thead className="bg-zinc-800 text-zinc-400">
+              <tr>
+                <th className="p-2">Nome</th>
+                <th>Pos</th>
+                <th>Id</th>
+                <th>OVR</th>
+                <th>Téc</th>
+                <th>Men</th>
+                <th>Fís</th>
+                <th>Teto</th>
+                <th>Perfil</th>
+                <th className="p-2">Ação</th>
+              </tr>
+            </thead>
+            <tbody>
+              {s23Query.result.map((a) => (
+                <tr key={a.id} className="border-t border-zinc-800 hover:bg-zinc-900">
+                  <td className="p-2">
+                    <button
+                      type="button"
+                      onClick={() => abrirPerfil(a.id)}
+                      className="font-medium text-emerald-100 underline-offset-2 hover:text-emerald-50 hover:underline"
+                    >
+                      {a.nome}
+                    </button>
+                  </td>
+                  <td>{a.posicao}</td>
+                  <td>{a.idade}</td>
+                  <td className="text-emerald-400">{a.overall}</td>
+                  <td>{mediaAtributosGrupo(a.atributos, 'tecnicos')}</td>
+                  <td>{mediaAtributosGrupo(a.atributos, 'mentais')}</td>
+                  <td>{mediaAtributosGrupo(a.atributos, 'fisicos')}</td>
+                  <td>~{a.potencialOvr}</td>
+                  <td className="text-zinc-400">
+                    {rotuloTierBase(a.tier)}
                     {a.precoceEstagnado ? ' · precoce' : ''}
                     {a.diamanteBruto ? ' · diamante bruto' : ''}
-                  </p>
-                </div>
-                <CmBtn
-                  variant="primary"
-                  disabled={plantelCheio}
-                  onClick={() => {
-                    if (plantelCheio) {
-                      setAviso(MSG_PLANTEL_CHEIO_SUBIR);
-                      return;
-                    }
-                    const err = promover(a.id);
-                    setAviso(err);
-                  }}
-                >
-                  {plantelCheio ? 'Plantel cheio' : 'Subir profissional'}
-                </CmBtn>
-              </div>
-            </CmPanel>
-          ))}
-        </ul>
+                  </td>
+                  <td className="p-2">
+                    <CmBtn
+                      variant="primary"
+                      disabled={plantelCheio}
+                      onClick={() => {
+                        if (plantelCheio) {
+                          setAviso(MSG_PLANTEL_CHEIO_SUBIR);
+                          return;
+                        }
+                        const err = promover(a.id);
+                        setAviso(err);
+                      }}
+                    >
+                      {plantelCheio ? 'Plantel cheio' : 'Subir profissional'}
+                    </CmBtn>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
         {elencoS23.length === 0 && (
           <p className="mt-4 text-sm text-amber-200/90">Nenhum atleta no Sub-23 deste clube.</p>
         )}

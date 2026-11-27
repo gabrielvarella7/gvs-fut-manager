@@ -3,6 +3,8 @@ import type { RelatorioPreJogo } from '../../career/relatorioPreJogo';
 import { formatarDataBr } from '../../career/brasileirao';
 import { StatBar } from './StatBar';
 import type { ProbabilidadesResultado } from '../../engine/matchEngine';
+import { ClubNameLink } from '../components/ClubNameLink';
+import { PlayerNameLink } from '../components/PlayerNameLink';
 
 type Props = {
   relatorio: RelatorioPreJogo;
@@ -137,7 +139,9 @@ function BlocoEscalacao({
     >
       <div className="mb-3 flex items-center justify-between gap-2">
         <div>
-          <p className="font-medium text-zinc-100">{time.nome_completo}</p>
+          <p className="font-medium text-zinc-100">
+            <ClubNameLink clubeId={time.id}>{time.nome_completo}</ClubNameLink>
+          </p>
           <p className="text-xs text-zinc-500">
             Esquema provável: <strong className="text-zinc-300">{esquema}</strong> · média OVR{' '}
             {mediaOvr}
@@ -156,7 +160,7 @@ function BlocoEscalacao({
           <li key={j.id} className="flex justify-between gap-2 text-zinc-300">
             <span>
               <span className="inline-block w-5 text-zinc-500">{idx + 1}.</span>
-              {j.nome}
+              <PlayerNameLink jogadorId={j.id}>{j.nome}</PlayerNameLink>
             </span>
             <span className="text-zinc-500">
               {j.posicao} · <strong className="text-zinc-200">{j.overall}</strong>

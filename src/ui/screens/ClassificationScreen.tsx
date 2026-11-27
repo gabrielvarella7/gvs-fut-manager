@@ -4,6 +4,7 @@ import { rotuloCompeticaoSub23 } from '../../types/aspirantesS23';
 import { useGameStore } from '../../store/useGameStore';
 import { CmCareerShell } from '../cm/CmCareerShell';
 import { CmPanel } from '../cm/CmShell';
+import { ClubNameLink } from '../components/ClubNameLink';
 
 export function ClassificationScreen() {
   const campeonato = useGameStore((s) => s.campeonato);
@@ -71,8 +72,10 @@ export function ClassificationScreen() {
                 >
                   <td className={`py-2 pr-2 ${classes.posicao}`}>{pos}</td>
                   <td className="py-2 font-medium text-zinc-100">
-                    {porNome.get(l.time_id) ?? l.time_id}
-                    {modoSub23 ? ' Sub23' : ''}
+                    <ClubNameLink clubeId={l.time_id}>
+                      {porNome.get(l.time_id) ?? l.time_id}
+                      {modoSub23 ? ' Sub23' : ''}
+                    </ClubNameLink>
                   </td>
                   <td className="py-2 text-center font-semibold">{l.pontos}</td>
                   <td className="py-2 text-center">{l.jogos}</td>

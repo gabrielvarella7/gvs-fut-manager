@@ -20,6 +20,8 @@ import { elencoSub23DoClube } from '../../career/aspirantesS23';
 import { useGameStore } from '../../store/useGameStore';
 import { CmCareerShell } from '../cm/CmCareerShell';
 import { CmBtn, CmMenuList, CmPanel } from '../cm/CmShell';
+import { ClubNameLink } from '../components/ClubNameLink';
+import { PlayerNameLink } from '../components/PlayerNameLink';
 
 export function OfficeHubScreen() {
   const perfil = useGameStore((s) => s.perfil);
@@ -133,7 +135,19 @@ export function OfficeHubScreen() {
                   </p>
                   <p className="mt-1 text-xs text-amber-200/90">
                     {rotuloTendenciaSaida(r.tendenciaSair ?? 50)}
-                    {jog ? ` · ${jog.nome}` : ''}
+                    {jog ? (
+                      <>
+                        {' · '}
+                        <PlayerNameLink
+                          jogadorId={jog.id}
+                          className="text-emerald-200 underline-offset-2 hover:underline"
+                        >
+                          {jog.nome}
+                        </PlayerNameLink>
+                      </>
+                    ) : (
+                      ''
+                    )}
                   </p>
                   <div className="mt-2 flex flex-wrap gap-2">
                     <CmBtn
@@ -232,8 +246,17 @@ export function OfficeHubScreen() {
                 Rodada {prox.rodada}
                 {'dataISO' in prox && prox.dataISO ? ` · ${formatarDataBr(prox.dataISO)}` : ''} ·{' '}
                 {emCasa ? 'Mandante' : 'Visitante'} vs{' '}
-                <strong>{adversario?.nome_completo ?? advId}</strong>
-                {modoSub23 ? ' (Sub23)' : ''}
+                {advId ? (
+                  <ClubNameLink
+                    clubeId={advId}
+                    className="font-semibold text-sky-200 underline-offset-2 hover:underline"
+                  >
+                    {adversario?.nome_completo ?? advId}
+                    {modoSub23 ? ' (Sub23)' : ''}
+                  </ClubNameLink>
+                ) : (
+                  <strong>{adversario?.nome_completo ?? '—'}</strong>
+                )}
               </p>
 
               {modoSub23 ? (
