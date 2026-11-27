@@ -80,18 +80,28 @@ export function TacticPitch({
         ? porId.get(slotIds[arrastando]!)
         : undefined;
 
-  const slotEhNativo100 = (i: number): boolean => {
-    if (!jogadorArrasto) return false;
-    const cel = grade11[i];
-    const pos =
-      cel != null
-        ? posicaoNaCelula(cel)
-        : (slots[i] ?? jogadorArrasto.posicao);
+  const celulaEhNativa100 = (cel: CelulaGrade): boolean => {
+    if (!jogadorArrasto || cel.gol) return false;
+    const pos = posicaoNaCelula(cel);
     const r = PositionRecalculator.multiplicadorNaPosicaoSchema(jogadorArrasto, pos, {
-      col: cel?.col,
+      col: cel.col,
     });
     return r.nativa === true;
   };
+
+  const slotEhNativo100 = (i: number): boolean => {
+    if (!jogadorArrasto) return false;
+    const cel = grade11[i];
+    if (cel != null) return celulaEhNativa100(cel);
+    const pos = slots[i] ?? jogadorArrasto.posicao;
+    const r = PositionRecalculator.multiplicadorNaPosicaoSchema(jogadorArrasto, pos);
+    return r.nativa === true;
+  };
+
+  /** Células da grade já ocupadas por um dos 11 slots (não repetir verdinho). */
+  const chavesSlotsOcupados = new Set(
+    grade11.map((cel) => (cel.gol ? 'gol' : `${cel.col},${cel.row}`)),
+  );
 
   const slotJogador = (i: number) => {
     const id = slotIds[i];
@@ -333,6 +343,34 @@ export function TacticPitch({
         >
           <FieldLines />
           <GradeInvisivel destaque={hover} arrastando={arrastando != null} />
+          {/* Durante arraste no gramado: verdinho também em células vazias nativas (100% OVR). */}
+          {jogadorArrasto != null &&
+            arrastando != null &&
+            Array.from({ length: LINHAS_CAMPO }, (_, row) =>
+              Array.from({ length: COLS_LINHA }, (_, col) => {
+                const chave = `${col},${row}`;
+                if (chavesSlotsOcupados.has(chave)) return null;
+                const cel: CelulaGrade = { col, row };
+                if (!celulaEhNativa100(cel)) return null;
+                const ponto = { x: COL_X_GRADE[col], y: ROW_Y[row] };
+                return (
+                  <div
+                    key={`nativo-vazio-${chave}`}
+                    className="pointer-events-none absolute z-[2] flex -translate-x-1/2 -translate-y-1/2 flex-col items-center"
+                    style={{ left: `${ponto.x}%`, top: `${ponto.y}%` }}
+                    title="100% OVR nesta posição"
+                  >
+                    <span
+                      aria-hidden
+                      className="absolute -top-1 left-1/2 z-0 h-3.5 w-3.5 -translate-x-1/2 rounded-full bg-green-400/55 ring-2 ring-green-300/40 shadow-[0_0_10px_rgba(74,222,128,0.45)]"
+                    />
+                    <div className="relative z-[1] flex h-11 w-11 items-center justify-center rounded-full border-2 border-dashed border-green-400/70 bg-zinc-900/55 text-[10px] font-bold text-green-100/90 ring-2 ring-green-400/20">
+                      {rotuloPosicaoCampinho(cel)}
+                    </div>
+                  </div>
+                );
+              }),
+            )}
           {coords.map((c, i) => {
             const j = slotJogador(i);
             const ativo = arrastando === i || selecionado === i;
