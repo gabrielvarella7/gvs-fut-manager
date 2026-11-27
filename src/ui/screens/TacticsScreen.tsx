@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { getTimeFicticio } from '../../career/fictionalLeague';
 import {
   bloqueadoPorLesaoComEnergiaBaixa,
@@ -95,6 +95,10 @@ function TacticsScreenPro() {
   const [reservaSubs, setReservaSubs] = useState<number | null>(null);
   const [arrastandoJogadorId, setArrastandoJogadorId] = useState<number | null>(null);
   const [slotAguardandoReserva, setSlotAguardandoReserva] = useState<number | null>(null);
+  const arrastandoJogadorIdRef = useRef<number | null>(null);
+  useEffect(() => {
+    arrastandoJogadorIdRef.current = arrastandoJogadorId;
+  }, [arrastandoJogadorId]);
 
   useEffect(() => {
     setConfigLocal(configSalva);
@@ -319,13 +323,30 @@ function TacticsScreenPro() {
     setReservaSubs(null);
   };
 
-  const soltarJogadorNoSlot = (slot: number) => {
-    if (arrastandoJogadorId != null) {
-      aplicarSubstituicao(slot, arrastandoJogadorId);
+  const aplicarSubstituicaoRef = useRef(aplicarSubstituicao);
+  useEffect(() => {
+    aplicarSubstituicaoRef.current = aplicarSubstituicao;
+  });
+
+  const soltarJogadorNoSlot = useCallback((slot: number) => {
+    const id = arrastandoJogadorIdRef.current;
+    if (id != null) {
+      aplicarSubstituicaoRef.current(slot, id);
       return;
     }
     setArrastandoJogadorId(null);
-  };
+  }, []);
+
+  const cancelarArrastoElenco = useCallback(() => {
+    setArrastandoJogadorId(null);
+    setSlotAguardandoReserva(null);
+  }, []);
+
+  const iniciarArrastoElenco = useCallback((id: number) => {
+    // Não limpa slotAguardandoReserva aqui: um toque na reserva após
+    // “solte fora” ainda precisa completar a substituição no pointerup/click.
+    setArrastandoJogadorId(id);
+  }, []);
 
   const arrastoSaiuDoCampo = (slot: number) => {
     const id = slotIds[slot];
@@ -676,10 +697,7 @@ function TacticsScreenPro() {
                 onSlotClick={onSlotElenco}
                 onReservaClick={onReservaElenco}
                 onToggleBanco={toggleBanco}
-                onArrastarJogador={(id) => {
-                  setArrastandoJogadorId(id);
-                  setSlotAguardandoReserva(null);
-                }}
+                onArrastarJogador={iniciarArrastoElenco}
                 arrastandoJogadorId={arrastandoJogadorId}
                 slotAguardandoReserva={slotAguardandoReserva}
                 onSoltarReservaComCampo={soltarReservaComCampo}
@@ -700,10 +718,7 @@ function TacticsScreenPro() {
               onMoverSlotGrade={moverSlotGrade}
               arrastandoJogadorId={arrastandoJogadorId}
               onSoltarJogadorNoSlot={soltarJogadorNoSlot}
-              onArrastoElencoCancelado={() => {
-                setArrastandoJogadorId(null);
-                setSlotAguardandoReserva(null);
-              }}
+              onArrastoElencoCancelado={cancelarArrastoElenco}
               onArrastoSaiuDoCampo={arrastoSaiuDoCampo}
             />
           )}

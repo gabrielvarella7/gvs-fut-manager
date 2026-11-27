@@ -1,4 +1,4 @@
-import type { PointerEvent as ReactPointerEvent } from 'react';
+import { useRef, type PointerEvent as ReactPointerEvent } from 'react';
 import {
   bloqueadoPorLesaoComEnergiaBaixa,
   rotuloBloqueioLesaoEnergia,
@@ -10,6 +10,9 @@ import { rotuloPosicaoCampinho } from '../../data/gradeCampinho';
 import type { CelulaGrade } from '../../data/gradeCampinho';
 import { SLOTS_POR_ESQUEMA, esquemaOuPadrao } from '../../data/esquemasTaticos';
 import type { EsquemaTatico, Jogador } from '../../types/schema';
+
+/** Movimento mínimo (px) para tratar o gesto como arraste e não como clique. */
+const LIMIAR_ARRASTO_PX = 8;
 
 type Props = {
   elenco: Jogador[];
@@ -67,17 +70,27 @@ function MiniJogador({
   titleBloqueio?: string | null;
 }) {
   const energiaBaixa = energia != null && energia < 70;
+  /**
+   * Com setPointerCapture o `click` dispara mesmo após arrastar até o gramado.
+   * Se o gesto moveu, ignoramos o click para não chamar toggleBanco e desfazer
+   * a substituição elenco → campo persistida no pointerup do TacticPitch.
+   */
+  const gestoRef = useRef<{ x: number; y: number; moveu: boolean } | null>(null);
   return (
     <button
       type="button"
       disabled={bloqueado && !titular}
       title={titleBloqueio ?? undefined}
       onClick={() => {
+        const foiArrasto = gestoRef.current?.moveu === true;
+        gestoRef.current = null;
+        if (foiArrasto) return;
         if (bloqueado && !titular) return;
         onClick();
       }}
       onPointerDown={(e) => {
         if (bloqueado) return;
+        gestoRef.current = { x: e.clientX, y: e.clientY, moveu: false };
         try {
           e.currentTarget.setPointerCapture(e.pointerId);
         } catch {
@@ -85,7 +98,17 @@ function MiniJogador({
         }
         onArrastar?.(e);
       }}
+      onPointerMove={(e) => {
+        const g = gestoRef.current;
+        if (!g || g.moveu) return;
+        if (Math.hypot(e.clientX - g.x, e.clientY - g.y) >= LIMIAR_ARRASTO_PX) {
+          g.moveu = true;
+        }
+      }}
       onPointerUp={onSoltar}
+      onPointerCancel={() => {
+        gestoRef.current = null;
+      }}
       style={{ touchAction: 'none' }}
       className={`flex w-full items-center gap-2 rounded-lg border px-2 py-1.5 text-left transition-colors ${
         bloqueado

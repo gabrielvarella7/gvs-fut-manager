@@ -21,6 +21,7 @@
     "smoke:matrix": "node scripts/smoke-position-recalculator.mjs",
     "smoke:slots": "npx --yes tsx scripts/smoke-pe-pd-st-slots.mjs",
     "smoke:sub23-ovr": "npx --yes tsx scripts/smoke-sub23-ovr-plantel.mjs",
+    "smoke:elenco-campo": "node scripts/smoke-lineup-elenco-campo.mjs",
     "sync": "powershell -NoProfile -ExecutionPolicy Bypass -File ./scripts/sync-nuvem.ps1"
   },
   "dependencies": {
