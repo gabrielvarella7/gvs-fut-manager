@@ -20,7 +20,6 @@ import { MatchCenter } from '../match/MatchCenter';
 import { gerarRelatorioPreJogo } from '../../career/relatorioPreJogo';
 import { multFadigaPreparadorFisico, nivelStaff } from '../../career/staffEfeitos';
 import { formacaoIdDeEsquema, taticaCpuAutomatica } from '../../engine/tacticsEngine';
-import { improvisacaoMultTreino } from '../../engine/trainingEngine';
 import { tryGetDatabaseTaticas } from '../../db/tacticsDatabase';
 import { PreMatchReport } from '../match/PreMatchReport';
 import { MatchPreGame } from '../match/MatchPreGame';
@@ -147,10 +146,10 @@ export function MatchScreen() {
         clubeRealId && mundoClube ? nivelStaff(mundoClube, 'PREPARADOR_FISICO') : undefined;
       const fadigaUser =
         nivelPrepUser != null ? multFadigaPreparadorFisico(nivelPrepUser) : undefined;
-      const improvisacaoPorJogador: Record<number, number> = {};
+      const polivalenciaPorJogador: Record<number, number> = {};
       if (mundoClube?.estadosTreino) {
         for (const est of mundoClube.estadosTreino) {
-          improvisacaoPorJogador[est.jogador_id] = improvisacaoMultTreino(est);
+          polivalenciaPorJogador[est.jogador_id] = est.progresso_polivalencia ?? 0;
         }
       }
       const bonusTreino = mundoClube?.bonusTreinoProximoJogo;
@@ -198,8 +197,8 @@ export function MatchScreen() {
         dbTaticas,
         config: {
           bonusMandoCampo: neutro ? 1 : (campeonato?.bonus_mando_campo ?? 1.05),
-          ...(Object.keys(improvisacaoPorJogador).length > 0 ?
-            { improvisacaoMultPorJogador: improvisacaoPorJogador }
+          ...(Object.keys(polivalenciaPorJogador).length > 0 ?
+            { polivalenciaPorJogador }
           : {}),
         },
         estadio: neutro ? 'Campo neutro' : mandanteLiga.estadio,

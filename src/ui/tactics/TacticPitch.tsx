@@ -86,7 +86,7 @@ export function TacticPitch({
     const nome = j?.nome ?? '—';
     const overall = j?.overall;
     const ovrPos =
-      j != null ? overallEfetivoEmCampo(j.overall, j.posicao, pos) : undefined;
+      j != null ? overallEfetivoEmCampo(j.overall, j.posicao, pos, j) : undefined;
     const ovrEfetivo =
       j != null && ovrPos != null
         ? overallEfetivoPorEnergia(ovrPos, j.energia)

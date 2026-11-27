@@ -39,7 +39,7 @@ import {
   placarJogoAlucinado,
   sortearDiffComVariancia,
 } from './matchResultadoCore';
-import { rendimentoJogadorEmCampo } from './matchRendimentoCampo';
+import { afinidadeEmCampo, rendimentoJogadorEmCampo } from './matchRendimentoCampo';
 import { efeitoSobrecargaExtremo17 } from '../career/youthAcademy';
 import {
   aplicarConfrontoTaticoNosLambdas,
@@ -47,6 +47,7 @@ import {
   type ConfrontoTatico,
 } from './matchTaticaConfronto';
 import { multiplicadorDesempenhoPosicao } from './posicaoCompatibilidade';
+import type { OpcoesAfinidade } from '../career/afinidadePosicional';
 import type { DatabaseTaticas } from '../types/tactics';
 import type { ConfiguracaoTaticaClube } from '../types/tactics';
 import {
@@ -102,8 +103,11 @@ export interface MatchTeamInput {
 
 export interface MatchSimConfig {
   bonusMandoCampo: number;
+  /** @deprecated Flat −20%; prefer polivalenciaPorJogador + matriz de afinidade. */
   improvisacaoMult?: number;
   improvisacaoMultPorJogador?: Record<number, number>;
+  /** Progresso ADAPTACAO_POLIVALENCIA (0–100) por jogador. */
+  polivalenciaPorJogador?: Record<number, number>;
   energiaLimiteFadiga?: number;
   fadigaPorMinuto?: number;
 }
@@ -177,6 +181,8 @@ export interface MatchSimResult {
   lesoesEmCampo?: LesaoEmCampo[];
   /** Clube que sofreu W.O. (perde 3–0). */
   woTimeId?: string;
+  /** Jogadores que terminaram fora da posição natural (insatisfação / contagem). */
+  idsImprovisados?: number[];
 }
 
 export function criarRng(seed: number): () => number {
@@ -245,7 +251,9 @@ function setorDaPosicao(pos: Posicao): keyof ForcaSetores {
 export function calcularForcaSetores(
   escalacao: JogadorEmCampo[],
   energiaPorId: Map<number, number>,
-  cfg: Required<Pick<MatchSimConfig, 'improvisacaoMult' | 'energiaLimiteFadiga'>>,
+  cfg: Pick<MatchSimConfig, 'improvisacaoMult' | 'improvisacaoMultPorJogador' | 'polivalenciaPorJogador' | 'energiaLimiteFadiga'> & {
+    energiaLimiteFadiga: number;
+  },
   opcoes: OpcoesForcaSetores = {},
 ): ForcaSetores {
   const soma = { defesa: 0, meio: 0, ataque: 0 };
@@ -258,15 +266,18 @@ export function calcularForcaSetores(
     if (expulsos?.has(jogador.id)) continue;
     const setor = setorDaPosicao(posicaoEscalada);
     const energia = energiaPorId.get(jogador.id) ?? jogador.energia;
-    const multImp =
-      cfg.improvisacaoMultPorJogador?.[jogador.id] ?? cfg.improvisacaoMult;
+    const poliv = cfg.polivalenciaPorJogador?.[jogador.id];
+    const opcoesAf: OpcoesAfinidade = {
+      progressoPolivalencia: poliv,
+      posicoesSecundarias: jogador.posicoes_secundarias,
+    };
     const rend = rendimentoJogadorEmCampo({
       jogador,
       posicaoEscalada,
       celula: celulaCampo,
       energia,
       energiaLimiteFadiga: cfg.energiaLimiteFadiga,
-      improvisacaoMult: multImp,
+      opcoesAfinidade: opcoesAf,
       fatorMotivacao: opcoes.fatorMotivacao,
       fatorMoralTime: opcoes.fatorMoralTime,
       criseOuDecisivo: opcoes.criseOuDecisivo,
@@ -345,12 +356,14 @@ function escolherJogadorCartao(
   escalacao: JogadorEmCampo[],
   rnd: () => number,
   fora?: ReadonlySet<number>,
+  multFaltasPorId?: ReadonlyMap<number, number>,
 ): Jogador {
   const ativos = escalacaoAtiva(escalacao, fora);
   const base = ativos.length > 0 ? ativos : escalacao;
   const pesos = base.map(({ jogador }) => {
     const agr = metricasMotorDeAtributos(jogador.atributos).agressividade;
-    return { jogador, w: 0.35 + agr };
+    const faltas = multFaltasPorId?.get(jogador.id) ?? 1;
+    return { jogador, w: (0.35 + agr) * faltas };
   });
   const total = pesos.reduce((s, p) => s + p.w, 0);
   let t = rnd() * total;
@@ -438,11 +451,17 @@ export function simularPartida(input: MatchSimInput): MatchSimResult {
   const cfg = {
     improvisacaoMult: input.config.improvisacaoMult ?? MOTOR_DEFAULTS.improvisacaoMult,
     improvisacaoMultPorJogador: input.config.improvisacaoMultPorJogador,
+    polivalenciaPorJogador: input.config.polivalenciaPorJogador,
     energiaLimiteFadiga:
       input.config.energiaLimiteFadiga ?? MOTOR_DEFAULTS.energiaLimiteFadiga,
     fadigaPorMinuto: fadigaBase * (isClassico ? 1.28 : 1),
     bonusMando: input.config.bonusMandoCampo,
   };
+
+  const opcoesAfinidadeDe = (jogador: Jogador): OpcoesAfinidade => ({
+    progressoPolivalencia: cfg.polivalenciaPorJogador?.[jogador.id],
+    posicoesSecundarias: jogador.posicoes_secundarias,
+  });
 
   let mandanteEsc =
     input.mandante.escalacao ??
@@ -683,6 +702,8 @@ export function simularPartida(input: MatchSimInput): MatchSimResult {
   const momento: MomentoAtaque[] = [];
 
   const fadigaPorJogador = new Map<number, number>();
+  const multFaltasPorJogador = new Map<number, number>();
+  const idsImprovisados = new Set<number>();
   const tudoOuNada =
     ctx?.necessidadeMandante === 'DECISIVO_TITULO' ||
     ctx?.necessidadeVisitante === 'DECISIVO_TITULO';
@@ -696,6 +717,9 @@ export function simularPartida(input: MatchSimInput): MatchSimResult {
     vetores: ReturnType<typeof vetoresTaticosDeConfig>,
     nivelPrep: number,
   ) => {
+    const af = afinidadeEmCampo(jogador, posicaoEscalada, opcoesAfinidadeDe(jogador));
+    if (af.ehImproviso) idsImprovisados.add(jogador.id);
+    multFaltasPorJogador.set(jogador.id, af.multFaltas);
     const prop = getGeneticaSegura(jogador).propensao_lesao;
     const sobrecarga17 = efeitoSobrecargaExtremo17(jogador, posicaoEscalada, 90);
     const paso = fadigaPorMinutoCompleta({
@@ -710,7 +734,10 @@ export function simularPartida(input: MatchSimInput): MatchSimResult {
       tudoOuNada,
       nivelPreparador: nivelPrep,
     });
-    fadigaPorJogador.set(jogador.id, paso * (1 + sobrecarga17.fadigaExtra));
+    fadigaPorJogador.set(
+      jogador.id,
+      paso * (1 + sobrecarga17.fadigaExtra) * af.multDesgasteEnergia,
+    );
   };
   for (const slot of mandanteEsc) {
     registrarFadiga(
@@ -1040,10 +1067,13 @@ export function simularPartida(input: MatchSimInput): MatchSimResult {
       const timeId = casa ? input.mandante.timeId : input.visitante.timeId;
       const ataque = casa ? input.mandante.nomeCurto : input.visitante.nomeCurto;
       const defesa = casa ? input.visitante.nomeCurto : input.mandante.nomeCurto;
-      const j = escolherJogadorCartao(esc, rnd, fora);
+      const j = escolherJogadorCartao(esc, rnd, fora, multFaltasPorJogador);
       const agr = metricasMotorDeAtributos(j.atributos).agressividade;
+      const multFaltaJog = multFaltasPorJogador.get(j.id) ?? 1;
       const segunda = (amarelos.get(j.id) ?? 0) >= 1;
-      const expulsaoDireta = !segunda && rnd() < 0.04 + (agr / 100) * 0.06;
+      // Improviso defensivo com defesa baixa (+22% faltas) eleva cartão/expulsão.
+      const expulsaoDireta =
+        !segunda && rnd() < (0.04 + (agr / 100) * 0.06) * Math.min(1.35, multFaltaJog);
       const expulso = segunda || expulsaoDireta;
       if (expulso) {
         fora.add(j.id);
@@ -1223,6 +1253,7 @@ export function simularPartida(input: MatchSimInput): MatchSimResult {
     impactoTatico: { mandante: impactoM, visitante: impactoV },
     ...(lesoesEmCampo.length > 0 ? { lesoesEmCampo } : {}),
     ...(woTimeId ? { woTimeId } : {}),
+    ...(idsImprovisados.size > 0 ? { idsImprovisados: [...idsImprovisados] } : {}),
   };
 }
 

@@ -60,6 +60,8 @@ export function previsaoPreJogo(
   }
   const cfg = {
     improvisacaoMult: input.config.improvisacaoMult ?? 0.8,
+    improvisacaoMultPorJogador: input.config.improvisacaoMultPorJogador,
+    polivalenciaPorJogador: input.config.polivalenciaPorJogador,
     energiaLimiteFadiga: input.config.energiaLimiteFadiga ?? 60,
     fadigaPorMinuto: 0,
     bonusMando: mandoMult,

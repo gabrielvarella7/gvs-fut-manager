@@ -1,6 +1,10 @@
 import type { ConfiguracaoTaticaClube, EstiloJogoId, RitmoJogo } from '../types/tactics';
 import type { GravidadeLesao, Jogador, Posicao } from '../types/schema';
 import { getGeneticaSegura } from './genetica';
+import {
+  multiplicadorFadigaPartida,
+  overallEfetivoPorEnergiaBase,
+} from './performancePartida';
 
 /** Limiar legado / auto-sub (~70%). */
 export const ENERGIA_LIMITE_LESAO = 70;
@@ -281,20 +285,16 @@ export function energiaInicialPartida(energiaAtual: number, rnd: () => number): 
 }
 
 /**
- * Rendimento cai com a energia.
- * &lt;70%: −18% em atributos técnicos/velocidade em campo (aplicado no rendimento).
+ * Rendimento ↔ energia (curto prazo, clampado — performance-career-curve-spec).
+ * 80–100: sem pena · 65–79: −2%…−5% · <65: máx −9% (piso competitivo).
+ * Não altera overall_base / atributos permanentes.
  */
 export function multiplicadorRendimentoPorEnergia(energia: number): number {
-  const e = Math.max(0, Math.min(100, energia));
-  let mult = Math.max(0.4, 0.4 + 0.6 * (e / 100));
-  if (e < ENERGIA_LIMITE_LESAO) {
-    mult *= 0.82; // −18%
-  }
-  return mult;
+  return multiplicadorFadigaPartida(energia);
 }
 
 export function overallEfetivoPorEnergia(overall: number, energia: number): number {
-  return Math.max(1, Math.round(overall * multiplicadorRendimentoPorEnergia(energia)));
+  return overallEfetivoPorEnergiaBase(overall, energia);
 }
 
 export function corClasseEnergia(energia: number): string {

@@ -182,6 +182,8 @@ export interface Jogador {
   nome: string;
   idade: number;
   posicao: Posicao;
+  /** Posições secundárias declaradas — pena de afinidade limitada a −2%. */
+  posicoes_secundarias?: Posicao[];
   atributos: AtributosJogador;
   overall: number;
   energia: number;
@@ -197,6 +199,10 @@ export interface Jogador {
   genetica?: GeneticaAtleta;
   /** ISO da última partida disputada (curva de recuperação D+1…D+6). */
   ultimaPartidaISO?: string;
+  /** Sequência de jogos fora da posição natural (insatisfação de estrela). */
+  jogosImprovisoSeguidos?: number;
+  /** Cicatriz de lesão grave sem médico (acelera regressão). */
+  cicatrizFisica?: boolean;
   /** Jogador promovido da base; guia evolução, pressão e identidade. */
   formacaoBase?: FormacaoBaseJogador;
 }
@@ -232,10 +238,10 @@ export interface FormacaoBaseJogador {
   criaDaCasa?: boolean;
 }
 
-/** Potential Ability + absorção + fragilidade — ocultos no scouting. */
 /** Alias usado pela base / mundoClube. */
 export type GeneticaJogador = GeneticaAtleta;
 
+/** Potential Ability + absorção + fragilidade — ocultos no scouting. */
 export interface GeneticaAtleta {
   /** Teto máximo de overall que o atleta pode atingir (40 a 99). */
   potencial_maximo: number;

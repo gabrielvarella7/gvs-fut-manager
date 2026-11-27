@@ -1,5 +1,14 @@
 import { clampAttr20, overallDeAtributos } from '../career/atributosJogador';
 import {
+  multiplicadorAprendizadoPolivalencia,
+} from '../career/afinidadePosicional';
+import {
+  multiplicadorXpEtario,
+  propensaoLesaoDe,
+  taxaRegressaoMensalEfetiva,
+  temCicatrizFisica,
+} from '../career/curvaCarreira';
+import {
   probabilidadeLesaoSobrecargaSemanal,
   preservacaoAtributosMedico,
   sortearLesaoSobrecarga,
@@ -296,6 +305,14 @@ export function processarSemanaTreinos(params: {
             jogador.atributos.fisicos.velocidade - perdaReal,
           );
           jogador.overall = overallDeAtributos(jogador.posicao, jogador.atributos);
+          // Lesão grave sem médico pleno em 17+: cicatriz (acelera regressão).
+          if (
+            estado.lesao_ativa.gravidade === 'GRAVE' &&
+            jogador.idade >= 17 &&
+            preservacaoMedica < 0.95
+          ) {
+            jogador = { ...jogador, cicatrizFisica: true };
+          }
         }
         jogador = aplicarAltaMedica(jogador, nivelMed);
         estado.lesao_ativa = null;
@@ -322,7 +339,10 @@ export function processarSemanaTreinos(params: {
       continue;
     }
 
-    const faixa = obterFaixaEtaria(dbTreinos, jogador.idade);
+    const faixaDb = obterFaixaEtaria(dbTreinos, jogador.idade);
+    const xpEtario = multiplicadorXpEtario(jogador.idade, rng);
+    // Preferir curva de carreira; fallback JSON se faixa existir.
+    const multEvolucao = xpEtario > 0 ? xpEtario : faixaDb.multiplicador_evolucao;
     const plano =
       dbTreinos.planos_individuais.find((p) => p.id === estado.plano_individual_id) ??
       dbTreinos.planos_individuais[0]!;
@@ -334,6 +354,11 @@ export function processarSemanaTreinos(params: {
           ? 1.0
           : 0.85;
 
+    const nivelStaffElite = Math.max(
+      preparador?.nivel ?? 10,
+      fisiologista?.nivel ?? 10,
+      medico?.nivel ?? 10,
+    );
     const absorcao = isViradaDeMes
       ? absorcaoMensalEfetiva(genetica.fator_absorcao, jogador.idade, rng)
       : genetica.fator_absorcao;
@@ -350,7 +375,7 @@ export function processarSemanaTreinos(params: {
         (baseColetiva + baseIndividual) *
         11.5 *
         regime.multiplicadores.ganho_xp_atributos *
-        faixa.multiplicador_evolucao *
+        multEvolucao *
         multMinutagem *
         bonusQualidadeComissao *
         absorcao *
@@ -374,29 +399,37 @@ export function processarSemanaTreinos(params: {
     }
 
     if (plano.id === 'ADAPTACAO_POLIVALENCIA' && estado.progresso_polivalencia < 100) {
+      const aprendizado = multiplicadorAprendizadoPolivalencia(jogador.idade);
       estado.progresso_polivalencia = Math.min(
         100,
         Math.round(
           estado.progresso_polivalencia +
-            14 * regime.multiplicadores.ganho_familiaridade_tatica,
+            14 * regime.multiplicadores.ganho_familiaridade_tatica * aprendizado,
         ),
       );
     }
 
-    if (isViradaDeMes && faixa.taxa_regressao_mensal > 0) {
-      // MANUTENCAO_VETERANO: −60% perda natural (fator 0,4).
-      const fatorProtecao = plano.id === 'MANUTENCAO_VETERANO' ? 0.4 : 1.0;
-      if (rng() < faixa.taxa_regressao_mensal * fatorProtecao) {
-        const attrAlvo: AtributoTreinoXp =
-          jogador.atributos.fisicos.velocidade > 10 ? 'velocidade' : 'defesa';
+    const taxaReg = taxaRegressaoMensalEfetiva({
+      idade: jogador.idade,
+      posicao: jogador.posicao,
+      propensaoLesao: propensaoLesaoDe(jogador),
+      nivelStaffElite,
+      planoId: plano.id,
+      cicatriz: temCicatrizFisica(jogador),
+    });
+
+    if (isViradaDeMes && taxaReg > 0) {
+      if (rng() < taxaReg) {
+        // Veteranos perdem só Velocidade (não Passe/Chute).
+        const attrAlvo: AtributoTreinoXp = 'velocidade';
         const anterior = notaAttrParaRelatorio(jogador, attrAlvo);
-        if (attrAlvo === 'velocidade') {
-          jogador.atributos.fisicos.velocidade = clampAttr20(
-            jogador.atributos.fisicos.velocidade - 1,
-          );
-        } else {
-          jogador.atributos.mentais.cobertura = clampAttr20(
-            jogador.atributos.mentais.cobertura - 1,
+        jogador.atributos.fisicos.velocidade = clampAttr20(
+          jogador.atributos.fisicos.velocidade - 1,
+        );
+        // 30–32: +leitura em decisivos (compensa um pouco o declínio físico).
+        if (jogador.idade >= 30 && jogador.idade <= 32 && rng() < 0.45) {
+          jogador.atributos.mentais.leitura_jogo = clampAttr20(
+            jogador.atributos.mentais.leitura_jogo + 1,
           );
         }
         jogador.overall = overallDeAtributos(jogador.posicao, jogador.atributos);

@@ -14,6 +14,7 @@
     "build:check": "tsc -b && vite build",
     "lint": "oxlint",
     "preview": "vite preview",
+    "smoke:performance": "node scripts/smoke-performance-career.mjs",
     "sync": "powershell -NoProfile -ExecutionPolicy Bypass -File ./scripts/sync-nuvem.ps1"
   },
   "dependencies": {

@@ -6,7 +6,7 @@ import type {
 } from '../types/training';
 
 export function planoPadraoJogador(j: Jogador): PlanoIndividualId {
-  if (j.idade >= 32) return 'MANUTENCAO_VETERANO';
+  if (j.idade >= 31) return 'MANUTENCAO_VETERANO';
   if (j.idade <= 21) return 'MATADOR_FINALIZACAO';
   if (j.posicao === 'ZAG' || j.posicao === 'VOL') return 'EVOLUCAO_DEFENSIVA';
   if (j.posicao === 'ATA') return 'MATADOR_FINALIZACAO';
