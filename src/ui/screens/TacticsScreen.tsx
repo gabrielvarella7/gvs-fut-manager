@@ -1,7 +1,12 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { getTimeFicticio } from '../../career/fictionalLeague';
 import { escalacaoAssistenteMelhorOverall } from '../../career/assistenteTecnico';
-import { idsEscalacaoPadrao } from '../../career/lineup';
+import {
+  idsBancoPadrao,
+  idsEscalacaoPadrao,
+  RESERVAS_PARTIDA,
+  validarRelacionadosPartida,
+} from '../../career/lineup';
 import { ordenarElenco } from '../../career/ordenarElenco';
 import { layoutCampinho } from '../../data/campinhoCoords';
 import {
@@ -30,9 +35,11 @@ type AbaTatica = 'esquemas' | 'jogadores' | 'filosofia';
 export function TacticsScreen() {
   const esquemaAtual = useGameStore((s) => s.esquemaAtual);
   const alinhamentoSalvo = useGameStore((s) => s.alinhamento11);
+  const bancoSalvo = useGameStore((s) => s.banco11);
   const gradeSalva = useGameStore((s) => s.gradeTatica11);
   const personalizadoSalvo = useGameStore((s) => s.usoTaticaPersonalizada);
   const commitEscolha = useGameStore((s) => s.commitEscolhaTatica);
+  const avisoSalvo = useGameStore((s) => s.avisoSalvo);
   const partidaRetorno = useGameStore((s) => s.partidaRetornoTatica);
   const voltarPartida = useGameStore((s) => s.voltarDaTaticaParaPartida);
   const perfil = useGameStore((s) => s.perfil);
@@ -49,6 +56,7 @@ export function TacticsScreen() {
   );
   const [esquemaBase, setEsquemaBase] = useState<EsquemaTatico>(esquemaAtual);
   const [slotIds, setSlotIds] = useState<number[]>([]);
+  const [bancoIds, setBancoIds] = useState<number[]>([]);
   const [grade11, setGrade11] = useState<CelulaGrade[]>([]);
   const [aba, setAba] = useState<AbaTatica>('jogadores');
   const [slotSubs, setSlotSubs] = useState<number | null>(null);
@@ -89,6 +97,9 @@ export function TacticsScreen() {
     if (alinhamentoSalvo?.length === 11) {
       setSlotIds(alinhamentoSalvo);
     }
+    if (bancoSalvo?.length) {
+      setBancoIds(bancoSalvo.filter((id) => id > 0));
+    }
     if (personalizadoSalvo && gradeSalva?.length === 11) {
       setSelecao('PERSONALIZADO');
       setGrade11(gradeSalva.map((c) => ({ ...c })));
@@ -98,13 +109,22 @@ export function TacticsScreen() {
     }
     // gradeSalva lido só quando muda esquema/alinhamento/modo — não a cada auto-save
     // eslint-disable-next-line react-hooks/exhaustive-deps -- gradeSalva omitido de propósito
-  }, [esquemaAtual, alinhamentoSalvo, personalizadoSalvo]);
+  }, [esquemaAtual, alinhamentoSalvo, bancoSalvo, personalizadoSalvo]);
 
   useEffect(() => {
     if (elenco.length === 0) return;
     if (alinhamentoSalvo?.length === 11) return;
     setSlotIds((prev) => (prev.length === 11 ? prev : idsPadrao(esquemaAtual)));
   }, [elenco.length, alinhamentoSalvo, esquemaAtual, idsPadrao]);
+
+  /** Mantém banco sem ids que viraram titulares. */
+  useEffect(() => {
+    const tit = new Set(slotIds.filter((id) => id > 0));
+    setBancoIds((prev) => {
+      const next = prev.filter((id) => id > 0 && !tit.has(id));
+      return next.length === prev.length ? prev : next;
+    });
+  }, [slotIds]);
 
   const entrarPersonalizado = useCallback(
     (esquemaRef?: EsquemaTatico) => {
@@ -118,7 +138,9 @@ export function TacticsScreen() {
     setSelecao(e);
     setEsquemaBase(e);
     setGrade11(gradePadrao(e));
-    setSlotIds(idsPadrao(e));
+    const ids = idsPadrao(e);
+    setSlotIds(ids);
+    setBancoIds(idsBancoPadrao(elenco, ids));
   };
 
   const escolherPersonalizado = () => {
@@ -134,21 +156,25 @@ export function TacticsScreen() {
     const personalizado = true;
     entrarPersonalizado();
     setSlotIds(next);
-    persistirLineup(next, grade11, 'PERSONALIZADO', esquemaBase, personalizado);
+    persistirLineup(next, bancoIds, grade11, 'PERSONALIZADO', esquemaBase, personalizado);
   };
 
   const persistirLineup = useCallback(
     (
       ids: number[],
+      banco: number[],
       grade: CelulaGrade[],
       sel: SelecaoTatica,
       base: EsquemaTatico,
       personalizado: boolean,
     ) => {
       const esq = personalizado ? base : (sel as EsquemaTatico);
+      const tit = new Set(ids.filter((id) => id > 0));
+      const bancoLimpo = banco.filter((id) => id > 0 && !tit.has(id)).slice(0, RESERVAS_PARTIDA);
       commitEscolha({
         esquema: esq,
         alinhamento11: ids,
+        banco11: bancoLimpo,
         gradeTatica11: personalizado ? grade : null,
         personalizado,
         configTatica: configParaEsquema(esq, configLocal),
@@ -187,17 +213,35 @@ export function TacticsScreen() {
     const ids = escalacaoAssistenteMelhorOverall(elenco, esq);
     if (ids.length < 11) return;
     const grade = gradePadrao(esq);
+    const banco = idsBancoPadrao(elenco, ids);
     setSlotIds(ids);
+    setBancoIds(banco);
     setGrade11(grade);
     const personalizado = selecao === 'PERSONALIZADO';
     if (personalizado) entrarPersonalizado();
     persistirLineup(
       ids,
+      banco,
       grade,
       personalizado ? 'PERSONALIZADO' : esq,
       personalizado ? esquemaBase : esq,
       personalizado,
     );
+  };
+
+  const toggleBanco = (jogadorId: number) => {
+    if (slotIds.includes(jogadorId)) return;
+    setBancoIds((prev) => {
+      if (prev.includes(jogadorId)) {
+        const next = prev.filter((id) => id !== jogadorId);
+        persistirLineup(slotIds, next, grade11, selecao, esquemaBase, selecao === 'PERSONALIZADO');
+        return next;
+      }
+      if (prev.length >= RESERVAS_PARTIDA) return prev;
+      const next = [...prev, jogadorId];
+      persistirLineup(slotIds, next, grade11, selecao, esquemaBase, selecao === 'PERSONALIZADO');
+      return next;
+    });
   };
 
   const aplicarSubstituicao = (slot: number, jogadorId: number) => {
@@ -206,14 +250,20 @@ export function TacticsScreen() {
     const saida = next[slot];
     next[slot] = jogadorId;
     if (outroSlot >= 0 && outroSlot !== slot) next[outroSlot] = saida;
+    // Quem saiu do campo volta ao banco se couber.
+    let banco = bancoIds.filter((id) => id !== jogadorId);
+    if (saida && saida > 0 && !next.includes(saida) && !banco.includes(saida)) {
+      if (banco.length < RESERVAS_PARTIDA) banco = [...banco, saida];
+    }
     setSelecao('PERSONALIZADO');
     entrarPersonalizado();
     setSlotIds(next);
+    setBancoIds(banco);
     setSlotSubs(null);
     setReservaSubs(null);
     setArrastandoJogadorId(null);
     setSlotAguardandoReserva(null);
-    persistirLineup(next, grade11, 'PERSONALIZADO', esquemaBase, true);
+    persistirLineup(next, banco, grade11, 'PERSONALIZADO', esquemaBase, true);
   };
 
   const onSlotElenco = (slot: number) => {
@@ -268,13 +318,15 @@ export function TacticsScreen() {
     const novaGrade = moverSlotNaGrade(grade11, slot, d);
     setGrade11(novaGrade);
     entrarPersonalizado();
-    persistirLineup(slotIds, novaGrade, 'PERSONALIZADO', esquemaBase, true);
+    persistirLineup(slotIds, bancoIds, novaGrade, 'PERSONALIZADO', esquemaBase, true);
   };
 
   const hashSlots = JSON.stringify(slotIds);
   const hashSalvo = JSON.stringify(alinhamentoSalvo ?? []);
+  const hashBanco = JSON.stringify(bancoIds);
+  const hashBancoSalvo = JSON.stringify(bancoSalvo ?? []);
   const esquemaPendente = selecao !== 'PERSONALIZADO' && selecao !== esquemaAtual;
-  const lineupPendente = hashSlots !== hashSalvo;
+  const lineupPendente = hashSlots !== hashSalvo || hashBanco !== hashBancoSalvo;
   const modoPendente = (selecao === 'PERSONALIZADO') !== personalizadoSalvo;
   const gradeReferenciaSalva =
     personalizadoSalvo && gradeSalva?.length === 11
@@ -287,17 +339,21 @@ export function TacticsScreen() {
   const escolhaPendente =
     esquemaPendente || lineupPendente || modoPendente || gradePendente || configPendente;
 
+  const checkRelacionados = validarRelacionadosPartida(slotIds, bancoIds);
+
   const salvarEscolha = () => {
     const personalizado = selecao === 'PERSONALIZADO';
     const esq = personalizado ? esquemaBase : (selecao as EsquemaTatico);
     commitEscolha({
       esquema: esq,
       alinhamento11: slotIds,
+      banco11: bancoIds,
       gradeTatica11: personalizado ? grade11 : null,
       personalizado,
       configTatica: configParaEsquema(esq, configLocal),
     });
-    if (partidaRetorno) voltarPartida();
+    const ok = validarRelacionadosPartida(slotIds, bancoIds).ok;
+    if (partidaRetorno && ok) voltarPartida();
   };
 
   const rotuloCampo =
@@ -350,6 +406,22 @@ export function TacticsScreen() {
           </button>
         ))}
       </nav>
+
+      {!checkRelacionados.ok && (
+        <div className="mb-4 rounded-lg border border-rose-700/60 bg-rose-950/30 p-3">
+          <p className="text-sm font-medium text-rose-100">
+            {checkRelacionados.motivo ??
+              'Relacione 11 titulares e 11 reservas antes de iniciar a partida.'}
+          </p>
+          <p className="mt-1 text-xs text-rose-200/80">
+            Agora: {checkRelacionados.titulares}/11 titulares · {checkRelacionados.reservas}/11
+            reservas.
+          </p>
+        </div>
+      )}
+      {avisoSalvo && avisoSalvo.toLowerCase().includes('reserva') && (
+        <p className="mb-3 text-xs text-amber-200/90">{avisoSalvo}</p>
+      )}
 
       <div className="mb-4 rounded-lg border border-amber-900/50 bg-amber-950/20 p-3">
         <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-amber-200/90">
@@ -480,11 +552,11 @@ export function TacticsScreen() {
 
       {aba === 'jogadores' && elenco.length >= 11 && (
         <div className="mb-3 flex flex-wrap gap-2">
-          <CmBtn variant="ghost" type="button" onClick={aplicarMelhorOverall}>
-            Assistente escolhe os melhores
+          <CmBtn variant="ghost" onClick={aplicarMelhorOverall}>
+            Assistente escolhe os melhores (11+11)
           </CmBtn>
           <span className="self-center text-xs text-zinc-500">
-            Maior OVR em cada posição do esquema {rotuloCampo} (exclui lesionados).
+            11 titulares por posição + 11 reservas por OVR ({rotuloCampo}).
           </span>
         </div>
       )}
@@ -543,12 +615,14 @@ export function TacticsScreen() {
               <TacticSquadPanel
                 elenco={elenco}
                 slotIds={slotIds}
+                bancoIds={bancoIds}
                 grade11={grade11}
                 esquema={esquemaGrafico}
                 slotAtivo={slotSubs}
                 reservaAtiva={reservaSubs}
                 onSlotClick={onSlotElenco}
                 onReservaClick={onReservaElenco}
+                onToggleBanco={toggleBanco}
                 onArrastarJogador={(id) => {
                   setArrastandoJogadorId(id);
                   setSlotAguardandoReserva(null);

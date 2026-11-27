@@ -149,6 +149,8 @@ export interface EstadoCarreira {
   esquemaAtual: EsquemaTatico;
   /** 11 ids na ordem dos slots do esquema (customizado na tela de tática) */
   alinhamento11: number[] | null;
+  /** 11 ids do banco relacionados (reservas da partida) */
+  banco11: number[] | null;
   /** Posições livres no modo personalizado */
   usoTaticaPersonalizada: boolean;
   /** Células 6×6 dos 11 slots (modo personalizado) */
