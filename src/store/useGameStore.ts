@@ -99,6 +99,17 @@ import {
 } from '../career/mundoParalelo';
 import { deveGerarInsatisfacaoImproviso } from '../career/afinidadePosicional';
 import { gerarSafraAnual, promoverJovemPorId } from '../career/youthAcademy';
+import {
+  criarEstadoAspirantesS23,
+  normalizarAspirantesS23,
+  sincronizarAspirantesComBrasileirao,
+} from '../career/aspirantesS23';
+import {
+  montarOfertaDispensa,
+  promoverSub23ParaPro,
+  tentarDispensaProfissional,
+} from '../career/sub23';
+import type { EstadoAspirantesS23, OfertaDispensa } from '../types/aspirantesS23';
 import { recuperarEnergiaUmDia } from '../career/energia';
 import { criarRng } from '../engine/matchEngine';
 import type { FocoCategoriaBase, NivelInvestimentoBase } from '../types/mundoClube';
@@ -220,6 +231,15 @@ interface GameStore extends EstadoCarreira {
   definirFocoBase: (foco: FocoCategoriaBase) => void;
   /** Promove jovem do Sub-20 ao profissional (1º contrato). */
   promoverJovemDaBase: (jovemId: number) => void;
+  /** Promove atleta do Sub-23 ao profissional (mantém Sub-23 em 22). */
+  promoverSub23: (atletaId: number) => string | null;
+  /** Oferta de dispensa (acordo 50%). */
+  simularOfertaDispensa: (jogadorId: number) => OfertaDispensa | null;
+  /** Tenta dispensa com acordo; se recusar, retorna oferta para pagar integral. */
+  tentarDispensa: (jogadorId: number) => string | null;
+  /** Confirma rescisão integral após recusa do acordo. */
+  confirmarDispensaIntegral: (jogadorId: number) => string | null;
+  aspirantesS23: EstadoAspirantesS23 | null;
   /** Aplica a semana de treinos; retorna mensagem de erro ou null se ok. */
   aplicarTreinoSemana: () => string | null;
   /** Restaura regime/sessões do treino padrão (Equilibrado). */
@@ -293,6 +313,7 @@ const estadoInicial = (): EstadoCarreira & {
   financas: null,
   comercial: null,
   mundoClube: null,
+  aspirantesS23: null,
   negociacoesTransferencia: [],
   partidaModoAuxiliar: false,
 });
@@ -347,6 +368,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
         tela === 'financas' ||
         tela === 'staff' ||
         tela === 'base' ||
+        tela === 'sub23' ||
         tela === 'treinos' ||
         tela === 'calendario' ||
         tela === 'classificacao' ||
@@ -566,7 +588,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
         id,
         undefined,
       ),
-    };
+    } as import('../types/mundoClube').EstadoMundoClube;
     const safraInicial = gerarSafraAnual({
       jogadores: get().jogadoresReais,
       mundo: mundoClube,
@@ -576,6 +598,20 @@ export const useGameStore = create<GameStore>((set, get) => ({
       seed: id.length * 9973 + (brasileirao.temporadaAno ?? 2026),
     });
     mundoClube = safraInicial.mundo;
+    const aspirantesS23 = criarEstadoAspirantesS23({
+      times: s.timesReais,
+      jogadores: get().jogadoresReais,
+      mundoUsuario: mundoClube,
+      clubeUsuarioId: id,
+      temporadaAno: brasileirao.temporadaAno ?? 2026,
+      seed: id.length * 4243 + (brasileirao.temporadaAno ?? 2026) * 17,
+    });
+    const noticiaS23: typeof noticia = {
+      id: `n_s23_${Date.now()}`,
+      data: new Date().toISOString(),
+      titulo: 'Campeonato de Aspirantes S23',
+      texto: `O Sub-23 do ${clube.nome} entrou no Campeonato de Aspirantes com 22 atletas. A disputa é 100% controlada pela IA — você pode promover jogadores ao profissional.`,
+    };
     let financas = inicializarFinancasClube(clube, elencoClube);
     financas = sincronizarFinancasComercial(financas, comercial, 10);
     set({
@@ -585,6 +621,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
       brasileirao,
       partidaRetornoTatica: false,
       noticias: deduplicarNoticias([
+        noticiaS23,
         ...safraInicial.noticias,
         noticiaCalendario,
         ...(jaExiste ? s.noticias : noticias),
@@ -592,6 +629,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
       financas,
       comercial,
       mundoClube,
+      aspirantesS23,
       negociacoesTransferencia: [],
       tela: 'escritorio',
     });
@@ -1131,6 +1169,19 @@ export const useGameStore = create<GameStore>((set, get) => ({
         };
       }
     }
+    let aspirantesS23 = s.aspirantesS23;
+    if (aspirantesS23 && s.clubeRealId) {
+      const nomes = new Map(s.timesReais.map((t) => [t.id, t.nome_completo]));
+      const syncS23 = sincronizarAspirantesComBrasileirao(
+        aspirantesS23,
+        estado,
+        seed ^ 0x52323,
+        s.clubeRealId,
+        nomes,
+      );
+      aspirantesS23 = syncS23.aspirantes;
+      noticiasMundo.push(...syncS23.noticias);
+    }
     const noticiaRodada = {
       id: `rod_${partida?.rodada ?? 0}_${Date.now()}`,
       data: new Date().toISOString(),
@@ -1143,6 +1194,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
       financas,
       comercial,
       mundoClube,
+      aspirantesS23: aspirantesS23 ?? s.aspirantesS23,
       partidaAtual: result,
       partidaJogoId: partidaId,
       tela: 'partida',
@@ -1290,6 +1342,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
       financas: s.financas,
       comercial: s.comercial,
       mundoClube: s.mundoClube,
+      aspirantesS23: s.aspirantesS23,
       negociacoesTransferencia: s.negociacoesTransferencia,
       // Só o elenco do clube + alterações recentes cabem melhor no localStorage (evita crash ~rodada 19).
       elencoPersistido: s.clubeRealId
@@ -1400,6 +1453,17 @@ export const useGameStore = create<GameStore>((set, get) => ({
         };
       }
     }
+    const aspirantesS23 =
+      data.clubeRealId && timesReais.length > 0 ?
+        normalizarAspirantesS23(
+          data.aspirantesS23 ?? null,
+          timesReais,
+          jogadoresCarregados,
+          mundoClube,
+          data.clubeRealId,
+          brasileirao?.temporadaAno ?? 2026,
+        )
+      : (data.aspirantesS23 ?? null);
     set({
       saveSlotId: id,
       perfil: data.perfil ?? null,
@@ -1423,6 +1487,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
       financas,
       comercial,
       mundoClube,
+      aspirantesS23,
       negociacoesTransferencia: data.negociacoesTransferencia ?? [],
       partidaAtual: null,
       partidaJogoId: null,
@@ -1920,6 +1985,81 @@ export const useGameStore = create<GameStore>((set, get) => ({
       noticias: [...r.noticias, ...s.noticias].slice(0, 80),
     });
     void persistirJogadoresDexie(r.jogadores).catch(console.error);
+  },
+  promoverSub23: (atletaId) => {
+    const s = get();
+    if (!s.clubeRealId || !s.aspirantesS23) return 'Sub-23 indisponível.';
+    const r = promoverSub23ParaPro({
+      atletaId,
+      clubeId: s.clubeRealId,
+      jogadores: s.jogadoresReais,
+      aspirantes: s.aspirantesS23,
+      mundo: s.mundoClube,
+      rodada: s.brasileirao?.rodadaAtual ?? 1,
+      seed: Date.now() ^ atletaId,
+    });
+    if (!r.ok) return r.motivo ?? 'Não foi possível promover.';
+    set({
+      jogadoresReais: r.jogadores,
+      aspirantesS23: r.aspirantes,
+      noticias: [...r.noticias, ...s.noticias].slice(0, 80),
+    });
+    void persistirJogadoresDexie(r.jogadores).catch(console.error);
+    return null;
+  },
+  simularOfertaDispensa: (jogadorId) => {
+    const s = get();
+    const j = s.jogadoresReais.find((x) => x.id === jogadorId && x.time_id === s.clubeRealId);
+    if (!j) return null;
+    return montarOfertaDispensa(j);
+  },
+  tentarDispensa: (jogadorId) => {
+    const s = get();
+    if (!s.clubeRealId || !s.financas) return 'Finanças indisponíveis.';
+    const rodada = s.brasileirao?.rodadaAtual ?? 1;
+    const r = tentarDispensaProfissional({
+      jogadorId,
+      jogadores: s.jogadoresReais,
+      clubeId: s.clubeRealId,
+      financas: s.financas,
+      rodada,
+      mes: mesDaRodada(rodada),
+      seed: Date.now() ^ jogadorId,
+    });
+    if (!r.resultado.ok) {
+      set({ noticias: [...r.noticias, ...s.noticias].slice(0, 80) });
+      return r.resultado.motivo;
+    }
+    set({
+      jogadoresReais: r.jogadores,
+      financas: r.financas,
+      noticias: [...r.noticias, ...s.noticias].slice(0, 80),
+    });
+    void persistirJogadoresDexie(r.jogadores).catch(console.error);
+    return null;
+  },
+  confirmarDispensaIntegral: (jogadorId) => {
+    const s = get();
+    if (!s.clubeRealId || !s.financas) return 'Finanças indisponíveis.';
+    const rodada = s.brasileirao?.rodadaAtual ?? 1;
+    const r = tentarDispensaProfissional({
+      jogadorId,
+      jogadores: s.jogadoresReais,
+      clubeId: s.clubeRealId,
+      financas: s.financas,
+      rodada,
+      mes: mesDaRodada(rodada),
+      seed: Date.now() ^ jogadorId ^ 0x99,
+      forcarIntegral: true,
+    });
+    if (!r.resultado.ok) return r.resultado.motivo;
+    set({
+      jogadoresReais: r.jogadores,
+      financas: r.financas,
+      noticias: [...r.noticias, ...s.noticias].slice(0, 80),
+    });
+    void persistirJogadoresDexie(r.jogadores).catch(console.error);
+    return null;
   },
   atualizarProgramacaoTreino: (patch) => {
     const s = get();

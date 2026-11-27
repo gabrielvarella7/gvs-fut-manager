@@ -74,6 +74,7 @@ function corpoSalvavel(estado: EstadoCarreira): EstadoCarreira {
     financas: estado.financas ?? null,
     comercial: estado.comercial ?? null,
     mundoClube: estado.mundoClube ?? null,
+    aspirantesS23: estado.aspirantesS23 ?? null,
     negociacoesTransferencia: estado.negociacoesTransferencia ?? [],
     elencoPersistido: estado.elencoPersistido,
     transmissaoCheckpoint: null,

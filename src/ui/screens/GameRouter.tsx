@@ -21,6 +21,7 @@ import { PreMatchReportScreen } from './PreMatchReportScreen';
 import { SettingsScreen } from './SettingsScreen';
 import { StaffScreen } from './StaffScreen';
 import { BaseScreen } from './BaseScreen';
+import { Sub23Screen } from './Sub23Screen';
 import { TreinosScreen } from './TreinosScreen';
 
 export function GameRouter() {
@@ -83,6 +84,8 @@ export function GameRouter() {
       return <StaffScreen />;
     case 'base':
       return <BaseScreen />;
+    case 'sub23':
+      return <Sub23Screen />;
     case 'treinos':
       return <TreinosScreen />;
     case 'calendario':
