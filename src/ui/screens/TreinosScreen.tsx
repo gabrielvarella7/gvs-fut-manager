@@ -18,6 +18,7 @@ import {
   jogadorAccessors,
   usePlayerListQuery,
 } from '../playerList';
+import { PlayerNameLink } from '../components/PlayerNameLink';
 
 export function TreinosScreen() {
   const clubeRealId = useGameStore((s) => s.clubeRealId);
@@ -271,6 +272,7 @@ export function TreinosScreen() {
             return (
               <MotionLinhaPlano
                 key={j.id}
+                jogadorId={j.id}
                 nome={j.nome}
                 pos={j.posicao}
                 ovr={j.overall}
@@ -348,6 +350,7 @@ function SessaoSelect({
 }
 
 function MotionLinhaPlano({
+  jogadorId,
   nome,
   pos,
   ovr,
@@ -358,6 +361,7 @@ function MotionLinhaPlano({
   poliv,
   onPlano,
 }: {
+  jogadorId: number;
   nome: string;
   pos: string;
   ovr: number;
@@ -375,7 +379,7 @@ function MotionLinhaPlano({
       }`}
     >
       <span className="min-w-[120px] text-zinc-200">
-        {nome}{' '}
+        <PlayerNameLink jogadorId={jogadorId}>{nome}</PlayerNameLink>{' '}
         <span className="text-xs text-zinc-500">
           {pos} {ovr} · {energia}%
         </span>

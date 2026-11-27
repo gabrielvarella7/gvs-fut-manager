@@ -173,6 +173,10 @@ interface GameStore extends EstadoCarreira {
   jogadorPerfilId: number | null;
   /** Tela para voltar ao fechar o perfil (elenco, transferências, etc.). */
   perfilRetornoTela: TelaJogo;
+  /** Clube cujo elenco está sendo visitado (tabela / calendário / mercado). */
+  elencoVisitadoClubeId: string | null;
+  /** Tela para voltar ao fechar o elenco visitado. */
+  elencoVisitadoRetornoTela: TelaJogo;
   saveSlotId: string | null;
   setDatabase: (p: {
     campeonato: CampeonatoConfig;
@@ -202,6 +206,8 @@ interface GameStore extends EstadoCarreira {
   sairParaMenu: () => void;
   abrirPerfilJogador: (id: number) => void;
   fecharPerfilJogador: () => void;
+  abrirElencoClube: (clubeId: string) => void;
+  fecharElencoClube: () => void;
   registrarResultadoPartida: (jogoId: number, result: MatchSimResult) => void;
   encerrarTransmissao: () => void;
   finalizarTorneioSePronto: () => void;
@@ -295,6 +301,8 @@ const estadoInicial = (): EstadoCarreira & {
   avisoSalvo: string | null;
   jogadorPerfilId: number | null;
   perfilRetornoTela: TelaJogo;
+  elencoVisitadoClubeId: string | null;
+  elencoVisitadoRetornoTela: TelaJogo;
   saveSlotId: string | null;
   dbTaticas: DatabaseTaticas | null;
   dbTreinos: DatabaseTreinos | null;
@@ -309,6 +317,8 @@ const estadoInicial = (): EstadoCarreira & {
   avisoSalvo: null,
   jogadorPerfilId: null,
   perfilRetornoTela: 'elenco',
+  elencoVisitadoClubeId: null,
+  elencoVisitadoRetornoTela: 'classificacao',
   saveSlotId: null,
   dbTaticas: null,
   dbTreinos: null,
@@ -442,6 +452,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
       tela: 'escritorio',
       partidaJogoEmCurso: null,
       jogadorPerfilId: null,
+      elencoVisitadoClubeId: null,
       partidaRetornoTatica: false,
     });
   },
@@ -451,6 +462,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
       tela: 'escritorio',
       partidaJogoEmCurso: null,
       jogadorPerfilId: null,
+      elencoVisitadoClubeId: null,
       partidaRetornoTatica: false,
     });
     get().garantirCalendarioUsuario();
@@ -1423,6 +1435,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
       partidaAtual: null,
       partidaJogoId: null,
       jogadorPerfilId: null,
+      elencoVisitadoClubeId: null,
     }),
   abrirPerfilJogador: (id) =>
     set((s) => ({
@@ -1435,6 +1448,31 @@ export const useGameStore = create<GameStore>((set, get) => ({
       jogadorPerfilId: null,
       tela: s.perfilRetornoTela || 'elenco',
       perfilRetornoTela: 'elenco',
+    })),
+  abrirElencoClube: (clubeId) =>
+    set((s) => {
+      if (!clubeId) return s;
+      // Próprio clube → elenco normal (pro ou Sub23 conforme modo).
+      if (clubeId === s.clubeRealId) {
+        return {
+          elencoVisitadoClubeId: null,
+          tela: 'elenco',
+        };
+      }
+      return {
+        elencoVisitadoClubeId: clubeId,
+        elencoVisitadoRetornoTela:
+          s.tela === 'elenco_clube' || s.tela === 'perfil_jogador'
+            ? s.elencoVisitadoRetornoTela
+            : s.tela,
+        tela: 'elenco_clube',
+      };
+    }),
+  fecharElencoClube: () =>
+    set((s) => ({
+      elencoVisitadoClubeId: null,
+      tela: s.elencoVisitadoRetornoTela || 'classificacao',
+      elencoVisitadoRetornoTela: 'classificacao',
     })),
   registrarResultadoPartida: (jogoId, result) => {
     const s = get();

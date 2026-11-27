@@ -5,6 +5,7 @@ import { rotuloCompeticaoSub23 } from '../../types/aspirantesS23';
 import { useGameStore } from '../../store/useGameStore';
 import { CmCareerShell } from '../cm/CmCareerShell';
 import { CmBtn, CmPanel } from '../cm/CmShell';
+import { ClubNameLink } from '../components/ClubNameLink';
 
 const JOGOS_POR_PAGINA = 7;
 
@@ -87,10 +88,10 @@ export function CalendarScreen() {
                 </div>
                 <p className="mt-1 text-sm text-zinc-300">
                   {casa ? 'Casa' : 'Fora'} vs{' '}
-                  <strong>
+                  <ClubNameLink clubeId={adv} className="font-semibold text-sky-200 underline-offset-2 hover:underline">
                     {porNome.get(adv) ?? adv}
                     {modoSub23 ? ' Sub23' : ''}
-                  </strong>
+                  </ClubNameLink>
                   {placar && <span className="text-emerald-300">{placar}</span>}
                 </p>
               </CmPanel>

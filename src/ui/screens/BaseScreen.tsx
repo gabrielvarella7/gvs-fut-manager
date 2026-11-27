@@ -22,6 +22,7 @@ import {
   jovemAccessors,
   usePlayerListQuery,
 } from '../playerList';
+import { PlayerNameLink } from '../components/PlayerNameLink';
 
 const NIVEIS: { nivel: NivelInvestimentoBase; rotulo: string }[] = [
   { nivel: 0, rotulo: 'Mínimo' },
@@ -190,7 +191,7 @@ export function BaseScreen() {
                     <div className="flex flex-wrap items-start justify-between gap-2">
                       <div>
                         <p className="font-medium text-zinc-100">
-                          {j.nome}{' '}
+                          <PlayerNameLink jogadorId={j.id}>{j.nome}</PlayerNameLink>{' '}
                           <span className="text-xs font-normal text-zinc-500">
                             {j.idade} anos · {j.posicao}
                           </span>

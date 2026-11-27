@@ -83,6 +83,7 @@ export type TelaJogo =
   | 'hub_torneio'
   | 'escritorio'
   | 'elenco'
+  | 'elenco_clube'
   | 'perfil_jogador'
   | 'noticias'
   | 'transferencias'

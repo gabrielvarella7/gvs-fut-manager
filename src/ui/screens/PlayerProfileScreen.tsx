@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import {
   corClasseEnergia,
   faixaRecuperacaoLabel,
@@ -13,9 +13,11 @@ import {
   visaoGeralAtributos,
   visaoGeralReferencia,
 } from '../../career/perfilJogador';
+import { resolverJogadorPorId } from '../../career/vistaJogador';
 import { AtributosDetalhe } from '../components/AtributosDetalhe';
 import { AtributosRadar } from '../components/AtributosRadar';
 import { ModalVisaoAtributos } from '../components/ModalVisaoAtributos';
+import { ClubNameLink } from '../components/ClubNameLink';
 import { pretensaoClubeVendedor } from '../../career/transfers';
 import { useGameStore } from '../../store/useGameStore';
 import { CmCareerShell } from '../cm/CmCareerShell';
@@ -25,22 +27,46 @@ export function PlayerProfileScreen() {
   const jogadorId = useGameStore((s) => s.jogadorPerfilId);
   const jogadoresReais = useGameStore((s) => s.jogadoresReais);
   const timesFicticios = useGameStore((s) => s.timesFicticios);
+  const timesReais = useGameStore((s) => s.timesReais);
+  const aspirantes = useGameStore((s) => s.aspirantesS23);
+  const mundo = useGameStore((s) => s.mundoClube);
   const clubeRealId = useGameStore((s) => s.clubeRealId);
+  const modoSub23 = useGameStore((s) => s.modoSub23);
   const voltarPerfil = useGameStore((s) => s.fecharPerfilJogador);
   const perfilRetornoTela = useGameStore((s) => s.perfilRetornoTela);
   const iniciarCompra = useGameStore((s) => s.iniciarNegociacaoCompra);
   const iniciarVenda = useGameStore((s) => s.iniciarNegociacaoVenda);
   const irPara = useGameStore((s) => s.irPara);
+  const abrirElenco = useGameStore((s) => s.abrirElencoClube);
+
+  const resolvido = useMemo(
+    () =>
+      jogadorId == null
+        ? null
+        : resolverJogadorPorId({
+            id: jogadorId,
+            jogadoresReais,
+            timesFicticios,
+            aspirantes,
+            mundo,
+            clubeRealId,
+          }),
+    [jogadorId, jogadoresReais, timesFicticios, aspirantes, mundo, clubeRealId],
+  );
+
+  const [modalVisao, setModalVisao] = useState(false);
+  const jogador = resolvido?.jogador ?? null;
+  const origem = resolvido?.origem;
+  const vistaJovem = origem === 'sub23' || origem === 'sub20';
+
   const rotuloVoltar =
     perfilRetornoTela === 'transferencias'
       ? 'Voltar às transferências'
-      : perfilRetornoTela === 'elenco'
-        ? 'Voltar ao elenco'
-        : 'Voltar';
-
-  const jogador =
-    jogadoresReais.find((j) => j.id === jogadorId) ??
-    timesFicticios.flatMap((t) => t.jogadores).find((j) => j.id === jogadorId);
+      : perfilRetornoTela === 'elenco_clube'
+        ? 'Voltar ao elenco do clube'
+        : perfilRetornoTela === 'elenco'
+          ? 'Voltar ao elenco'
+          : 'Voltar';
 
   if (!jogador) {
     return (
@@ -60,18 +86,24 @@ export function PlayerProfileScreen() {
   const fin = resumoFinanceiro(jogador);
   const partes = particularidadesJogador(jogador);
   const posicoesAf = listagemPosicoesAfinidade(jogador);
-  const profissional = !!clubeRealId;
+  const profissional = !!clubeRealId && origem === 'pro';
+  const podeProposta =
+    profissional && !!clubeRealId && jogador.time_id !== clubeRealId && !modoSub23;
+  const podeVender =
+    profissional && !!clubeRealId && jogador.time_id === clubeRealId && !modoSub23;
   const visao = visaoGeralAtributos(jogador);
   const refVisao = visaoGeralReferencia(jogador);
-  const [modalVisao, setModalVisao] = useState(false);
+  const clubeJogador = timesReais.find((t) => t.id === jogador.time_id);
 
   return (
     <CmCareerShell
       titulo={jogador.nome}
-      subtitulo={`${rotuloPosicao(jogador.posicao)} · ${jogador.idade} anos · OVR ${jogador.overall} · Energia ${Math.round(jogador.energia)}%`}
+      subtitulo={`${rotuloPosicao(jogador.posicao)} · ${jogador.idade} anos · OVR ${jogador.overall}${
+        vistaJovem ? '' : ` · Energia ${Math.round(jogador.energia)}%`
+      }${origem === 'sub23' ? ' · Sub23' : origem === 'sub20' ? ' · Sub-20' : ''}`}
       acoesExtras={
         <>
-          {profissional && jogador && clubeRealId && jogador.time_id !== clubeRealId && (
+          {podeProposta && (
             <CmBtn
               variant="primary"
               onClick={() => {
@@ -79,10 +111,10 @@ export function PlayerProfileScreen() {
                 irPara('transferencias');
               }}
             >
-              Negociar compra
+              Fazer proposta
             </CmBtn>
           )}
-          {profissional && jogador && clubeRealId && jogador.time_id === clubeRealId && (
+          {podeVender && (
             <CmBtn
               variant="ghost"
               onClick={() => {
@@ -99,6 +131,23 @@ export function PlayerProfileScreen() {
         </>
       }
     >
+      {clubeJogador && (
+        <CmPanel className="mb-4">
+          <p className="text-xs text-zinc-500">Clube</p>
+          <p className="mt-1 text-sm">
+            <ClubNameLink clubeId={clubeJogador.id}>{clubeJogador.nome_completo}</ClubNameLink>
+            {jogador.time_id === clubeRealId ? ' · seu clube' : ''}
+          </p>
+          {jogador.time_id !== clubeRealId && !modoSub23 && origem === 'pro' && (
+            <div className="mt-2">
+              <CmBtn variant="ghost" onClick={() => abrirElenco(clubeJogador.id)}>
+                Ver elenco do clube
+              </CmBtn>
+            </div>
+          )}
+        </CmPanel>
+      )}
+
       <div className="mb-4 grid gap-4 lg:grid-cols-[1fr_auto]">
         <CmPanel>
           <div className="mb-3 flex items-center justify-between gap-2">
@@ -152,24 +201,29 @@ export function PlayerProfileScreen() {
               Verde = OVR cheio · Rosa = adaptada (perda leve) · Improviso severo oculto
             </p>
           </div>
-          <p className="mt-3 text-sm text-zinc-400">
-            Status: <strong className="text-zinc-200">{rotuloStatus(jogador.status_escalacao)}</strong>
-          </p>
-          <p className="mt-2 text-sm text-zinc-400">
-            Energia:{' '}
-            <strong className={corClasseEnergia(jogador.energia)}>
-              {Math.round(jogador.energia)}%
-            </strong>
-            {jogador.energia < 92 && (
-              <>
-                {' '}
-                · OVR em campo ~{overallEfetivoPorEnergia(jogador.overall, jogador.energia)}
-              </>
-            )}
-            <span className="mt-0.5 block text-xs text-zinc-500">
-              {faixaRecuperacaoLabel(jogador.idade)}
-            </span>
-          </p>
+          {!vistaJovem && (
+            <>
+              <p className="mt-3 text-sm text-zinc-400">
+                Status:{' '}
+                <strong className="text-zinc-200">{rotuloStatus(jogador.status_escalacao)}</strong>
+              </p>
+              <p className="mt-2 text-sm text-zinc-400">
+                Energia:{' '}
+                <strong className={corClasseEnergia(jogador.energia)}>
+                  {Math.round(jogador.energia)}%
+                </strong>
+                {jogador.energia < 92 && (
+                  <>
+                    {' '}
+                    · OVR em campo ~{overallEfetivoPorEnergia(jogador.overall, jogador.energia)}
+                  </>
+                )}
+                <span className="mt-0.5 block text-xs text-zinc-500">
+                  {faixaRecuperacaoLabel(jogador.idade)}
+                </span>
+              </p>
+            </>
+          )}
           {jogador.lesao && jogador.lesao.diasRestantes > 0 && (
             <p className="mt-2 text-sm text-rose-300">
               Lesionado ({jogador.lesao.gravidade.toLowerCase()}): {jogador.lesao.descricao} ·{' '}
@@ -192,7 +246,11 @@ export function PlayerProfileScreen() {
           )}
           {jogador.formacaoBase && (
             <p className="mt-2 text-xs text-zinc-500">
-              Cria da base
+              {origem === 'sub23'
+                ? 'Sub-23'
+                : origem === 'sub20'
+                  ? 'Sub-20 / base'
+                  : 'Cria da base'}
               {jogador.formacaoBase.tier ? ` · ${jogador.formacaoBase.tier.toLowerCase()}` : ''}
               {jogador.formacaoBase.potencialOvr != null &&
                 ` · potencial ~${jogador.formacaoBase.potencialOvr} OVR`}

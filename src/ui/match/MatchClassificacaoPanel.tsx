@@ -12,6 +12,7 @@ import {
 import type { EstadoTemporada } from '../../career/brasileirao';
 import type { MatchSimResult } from '../../engine/matchEngine';
 import type { CampeonatoConfig, Time } from '../../types/schema';
+import { ClubNameLink } from '../components/ClubNameLink';
 
 type Props = {
   estado: EstadoTemporada;
@@ -162,7 +163,9 @@ export function MatchClassificacaoPanel({
                 >
                   <td className={`px-2 py-1.5 text-center ${classes.posicao}`}>{l.posicao}</td>
                   <td className="px-2 py-1.5 font-medium text-zinc-100">
-                    {porNome.get(l.time_id) ?? l.time_id}
+                    <ClubNameLink clubeId={l.time_id}>
+                      {porNome.get(l.time_id) ?? l.time_id}
+                    </ClubNameLink>
                   </td>
                   <td className="px-1 py-1.5 text-center text-zinc-300">{l.jogos}</td>
                   <td className="px-1 py-1.5 text-center text-zinc-300">{l.vitorias}</td>

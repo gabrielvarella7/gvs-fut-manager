@@ -7,6 +7,7 @@ import { ManagerCreateScreen } from './ManagerCreateScreen';
 import { FictionalTeamPickScreen } from './FictionalTeamPickScreen';
 import { TournamentHubScreen } from './TournamentHubScreen';
 import { SquadScreen } from './SquadScreen';
+import { ClubSquadScreen } from './ClubSquadScreen';
 import { TacticsScreen } from './TacticsScreen';
 import { MatchScreen } from './MatchScreen';
 import { OffersScreen } from './OffersScreen';
@@ -110,6 +111,9 @@ export function GameRouter() {
       break;
     case 'elenco':
       telaAtual = <SquadScreen />;
+      break;
+    case 'elenco_clube':
+      telaAtual = <ClubSquadScreen />;
       break;
     case 'perfil_jogador':
       telaAtual = <PlayerProfileScreen />;
