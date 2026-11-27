@@ -127,14 +127,29 @@ export interface ParametrosRendimentoJogador {
  * Afinidade posicional substitui o flat −20% de improvisação.
  * Cansaço/moral/pressão nunca gravam em attrs permanentes.
  */
+function linhaDeZona(zona: ZonaCampo): import('../data/campinhoLayout').LinhaCampinho {
+  if (zona === 'GOL') return 'GOL';
+  if (zona === 'DEF') return 'DEF';
+  if (zona === 'VOL') return 'VOL';
+  if (zona === 'MC') return 'MC';
+  if (zona === 'MO') return 'MO';
+  return 'ATA';
+}
+
 export function rendimentoJogadorEmCampo(p: ParametrosRendimentoJogador): number {
   const zona = p.celula ? zonaDaCelula(p.celula) : zonaFallbackPosicao(p.posicaoEscalada);
   const base = rendimentoAtributosNaZona(p.jogador.atributos, zona);
 
+  const linhaEscalada = linhaDeZona(zona);
+  const opcoesAf = {
+    ...p.opcoesAfinidade,
+    linhaEscalada: p.opcoesAfinidade?.linhaEscalada ?? linhaEscalada,
+  };
+
   const pos = multiplicadorPosicaoPartidaClamp(
     p.jogador,
     p.posicaoEscalada,
-    p.opcoesAfinidade,
+    opcoesAf,
   );
 
   const perf = calcularPerformancePartida({
@@ -142,7 +157,9 @@ export function rendimentoJogadorEmCampo(p: ParametrosRendimentoJogador): number
     energia: p.energia,
     multPosicao: pos.mult,
     excecaoGrave: pos.excecaoGrave,
-    posicaoNatural: p.jogador.posicao === p.posicaoEscalada,
+    // Paridade OVR (VOL↔MC, alas, etc.) conta como “na posição” para o piso competitivo.
+    posicaoNatural:
+      p.jogador.posicao === p.posicaoEscalada || pos.afinidade.paridadeOvr === true,
     fatorMotivacao: p.fatorMotivacao,
     fatorMoralTime: p.fatorMoralTime,
     idade: p.jogador.idade,

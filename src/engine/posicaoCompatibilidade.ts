@@ -10,12 +10,13 @@ import type { Jogador, Posicao } from '../types/schema';
  * Matriz legada (referência). O motor usa `calcularAfinidadePosicional`.
  * Mantida para UI/fallback quando não há Jogador completo.
  */
+/** Fallback sem attrs — VOL↔MEI já em paridade (1.0). */
 const MULT_LEGADO: Record<Posicao, Record<Posicao, number>> = {
   GOL: { GOL: 1, ZAG: 0.35, LAT: 0.35, VOL: 0.35, MEI: 0.35, ATA: 0.35 },
   ZAG: { GOL: 0.35, ZAG: 1, LAT: 0.89, VOL: 0.89, MEI: 0.75, ATA: 0.75 },
   LAT: { GOL: 0.35, ZAG: 0.89, LAT: 1, VOL: 0.89, MEI: 0.95, ATA: 0.89 },
-  VOL: { GOL: 0.35, ZAG: 0.89, LAT: 0.89, VOL: 1, MEI: 0.95, ATA: 0.75 },
-  MEI: { GOL: 0.35, ZAG: 0.75, LAT: 0.95, VOL: 0.95, MEI: 1, ATA: 0.95 },
+  VOL: { GOL: 0.35, ZAG: 0.89, LAT: 0.89, VOL: 1, MEI: 1, ATA: 0.75 },
+  MEI: { GOL: 0.35, ZAG: 0.75, LAT: 0.95, VOL: 1, MEI: 1, ATA: 0.95 },
   ATA: { GOL: 0.35, ZAG: 0.75, LAT: 0.75, VOL: 0.75, MEI: 0.95, ATA: 1 },
 };
 

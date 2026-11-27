@@ -15,6 +15,7 @@
     "lint": "oxlint",
     "preview": "vite preview",
     "smoke:performance": "node scripts/smoke-performance-career.mjs",
+    "smoke:affinity": "node scripts/smoke-affinity-ovr-parity.mjs",
     "sync": "powershell -NoProfile -ExecutionPolicy Bypass -File ./scripts/sync-nuvem.ps1"
   },
   "dependencies": {
