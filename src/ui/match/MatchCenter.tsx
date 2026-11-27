@@ -1,21 +1,33 @@
-import { useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { EstadoTemporada } from '../../career/brasileirao';
 import type { DadosH2H } from '../../career/h2hMatch';
 import {
   estatisticasParciais,
   type PeriodoEstatisticas,
 } from '../../engine/matchStats';
-import type { MatchSimResult } from '../../engine/matchEngine';
+import type { Lancamento, MatchSimResult } from '../../engine/matchEngine';
 import type { InfoJogadorPartida } from '../../engine/jogadorDaPartida';
 import type { CampeonatoConfig, Time } from '../../types/schema';
 import type { InfoPartidaPreJogo } from '../../career/infoPartidaPreJogo';
 import type { PacotePreJogoEquipes } from '../../career/preJogoEquipeStats';
+import {
+  MatchHighlightManager,
+  bindHighlightControls,
+  isDangerousChance,
+  rosterFromEscalacao,
+  synthesizeBuildupClip,
+  synthesizeFrame,
+  type HighlightClip,
+  type HighlightMode,
+  type HighlightRoster,
+} from '../../engine/highlights';
 import { MatchEventTimeline } from './MatchEventTimeline';
 import { MatchH2HPanel } from './MatchH2HPanel';
 import { MatchMomentum } from './MatchMomentum';
 import { MatchPreGame } from './MatchPreGame';
 import { MatchStatsPanel } from './MatchStatsPanel';
 import { MatchClassificacaoPanel } from './MatchClassificacaoPanel';
+import { MatchHighlightOverlay } from './highlights/MatchHighlightOverlay';
 import {
   MatchFormacoesPanel,
   type ArbitroFormacoes,
@@ -81,6 +93,12 @@ type Props = {
   h2h?: DadosH2H | null;
 };
 
+const MODE_LABEL: Record<HighlightMode, string> = {
+  ON: 'ON',
+  ONLY_GOALS: 'APENAS GOLS',
+  OFF: 'OFF',
+};
+
 export function MatchCenter({
   result,
   mandanteNome,
@@ -118,12 +136,152 @@ export function MatchCenter({
     resumePlayback ?? { idx: 0, golsM: 0, golsV: 0, minuto: 0 },
   );
   const [syncKey, setSyncKey] = useState(playbackKey ?? '0');
+  const [highlightMode, setHighlightMode] = useState<HighlightMode>('ON');
+  const [activeClip, setActiveClip] = useState<HighlightClip | null>(null);
+  const pausedForClipRef = useRef(false);
+
   if ((playbackKey ?? '0') !== syncKey) {
     const base = resumePlayback ?? { idx: 0, golsM: 0, golsV: 0, minuto: 0 };
     setSyncKey(playbackKey ?? '0');
     setProgresso(base);
     setMinuto(base.minuto);
   }
+
+  const managerRef = useRef<MatchHighlightManager | null>(null);
+  if (!managerRef.current) {
+    managerRef.current = new MatchHighlightManager('ON');
+  }
+  const manager = managerRef.current;
+
+  const roster: HighlightRoster = useMemo(() => {
+    if (result.highlightRoster) return result.highlightRoster;
+    return rosterFromEscalacao([], []);
+  }, [result.highlightRoster]);
+
+  const attackingHomeRef = useRef(true);
+  const focusIdRef = useRef<number | undefined>(undefined);
+  const clockRef = useRef(minuto);
+
+  useEffect(() => {
+    manager.clearBuffer();
+    manager.setMode(highlightMode);
+  }, [manager, playbackKey, highlightMode]);
+
+  useEffect(() => {
+    manager.onPlayHighlight(async (clip) => {
+      pausedForClipRef.current = true;
+      onPausado(true);
+      setActiveClip(clip);
+      await new Promise<void>((resolve) => {
+        const done = () => {
+          window.removeEventListener('mm-highlight-done', done);
+          resolve();
+        };
+        window.addEventListener('mm-highlight-done', done);
+      });
+    });
+  }, [manager, onPausado]);
+
+  useEffect(() => {
+    return bindHighlightControls('highlight-selector', manager);
+  }, [manager]);
+
+  useEffect(() => {
+    if (highlightMode === 'OFF') return;
+    if (pausado || activeClip || aguardandoSegundoTempo || !aoVivo) return;
+    const hz = manager.getTicksPerSecond();
+    const id = window.setInterval(() => {
+      const frame = synthesizeFrame({
+        clock: clockRef.current,
+        roster,
+        attackingHome: attackingHomeRef.current,
+        phase: 0.35 + (Math.sin(clockRef.current) + 1) * 0.2,
+        focusPlayerId: focusIdRef.current,
+        seed: Date.now() % 100000,
+      });
+      manager.recordFrame(frame);
+    }, 1000 / hz);
+    return () => window.clearInterval(id);
+  }, [
+    highlightMode,
+    pausado,
+    activeClip,
+    aguardandoSegundoTempo,
+    aoVivo,
+    manager,
+    roster,
+  ]);
+
+  const onClipDone = useCallback(() => {
+    setActiveClip(null);
+    window.dispatchEvent(new Event('mm-highlight-done'));
+    if (pausedForClipRef.current) {
+      pausedForClipRef.current = false;
+      onPausado(false);
+    }
+  }, [onPausado]);
+
+  const handleLance = useCallback(
+    async (l: Lancamento) => {
+      clockRef.current = l.minuto;
+      const attackingHome =
+        l.tipo === 'gol' || l.tipo === 'chance'
+          ? l.timeId === result.mandanteId
+          : l.tipo === 'defesa'
+            ? l.timeId !== result.mandanteId
+            : attackingHomeRef.current;
+      attackingHomeRef.current = attackingHome;
+      focusIdRef.current = l.jogadorId;
+
+      if (manager.getMode() === 'OFF') return;
+
+      if (manager.getBufferLength() < 40) {
+        const frames = synthesizeBuildupClip({
+          clockAtEvent: l.minuto,
+          roster,
+          attackingHome,
+          focusPlayerId: l.jogadorId,
+          banner:
+            l.tipo === 'gol'
+              ? 'GOL!'
+              : l.highlight?.woodwork
+                ? 'TRAVESSÃO!'
+                : l.highlight?.hardSave
+                  ? 'GRANDE DEFESA!'
+                  : undefined,
+        });
+        for (const f of frames) manager.recordFrame(f);
+      } else {
+        manager.recordFrame(
+          synthesizeFrame({
+            clock: l.minuto,
+            roster,
+            attackingHome,
+            phase: 0.92,
+            focusPlayerId: l.jogadorId,
+            banner: l.tipo === 'gol' ? 'GOL!' : undefined,
+          }),
+        );
+      }
+
+      if (l.tipo === 'gol' && manager.shouldTrigger('GOAL')) {
+        pausedForClipRef.current = true;
+        onPausado(true);
+        await manager.evaluateAndTriggerEvent('GOAL', l.minuto);
+        return;
+      }
+      if (
+        (l.tipo === 'chance' || l.tipo === 'defesa' || l.tipo === 'cartao_amarelo') &&
+        isDangerousChance(l.highlight) &&
+        manager.shouldTrigger('DANGEROUS_CHANCE')
+      ) {
+        pausedForClipRef.current = true;
+        onPausado(true);
+        await manager.evaluateAndTriggerEvent('DANGEROUS_CHANCE', l.minuto);
+      }
+    },
+    [manager, onPausado, result.mandanteId, roster],
+  );
 
   const stats =
     result.estatisticas &&
@@ -178,9 +336,10 @@ export function MatchCenter({
           visitanteNome={visitanteNome}
           jogadoresInfo={jogadoresInfo}
           velocidade={velocidade}
-          pausado={pausado}
+          pausado={pausado || !!activeClip}
           onPausado={onPausado}
           onMinuto={(m) => {
+            clockRef.current = m;
             setMinuto(m);
             onMinuto(m);
           }}
@@ -199,6 +358,9 @@ export function MatchCenter({
           playbackKey={playbackKey}
           onIntervalo={onIntervalo}
           skipToEndNonce={skipToEndNonce}
+          onLanceConsumido={(l) => {
+            void handleLance(l);
+          }}
         />
       </div>
 
@@ -298,7 +460,7 @@ export function MatchCenter({
 
       <div className="flex flex-wrap items-center gap-2 border-t border-zinc-800 pt-3">
         {!aguardandoSegundoTempo && (
-          <CmBtn variant="ghost" onClick={() => onPausado(!pausado)}>
+          <CmBtn variant="ghost" onClick={() => onPausado(!pausado)} disabled={!!activeClip}>
             {pausado ? 'Retomar' : 'Pausar'}
           </CmBtn>
         )}
@@ -314,7 +476,7 @@ export function MatchCenter({
         <label className="flex items-center gap-2 text-xs text-zinc-400">
           Velocidade
           <select
-            className="rounded border border-zinc-600 bg-zinc-800 px-2 py-1"
+            className="rounded border border-zinc-600 bg-zinc-800 px-2 py-1 text-zinc-200"
             value={velocidade}
             onChange={(e) => onVelocidade(Number(e.target.value) as VelocidadePlayback)}
           >
@@ -322,6 +484,24 @@ export function MatchCenter({
             <option value={1}>1×</option>
             <option value={2}>2×</option>
             <option value={4}>4×</option>
+          </select>
+        </label>
+        <label className="flex items-center gap-2 text-xs text-zinc-400">
+          Destaques 2D
+          <select
+            id="highlight-selector"
+            className="rounded border border-zinc-600 bg-zinc-900 px-2 py-1 font-medium text-zinc-100"
+            value={highlightMode}
+            onChange={(e) => {
+              const v = e.target.value as HighlightMode;
+              setHighlightMode(v);
+              manager.setMode(v);
+            }}
+            aria-label="Modo de destaques 2D"
+          >
+            <option value="ON">{MODE_LABEL.ON}</option>
+            <option value="ONLY_GOALS">{MODE_LABEL.ONLY_GOALS}</option>
+            <option value="OFF">{MODE_LABEL.OFF}</option>
           </select>
         </label>
         {aoVivo && (
@@ -336,6 +516,13 @@ export function MatchCenter({
           </CmBtn>
         )}
       </div>
+
+      <MatchHighlightOverlay
+        clip={activeClip}
+        ticksPerSecond={manager.getTicksPerSecond()}
+        playbackSpeed={manager.getPlaybackSpeed()}
+        onDone={onClipDone}
+      />
     </div>
   );
 }
