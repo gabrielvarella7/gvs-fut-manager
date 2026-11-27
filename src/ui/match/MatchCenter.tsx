@@ -8,6 +8,8 @@ import {
 import type { MatchSimResult } from '../../engine/matchEngine';
 import type { InfoJogadorPartida } from '../../engine/jogadorDaPartida';
 import type { CampeonatoConfig, Time } from '../../types/schema';
+import type { InfoPartidaPreJogo } from '../../career/infoPartidaPreJogo';
+import type { PacotePreJogoEquipes } from '../../career/preJogoEquipeStats';
 import { MatchEventTimeline } from './MatchEventTimeline';
 import { MatchH2HPanel } from './MatchH2HPanel';
 import { MatchMomentum } from './MatchMomentum';
@@ -56,6 +58,9 @@ type Props = {
     mandanteId: string;
     visitanteId: string;
   } | null;
+  /** Stats de temporada para a aba Pré-jogo (ambos os times). */
+  equipesPreJogo?: PacotePreJogoEquipes | null;
+  infoPartida?: InfoPartidaPreJogo | null;
   /** Head-to-head panel data (liga ou torneio). */
   h2h?: DadosH2H | null;
 };
@@ -83,6 +88,8 @@ export function MatchCenter({
   onIrProFimDoJogo,
   onFinalizarJogo,
   classificacao = null,
+  equipesPreJogo = null,
+  infoPartida = null,
   h2h = null,
 }: Props) {
   const [aba, setAba] = useState<Aba>('comentario');
@@ -205,6 +212,8 @@ export function MatchCenter({
           visitanteNome={visitanteNome}
           estadio={estadio}
           preJogo={result.preJogo}
+          equipes={equipesPreJogo}
+          infoPartida={infoPartida}
         />
       )}
 

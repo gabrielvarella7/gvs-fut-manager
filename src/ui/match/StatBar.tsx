@@ -22,8 +22,10 @@ export function StatBar({
   max,
   sufixo = '',
 }: Props) {
-  const m = typeof mandante === 'number' ? mandante : parseFloat(String(mandante));
-  const v = typeof visitante === 'number' ? visitante : parseFloat(String(visitante));
+  const rawM = typeof mandante === 'number' ? mandante : parseFloat(String(mandante));
+  const rawV = typeof visitante === 'number' ? visitante : parseFloat(String(visitante));
+  const m = Number.isFinite(rawM) ? rawM : 0;
+  const v = Number.isFinite(rawV) ? rawV : 0;
   const cap = max ?? Math.max(m, v, 1);
   const pctM = Math.min(100, (m / cap) * 100);
   const pctV = Math.min(100, (v / cap) * 100);
