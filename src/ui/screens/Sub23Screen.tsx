@@ -30,6 +30,7 @@ export function Sub23Screen() {
     [aspirantes, clubeId],
   );
   const plantel = clubeId ? plantelProfissionalCount(jogadores, clubeId) : 0;
+  const plantelCheio = plantel >= TETO_PLANTEL_PRO_SUB23;
   const pos = aspirantes && clubeId ? posicaoTabelaAspirantes(aspirantes.tabela, clubeId) : 0;
   const prox = aspirantes && clubeId ? proximaPartidaAspirantes(aspirantes, clubeId) : null;
   const adv =
@@ -70,6 +71,9 @@ export function Sub23Screen() {
             <p className="mt-1 text-xs text-zinc-400">
               Plantel profissional {plantel}/{TETO_PLANTEL_PRO_SUB23} · disputa 100% pela IA
             </p>
+            {plantelCheio && (
+              <p className="mt-2 text-sm text-amber-200">{MSG_PLANTEL_CHEIO_SUBIR}</p>
+            )}
             {prox && (
               <p className="mt-2 text-sm text-zinc-300">
                 Próximo: rodada {prox.rodada} vs {adv?.nome_completo ?? 'adversário'} (
@@ -81,8 +85,10 @@ export function Sub23Screen() {
 
           <h2 className="mb-2 text-sm font-semibold text-emerald-400">Elenco Sub-23</h2>
           <p className="mb-3 text-xs text-zinc-500">
-            Ao promover, um novo aspirante entra automaticamente (sempre 22). Se o plantel
-            profissional estiver cheio: “{MSG_PLANTEL_CHEIO_SUBIR}”
+            Ao promover, um novo aspirante entra automaticamente (sempre 22).
+            {plantelCheio ?
+              ` ${MSG_PLANTEL_CHEIO_SUBIR}`
+            : ' Escolha um atleta para subir ao profissional.'}
           </p>
           <ul className="mb-6 space-y-2">
             {elenco.map((a) => (
@@ -103,12 +109,17 @@ export function Sub23Screen() {
                   </div>
                   <CmBtn
                     variant="primary"
+                    disabled={plantelCheio}
                     onClick={() => {
+                      if (plantelCheio) {
+                        setAviso(MSG_PLANTEL_CHEIO_SUBIR);
+                        return;
+                      }
                       const err = promover(a.id);
                       setAviso(err);
                     }}
                   >
-                    Subir ao profissional
+                    {plantelCheio ? 'Plantel cheio' : 'Subir ao profissional'}
                   </CmBtn>
                 </div>
               </CmPanel>
