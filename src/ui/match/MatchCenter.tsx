@@ -162,20 +162,12 @@ export function MatchCenter({
       </div>
 
       {aba === 'estatisticas' && stats && (
-        <>
-          <MatchStatsPanel
-            mandante={stats.mandante}
-            visitante={stats.visitante}
-            mandanteNome={mandanteNome}
-            visitanteNome={visitanteNome}
-          />
-          <MatchMomentum
-            momento={result.estatisticas.momento}
-            minutoAtual={minuto}
-            mandanteNome={mandanteNome}
-            visitanteNome={visitanteNome}
-          />
-        </>
+        <MatchStatsPanel
+          mandante={stats.mandante}
+          visitante={stats.visitante}
+          mandanteNome={mandanteNome}
+          visitanteNome={visitanteNome}
+        />
       )}
 
       {aba === 'classificacao' && classificacao && (
@@ -204,6 +196,15 @@ export function MatchCenter({
         <MatchStatsPanel
           mandante={stats.mandante}
           visitante={stats.visitante}
+          mandanteNome={mandanteNome}
+          visitanteNome={visitanteNome}
+        />
+      )}
+
+      {result.estatisticas?.momento && (
+        <MatchMomentum
+          momento={result.estatisticas.momento}
+          minutoAtual={minuto}
           mandanteNome={mandanteNome}
           visitanteNome={visitanteNome}
         />

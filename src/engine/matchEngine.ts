@@ -29,9 +29,9 @@ import { type ContextoDinamicoPartida, modificadoresUrgencia } from './matchCont
 import {
   construirEstatisticasPartida,
   type EstatisticasPartida,
-  type MomentoAtaque,
   type PreJogoInfo,
 } from './matchStats';
+import { gerarGraficoMomentum } from './matchMomentum';
 import { prepararPartidaComFaixa } from './matchProbabilidades';
 import {
   indicePartidaDeveSerAlucinado,
@@ -713,7 +713,6 @@ export function simularPartida(input: MatchSimInput): MatchSimResult {
 
   let posseM = 0;
   let posseV = 0;
-  const momento: MomentoAtaque[] = [];
 
   const fadigaPorJogador = new Map<number, number>();
   const multFaltasPorJogador = new Map<number, number>();
@@ -968,8 +967,6 @@ export function simularPartida(input: MatchSimInput): MatchSimResult {
       break;
     }
 
-    if (minutosOcupados.has(minuto)) continue;
-
     const fadigaRatio = minuto > 45 ? 0.92 : 1;
     const forcaM = calcularForcaSetores(mandanteEsc, energia, cfg, opcoesM());
     const forcaV = calcularForcaSetores(visitanteEsc, energia, cfg, opcoesV());
@@ -999,12 +996,8 @@ export function simularPartida(input: MatchSimInput): MatchSimResult {
       Math.max(0.55, Math.min(1.65, ratioPosseV));
     posseM += pressaoM + 0.02;
     posseV += pressaoV + 0.02;
-    momento.push({
-      minuto,
-      valor: (pressaoM - pressaoV) * 48,
-      golMandante: minutosGolM.includes(minuto),
-      golVisitante: minutosGolV.includes(minuto),
-    });
+
+    if (minutosOcupados.has(minuto)) continue;
 
     if (rnd() < pressaoM) {
       const autor = escolherArtilheiro(mandanteEsc, rnd, foraMandante);
@@ -1236,6 +1229,18 @@ export function simularPartida(input: MatchSimInput): MatchSimResult {
     id,
     energia: Math.round(e * 10) / 10,
   }));
+
+  const momento = gerarGraficoMomentum({
+    minutoFinal,
+    lancamentos,
+    mandanteId: input.mandante.timeId,
+    visitanteId: input.visitante.timeId,
+    taticaMandante: taticaM,
+    taticaVisitante: taticaV,
+    skillMandante: globalM,
+    skillVisitante: globalV,
+    seed: input.seed,
+  });
 
   const estatisticas = construirEstatisticasPartida(
     lancamentos,
