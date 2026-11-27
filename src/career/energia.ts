@@ -71,18 +71,19 @@ export function fatorStaffRecuperacao(nivelPreparador: number): number {
 }
 
 /**
- * Base do dia pós-jogo (ressaca → janela midweek → pleno):
- * D+1: 6–9 · D+2–3: 11–15 · D+4–6: 10–14 · D+7+: 6–9
+ * Recuperação diária escalada ao descanso (drain de partida ~10–16%):
+ * D+1: 3,5–5,5 (ressaca) · D+2–3: 4,5–6,5 · D+4–5: 5–7 · D+6+: 4–6
+ * Pico etário cobre um jogo normal em ~4–5 dias; calendário a cada 3 dias deixa residual.
  */
 export function baseRecuperacaoPorDiaPosJogo(
   diasDesdePartida: number,
   rnd: () => number,
 ): number {
   const d = Math.max(0, Math.floor(diasDesdePartida));
-  if (d <= 1) return randEntre(rnd, 6, 9);
-  if (d <= 3) return randEntre(rnd, 11, 15);
-  if (d <= 6) return randEntre(rnd, 10, 14);
-  return randEntre(rnd, 6, 9);
+  if (d <= 1) return randEntre(rnd, 3.5, 5.5);
+  if (d <= 3) return randEntre(rnd, 4.5, 6.5);
+  if (d <= 5) return randEntre(rnd, 5, 7);
+  return randEntre(rnd, 4, 6);
 }
 
 export interface OpcoesRecuperacaoDiaria {
@@ -146,12 +147,66 @@ export function recuperarEnergiaUmDia(
   });
 }
 
-/** Multiplicador de gasto posicional em 90' (ATA ≈ 20–24% base). */
+/** Capacidade de jogos de alto nível / temporada (~11 meses). */
+export const PARTIDAS_BASELINE_PICO = 50; // idades 23–32
+export const PARTIDAS_BASELINE_FORA = 40; // fora do pico etário
+
+export function partidasBaselineTemporada(idade: number): number {
+  return idade >= 23 && idade <= 32 ? PARTIDAS_BASELINE_PICO : PARTIDAS_BASELINE_FORA;
+}
+
+/**
+ * Teto duro de perda em 90' — um jogo nunca esvazia o elenco.
+ * GOL ~8 · pico 23–32 ~16 · jovem ~14 · fora do pico (33+) ~20
+ */
+export function tetoDrainPartidaPct(idade: number, posicao: Posicao): number {
+  if (posicao === 'GOL') return 8;
+  if (idade >= 23 && idade <= 32) return 16;
+  if (idade < 23) return 14;
+  return 20;
+}
+
+/**
+ * Calendário denso (ex.: a cada 3 dias) eleva fadiga; ≥6 dias = ritmo normal de temporada.
+ */
+export function multiplicadorDensidadeCalendario(diasDescanso: number): number {
+  const d = Math.max(0, Math.floor(diasDescanso));
+  if (d <= 0) return 1.55;
+  if (d === 1) return 1.42;
+  if (d === 2) return 1.28;
+  if (d === 3) return 1.16;
+  if (d <= 5) return 1.06;
+  return 1.0;
+}
+
+/**
+ * Acima da capacidade etária (50 ou 40) → mais gasto + risco de queda de rendimento.
+ */
+export function multiplicadorCargaTemporada(jogosTemporada: number, idade: number): number {
+  const base = partidasBaselineTemporada(idade);
+  const ratio = Math.max(0, jogosTemporada) / base;
+  if (ratio < 0.5) return 0.96;
+  if (ratio < 0.85) return 1.0;
+  if (ratio < 1.0) return 1.05;
+  if (ratio < 1.15) return 1.14;
+  return 1.26;
+}
+
+/** Dias desde a última partida (3 = default se sem histórico). */
+export function diasDescansoAntesPartida(
+  ultimaPartidaISO: string | undefined,
+  dataPartidaISO: string | undefined,
+): number {
+  if (!ultimaPartidaISO || !dataPartidaISO) return 7;
+  return diasEntreISO(ultimaPartidaISO, dataPartidaISO);
+}
+
+/** Multiplicador de gasto posicional (ATA = 1,0 → alvo ~11–13% em 90'). */
 export function multiplicadorDrainPosicao(posicao: Posicao): number {
-  if (posicao === 'GOL') return 0.25;
-  if (posicao === 'ZAG') return 0.85;
+  if (posicao === 'GOL') return 0.45;
+  if (posicao === 'ZAG') return 0.88;
   if (posicao === 'ATA') return 1.0;
-  return 1.18; // LAT / VOL / MEI
+  return 1.1; // LAT / VOL / MEI
 }
 
 export function multiplicadorDrainTatico(params: {
@@ -173,13 +228,12 @@ export function multiplicadorDrainTatico(params: {
     (linha === 'BAIXA' && ritmo === 'LENTO_CADENCIADO');
 
   if (gegen && (ritmo === 'ACELERADO' || linha === 'MUITO_ALTA' || linha === 'ALTA')) {
-    // +30–46%
-    return 1.38;
+    return 1.18;
   }
-  if (gegen) return 1.3;
-  if (parkBus) return 0.88;
-  if (ritmo === 'ACELERADO') return 1.12;
-  if (ritmo === 'LENTO_CADENCIADO') return 0.94;
+  if (gegen) return 1.12;
+  if (parkBus) return 0.9;
+  if (ritmo === 'ACELERADO') return 1.08;
+  if (ritmo === 'LENTO_CADENCIADO') return 0.95;
   return 1.0;
 }
 
@@ -187,38 +241,38 @@ export function multiplicadorDrainEmocional(params: {
   isClassico?: boolean;
   tudoOuNada?: boolean;
 }): number {
-  if (params.isClassico || params.tudoOuNada) return 1.28;
+  if (params.isClassico || params.tudoOuNada) return 1.12;
   return 1.0;
 }
 
 /**
- * Genética no gasto em jogo:
- * ≤0,75 → menos drop no fim; ≥1,50 → queda acentuada após 65'.
+ * Genética no gasto em jogo (suave — o teto da partida impede esvaziar o XI):
+ * ≤0,75 → menos drop no fim; ≥1,50 → queda após 65'.
  */
 export function multiplicadorDrainGeneticaNoMinuto(
   propensaoLesao: number,
   minuto: number,
 ): number {
   if (propensaoLesao <= 0.75) {
-    return minuto >= 70 ? 0.82 : 0.92;
+    return minuto >= 70 ? 0.88 : 0.94;
   }
   if (propensaoLesao >= 1.5) {
-    return minuto >= 65 ? 1.55 : 1.12;
+    return minuto >= 65 ? 1.22 : 1.06;
   }
   return 1.0;
 }
 
-/** Idade 30–33: +10% gasto se ritmo acelerado. */
+/** Idade fora do pico / ritmo acelerado: gasto levemente maior. */
 export function multiplicadorDrainIdadeGasto(idade: number, ritmoAcelerado: boolean): number {
-  if (idade >= 30 && idade <= 33 && ritmoAcelerado) return 1.1;
-  if (idade >= 34) return 1.08;
-  if (idade <= 23) return 0.95;
+  if (idade >= 30 && idade <= 32 && ritmoAcelerado) return 1.06;
+  if (idade >= 33) return 1.1;
+  if (idade < 23) return 0.96;
   return 1.0;
 }
 
 /**
- * Fadiga por minuto — vetores de posição, idade, tática, emocional e staff.
- * ATA pleno ≈ 20–24% em 90' (base ~0,244/min × mults).
+ * Fadiga por minuto — capacidade etária + densidade + carga + teto duro.
+ * ATA pleno, descanso normal, sob capacidade ≈ 11–13% em 90'.
  */
 export function fadigaPorMinutoCompleta(params: {
   idade: number;
@@ -234,9 +288,13 @@ export function fadigaPorMinutoCompleta(params: {
   isClassico?: boolean;
   tudoOuNada?: boolean;
   nivelPreparador?: number;
+  /** Dias desde a última partida (≥6 = ritmo normal). */
+  diasDescanso?: number;
+  /** Jogos já disputados nesta temporada (antes deste). */
+  jogosTemporada?: number;
 }): number {
-  // Base ATA: ~22% em 90' → 0,244/min
-  const baseAta = randEntre(params.rnd, 0.222, 0.267);
+  // Base ATA: ~12% em 90' → ~0,133/min
+  const baseAta = randEntre(params.rnd, 0.118, 0.148);
   let mult = multiplicadorDrainPosicao(params.posicao);
   mult *= multiplicadorDrainTatico({
     estiloId: params.estiloId,
@@ -252,17 +310,23 @@ export function fadigaPorMinutoCompleta(params: {
     params.idade,
     params.ritmo === 'ACELERADO',
   );
-  // Preparador alto: menos drain nos 90'
-  const prep = clamp(params.nivelPreparador ?? 10, 1, 20);
-  const multPrep = prep >= 18 ? 0.78 : prep >= 14 ? 0.88 : prep >= 10 ? 0.96 : 1.05;
-  mult *= multPrep;
-  mult *= params.multEquipe ?? 1;
-  mult *= params.desgasteTatico ?? 1;
-  // Genética média no cálculo inicial (ajuste fino por minuto no loop)
-  if (params.propensaoLesao <= 0.75) mult *= 0.9;
-  else if (params.propensaoLesao >= 1.5) mult *= 1.12;
+  mult *= multiplicadorDensidadeCalendario(params.diasDescanso ?? 7);
+  mult *= multiplicadorCargaTemporada(params.jogosTemporada ?? 0, params.idade);
 
-  return baseAta * mult;
+  const prep = clamp(params.nivelPreparador ?? 10, 1, 20);
+  const multPrep = prep >= 18 ? 0.82 : prep >= 14 ? 0.9 : prep >= 10 ? 0.97 : 1.04;
+  mult *= multPrep;
+
+  // Evita empilhar multEquipe × desgaste tático até esvaziar o XI.
+  const externo = clamp((params.multEquipe ?? 1) * (params.desgasteTatico ?? 1), 0.85, 1.18);
+  mult *= externo;
+
+  if (params.propensaoLesao <= 0.75) mult *= 0.92;
+  else if (params.propensaoLesao >= 1.5) mult *= 1.08;
+
+  const raw = baseAta * mult;
+  const tetoMin = tetoDrainPartidaPct(params.idade, params.posicao) / 90;
+  return Math.min(raw, tetoMin);
 }
 
 /**
@@ -444,15 +508,18 @@ export function energiaJitterNovaCarreira(rnd: () => number): number {
 
 export function preverEnergiaFimJogo(idade: number, energiaInicio: number, rnd: () => number): number {
   const drain = fadigaPorMinutoPorIdade(idade, rnd) * 90;
-  return Math.max(0, Math.round((energiaInicio - drain) * 10) / 10);
+  const teto = tetoDrainPartidaPct(idade, 'MEI');
+  const perda = Math.min(drain, teto);
+  return Math.max(0, Math.round((energiaInicio - perda) * 10) / 10);
 }
 
 export function faixaRecuperacaoLabel(idade: number): string {
   const f = fatorIdadeRecuperacao(idade);
-  if (f >= 1.1) return 'Recuperação rápida (18–23 · ~1,15×)';
-  if (f >= 0.95) return 'Recuperação padrão (24–29)';
-  if (f >= 0.8) return 'Recuperação reduzida (30–33 · ~0,85×)';
-  return 'Recuperação lenta (34+ · ~0,68× · 4–5 dias)';
+  const cap = partidasBaselineTemporada(idade);
+  if (f >= 1.1) return `Recuperação rápida (18–23 · ~1,15× · até ~${cap} jogos/temp.)`;
+  if (idade >= 23 && idade <= 32) return `Pico físico (23–32 · ~${cap} jogos/temp. · recuperação padrão)`;
+  if (f >= 0.8) return `Recuperação reduzida (30–33 · ~0,85× · até ~${cap} jogos)`;
+  return `Recuperação lenta (34+ · ~0,68× · até ~${cap} jogos · risco se sobrecarregar)`;
 }
 
 /** Extrai vetores táticos do config do clube para o drain. */

@@ -529,6 +529,7 @@ export function montarInputPartidaCpu(
   bonusMando: number,
   seed: number,
   estado?: EstadoTemporada,
+  dataPartidaISO?: string,
 ): { input: MatchSimInput; seed: number } {
   const mandanteTime = times.find((t) => t.id === mandanteId)!;
   const visitanteTime = times.find((t) => t.id === visitanteId)!;
@@ -567,6 +568,7 @@ export function montarInputPartidaCpu(
     estadio: mandanteTime.estadio,
     seed: s,
     ...(contexto ? { contexto } : {}),
+    dataPartidaISO: dataPartidaISO ?? estado?.dataAtualISO,
   };
   return { input, seed: s };
 }
@@ -602,6 +604,7 @@ export function simularRestanteRodada(
         campeonato.bonus_mando_campo ?? 1.05,
         seed,
         next,
+        p.dataISO,
       );
       seed = (s * 1103515245 + 12345) >>> 0;
       const r = simularPartidaCpu({ ...input, seed: s, indicePartidaTemporada: indice });

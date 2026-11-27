@@ -196,6 +196,7 @@ export function MatchScreen() {
         bonusTreino && Object.keys(bonusTreino).length > 0
           ? { bonusTreino, multExecucaoTreino: multExec ?? 1 }
           : {};
+      const participacoesUser = mundoClube?.participacoesTemporada;
       return {
         mandante: {
           timeId: mandanteLiga.id,
@@ -214,6 +215,9 @@ export function MatchScreen() {
               ? taticaUsuario
               : taticaCpuAutomatica(esqM, mandanteLiga.id),
           ...(mandanteLiga.id === clubeRealId ? treinoUser : {}),
+          ...(mandanteLiga.id === clubeRealId && participacoesUser
+            ? { participacoesTemporada: participacoesUser }
+            : {}),
         },
         visitante: {
           timeId: visitanteLiga.id,
@@ -231,6 +235,9 @@ export function MatchScreen() {
               ? taticaUsuario
               : taticaCpuAutomatica(esqV, visitanteLiga.id),
           ...(visitanteLiga.id === clubeRealId ? treinoUser : {}),
+          ...(visitanteLiga.id === clubeRealId && participacoesUser
+            ? { participacoesTemporada: participacoesUser }
+            : {}),
         },
         dbTaticas,
         config: {
@@ -242,6 +249,7 @@ export function MatchScreen() {
         estadio: neutro ? 'Campo neutro' : mandanteLiga.estadio,
         contexto,
         indicePartidaTemporada: brasileirao ? indiceProximaPartida(brasileirao) : undefined,
+        dataPartidaISO: partidaLiga.dataISO ?? brasileirao?.dataAtualISO,
       };
     }
     if (jogo && mandanteFic && visitanteFic && timeUsuarioId) {
