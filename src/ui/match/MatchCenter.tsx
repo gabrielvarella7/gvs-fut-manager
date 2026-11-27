@@ -5,13 +5,19 @@ import { MatchMomentum } from './MatchMomentum';
 import { MatchPreGame } from './MatchPreGame';
 import { MatchStatsPanel } from './MatchStatsPanel';
 import {
+  MatchFormacoesPanel,
+  type ArbitroFormacoes,
+  type TimeFormacoesInfo,
+} from './MatchFormacoesPanel';
+import {
   MatchPlayback,
   type PlaybackProgress,
   type VelocidadePlayback,
 } from '../MatchPlayback';
 import { CmBtn } from '../cm/CmShell';
 
-type Aba = 'comentario' | 'estatisticas' | 'prejogo' | 'detalhes';
+/** Formações é conteúdo próprio; layout da faixa de abas pode ser reordenado por outro PR. */
+type Aba = 'comentario' | 'estatisticas' | 'prejogo' | 'detalhes' | 'formacoes';
 
 type Props = {
   result: MatchSimResult;
@@ -34,6 +40,10 @@ type Props = {
   onIntervalo?: () => void;
   skipToEndNonce?: number;
   onIrProFimDoJogo?: () => void;
+  /** Dados para a aba Formações (read-only). */
+  formacoesMandante?: TimeFormacoesInfo;
+  formacoesVisitante?: TimeFormacoesInfo;
+  arbitro?: ArbitroFormacoes | null;
 };
 
 export function MatchCenter({
@@ -56,6 +66,9 @@ export function MatchCenter({
   onIntervalo,
   skipToEndNonce = 0,
   onIrProFimDoJogo,
+  formacoesMandante,
+  formacoesVisitante,
+  arbitro = null,
 }: Props) {
   const [aba, setAba] = useState<Aba>('comentario');
   const [minuto, setMinuto] = useState(0);
@@ -64,8 +77,10 @@ export function MatchCenter({
     result.estatisticas &&
     estatisticasParciais(result, minuto, result.mandanteId);
 
+  const temFormacoes = !!formacoesMandante && !!formacoesVisitante;
   const abas: { id: Aba; label: string }[] = [
     { id: 'detalhes', label: 'Detalhes' },
+    ...(temFormacoes ? [{ id: 'formacoes' as const, label: 'Formações' }] : []),
     { id: 'estatisticas', label: 'Estatísticas' },
     { id: 'comentario', label: 'Comentário' },
     { id: 'prejogo', label: 'Pré-jogo' },
@@ -145,6 +160,16 @@ export function MatchCenter({
           visitante={stats.visitante}
           mandanteNome={mandanteNome}
           visitanteNome={visitanteNome}
+        />
+      )}
+
+      {aba === 'formacoes' && temFormacoes && (
+        <MatchFormacoesPanel
+          result={result}
+          minuto={minuto}
+          mandante={formacoesMandante}
+          visitante={formacoesVisitante}
+          arbitro={arbitro}
         />
       )}
 
