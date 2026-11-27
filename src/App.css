@@ -51,7 +51,9 @@
 }
 
 .welcome-splash__img {
-  max-height: min(48vh, 480px);
+  max-height: min(52vh, 520px);
+  width: auto;
+  max-width: min(100%, 360px);
 }
 
 .welcome-splash__cta {
