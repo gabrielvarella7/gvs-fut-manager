@@ -638,18 +638,18 @@ export function simularRestanteRodada(
 
 const TITULOS_FATO = [
   'Treino intenso',
-  'Coletiva do técnico',
   'Mercado em silêncio',
   'Preparação física',
   'Torcida no CT',
+  'Bastidores do CT',
 ];
 
 const TEXTOS_FATO = [
   'O elenco treinou tático e finalizações nesta manhã.',
-  'O técnico pediu foco total na próxima rodada do Brasileirão.',
   'Sem novidades no mercado — grupo fechado para o duelo.',
   'Departamento médico não registra baixas no dia.',
   'Torcedores acompanham o treino aberto antes do clássico do fim de semana.',
+  'Comissão técnica revisou vídeo e reforçou o plano para a próxima rodada.',
 ];
 
 export function gerarFatoDoDia(iso: string, clubeNome: string): NoticiaCarreira {

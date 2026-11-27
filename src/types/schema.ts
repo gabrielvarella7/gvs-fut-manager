@@ -191,6 +191,11 @@ export interface Jogador {
   atributos: AtributosJogador;
   overall: number;
   energia: number;
+  /**
+   * Moral individual (0–100). Afetada por coletiva pós-jogo e clima de vestiário.
+   * Ausente em saves antigos → tratar como 50.
+   */
+  moral?: number;
   status_escalacao: StatusEscalacao;
   valor_mercado?: number;
   salario_mensal?: number;
