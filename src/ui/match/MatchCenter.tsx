@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { estatisticasParciais } from '../../engine/matchStats';
 import type { MatchSimResult } from '../../engine/matchEngine';
+import { MatchEventTimeline } from './MatchEventTimeline';
 import { MatchMomentum } from './MatchMomentum';
 import { MatchPreGame } from './MatchPreGame';
 import { MatchStatsPanel } from './MatchStatsPanel';
@@ -58,11 +59,23 @@ export function MatchCenter({
   onIrProFimDoJogo,
 }: Props) {
   const [aba, setAba] = useState<Aba>('comentario');
-  const [minuto, setMinuto] = useState(0);
+  const [minuto, setMinuto] = useState(resumePlayback?.minuto ?? 0);
+  const [progresso, setProgresso] = useState<PlaybackProgress>(
+    resumePlayback ?? { idx: 0, golsM: 0, golsV: 0, minuto: 0 },
+  );
+  const [syncKey, setSyncKey] = useState(playbackKey ?? '0');
+  if ((playbackKey ?? '0') !== syncKey) {
+    const base = resumePlayback ?? { idx: 0, golsM: 0, golsV: 0, minuto: 0 };
+    setSyncKey(playbackKey ?? '0');
+    setProgresso(base);
+    setMinuto(base.minuto);
+  }
 
   const stats =
     result.estatisticas &&
     estatisticasParciais(result, minuto, result.mandanteId);
+
+  const lancamentosVisiveis = result.lancamentos.slice(0, progresso.idx);
 
   const abas: { id: Aba; label: string }[] = [
     { id: 'detalhes', label: 'Detalhes' },
@@ -92,6 +105,14 @@ export function MatchCenter({
         ))}
       </nav>
 
+      {aba === 'comentario' && (
+        <MatchEventTimeline
+          lancamentos={lancamentosVisiveis}
+          mandanteId={result.mandanteId}
+          placarAtual={{ m: progresso.golsM, v: progresso.golsV }}
+        />
+      )}
+
       {/* Mantém montado para não resetar placar/tempo ao trocar de aba */}
       <div className={mostrarPlayback ? undefined : 'hidden'} aria-hidden={!mostrarPlayback}>
         <MatchPlayback
@@ -105,7 +126,17 @@ export function MatchCenter({
             setMinuto(m);
             onMinuto(m);
           }}
-          onProgress={onPlaybackProgress}
+          onProgress={(p) => {
+            setProgresso((prev) =>
+              prev.idx === p.idx &&
+              prev.golsM === p.golsM &&
+              prev.golsV === p.golsV &&
+              prev.minuto === p.minuto
+                ? prev
+                : p,
+            );
+            onPlaybackProgress?.(p);
+          }}
           resumeFrom={resumePlayback}
           playbackKey={playbackKey}
           onIntervalo={onIntervalo}

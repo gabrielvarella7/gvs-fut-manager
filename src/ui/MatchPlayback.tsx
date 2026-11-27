@@ -67,7 +67,15 @@ export function MatchPlayback({
   const intervaloDisparadoRef = useRef(false);
   const lastSkipNonce = useRef(0);
   const skipToEndNonceRef = useRef(skipToEndNonce);
-  skipToEndNonceRef.current = skipToEndNonce;
+  const onMinutoRef = useRef(onMinuto);
+  const onProgressRef = useRef(onProgress);
+  const onIntervaloRef = useRef(onIntervalo);
+  useEffect(() => {
+    skipToEndNonceRef.current = skipToEndNonce;
+    onMinutoRef.current = onMinuto;
+    onProgressRef.current = onProgress;
+    onIntervaloRef.current = onIntervalo;
+  });
   const lanc = result.lancamentos;
 
   useEffect(() => {
@@ -113,12 +121,12 @@ export function MatchPlayback({
       setIdx((i) => i + 1);
       if (atual.tipo === 'intervalo' && !intervaloDisparadoRef.current) {
         intervaloDisparadoRef.current = true;
-        onIntervalo?.();
+        onIntervaloRef.current?.();
       }
     }, delayMs(atual, anterior, velocidade));
 
     return () => window.clearTimeout(t);
-  }, [idx, lanc, result.mandanteId, aoVivo, velocidade, pausado, onIntervalo]);
+  }, [idx, lanc, result.mandanteId, aoVivo, velocidade, pausado]);
 
   useEffect(() => {
     if (idx >= lanc.length) setAoVivo(false);
@@ -128,9 +136,9 @@ export function MatchPlayback({
   const relogio = visiveis.length ? visiveis[visiveis.length - 1].minuto : 0;
 
   useEffect(() => {
-    onMinuto?.(relogio);
-    onProgress?.({ idx, golsM: placar.m, golsV: placar.v, minuto: relogio });
-  }, [relogio, onMinuto, onProgress, idx, placar.m, placar.v]);
+    onMinutoRef.current?.(relogio);
+    onProgressRef.current?.({ idx, golsM: placar.m, golsV: placar.v, minuto: relogio });
+  }, [relogio, idx, placar.m, placar.v]);
 
   useEffect(() => {
     const el = listaRef.current;
