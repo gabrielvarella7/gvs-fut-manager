@@ -1,15 +1,14 @@
 import { useEffect, useMemo } from 'react';
 import { deduplicarNoticias } from '../../career/noticias';
+import { textoSemMarcadores } from '../../career/noticiasMarkup';
 import { useGameStore } from '../../store/useGameStore';
 import { CmCareerShell } from '../cm/CmCareerShell';
 import { CmPanel } from '../cm/CmShell';
+import { NoticiaTexto } from '../components/NoticiaTexto';
 
 function ehNoticiaSub23(n: { id: string; titulo: string; texto: string }): boolean {
-  return (
-    /sub23|aspirantes|s23/i.test(n.id) ||
-    /sub23|aspirantes|s23/i.test(n.titulo) ||
-    /sub-23|sub23|aspirantes/i.test(n.texto)
-  );
+  const plain = `${n.id} ${textoSemMarcadores(n.titulo)} ${textoSemMarcadores(n.texto)}`;
+  return /sub23|aspirantes|s23|sub-23/i.test(plain);
 }
 
 export function NewsScreen() {
@@ -53,8 +52,11 @@ export function NewsScreen() {
                     year: 'numeric',
                   })}
                 </p>
-                <p className="mt-1 text-base font-semibold text-emerald-100">{n.titulo}</p>
-                <p className="mt-2 text-sm text-zinc-400">{n.texto}</p>
+                <NoticiaTexto
+                  texto={n.titulo}
+                  className="mt-1 text-base font-semibold text-emerald-100"
+                />
+                <NoticiaTexto texto={n.texto} className="mt-2 text-sm text-zinc-400" />
               </CmPanel>
             </li>
           ))}
