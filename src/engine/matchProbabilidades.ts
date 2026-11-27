@@ -2,6 +2,7 @@ import { metricasMotorDeAtributos } from '../career/atributosJogador';
 import { calcularFatorMoral, type ContextoDinamicoPartida, type ContextoNecessidade } from './matchContext';
 import {
   cruzar22Titulares,
+  cruzarQuemVencera,
   probabilidadesDeDiff,
   type CruzamentoPartida,
 } from './matchResultadoCore';
@@ -166,11 +167,25 @@ export function prepararPartidaComFaixa(
   const varM = sortearVariacaoDia(rnd, motM, desM);
   const varV = sortearVariacaoDia(rnd, motV, desV);
 
+  const contexto = mandante.contexto ?? visitante.contexto;
+
+  /** Força da simulação: XI do dia (pode mudar com tática). */
   const cruzamento = cruzar22Titulares(
     mandante.escalacao,
     visitante.escalacao,
     bonusMando,
-    mandante.contexto ?? visitante.contexto,
+    contexto,
+  );
+
+  /**
+   * Pills “Quem vencerá?”: elenco (top 22) + forma campeonato + forma recente + mando.
+   * Não usa escalação/tática — permanece estável no pré-jogo e no ao vivo.
+   */
+  const cruzamentoEnquete = cruzarQuemVencera(
+    mandante.elenco,
+    visitante.elenco,
+    bonusMando,
+    contexto,
   );
 
   const forcaM = forcaCombinada(
@@ -195,7 +210,7 @@ export function prepararPartidaComFaixa(
     forcaV,
     mandante.forcaInstitucional,
     visitante.forcaInstitucional,
-    cruzamento,
+    cruzamentoEnquete,
   );
 
   return {

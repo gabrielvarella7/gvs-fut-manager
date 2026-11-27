@@ -1,4 +1,9 @@
-import { calcularFatorMoral, type ContextoDinamicoPartida } from './matchContext';
+import {
+  calcularFatorMoral,
+  fatorFormaCampeonato,
+  fatorFormaRecente,
+  type ContextoDinamicoPartida,
+} from './matchContext';
 import type { JogadorEmCampo, ProbabilidadesResultado } from './matchEngine';
 
 /** Oscilação máxima (pontos de índice) no confronto antes do placar. */
@@ -6,6 +11,9 @@ export const VARIANCE_OVR_MAX = 11;
 
 /** Equivalente em OVR no índice do mandante (não multiplica o time inteiro). */
 export const BONUS_CASA_OVR = 2.2;
+
+/** Tamanho do plantel considerado em “Quem vencerá?” (titulares + reservas). */
+export const QUEM_VENCERA_TOP_N = 22;
 
 export interface CruzamentoPartida {
   mediaOvrM: number;
@@ -22,6 +30,18 @@ export function mediaOvrEscalacao(esc: JogadorEmCampo[]): number {
   return esc.reduce((s, e) => s + e.jogador.overall, 0) / esc.length;
 }
 
+/** Média OVR dos N melhores do elenco — independente da tática/XI do dia. */
+export function mediaOvrMelhoresElenco(
+  elenco: { overall: number }[],
+  n = QUEM_VENCERA_TOP_N,
+): number {
+  if (elenco.length === 0) return 68;
+  const top = [...elenco]
+    .sort((a, b) => b.overall - a.overall)
+    .slice(0, Math.min(n, elenco.length));
+  return top.reduce((s, j) => s + j.overall, 0) / top.length;
+}
+
 export function momentoTime(
   contexto: ContextoDinamicoPartida | undefined,
   mandante: boolean,
@@ -32,10 +52,17 @@ export function momentoTime(
   return calcularFatorMoral(hist ?? []).multiplicador;
 }
 
+function bonusCasaOvr(bonusMando: number): number {
+  return bonusMando > 1.01
+    ? BONUS_CASA_OVR * Math.min(1.15, (bonusMando - 1) / 0.05)
+    : 0;
+}
+
 /**
  * Compara os 22 titulares: média OVR × momento.
  * Casa entra como pontos fixos (não % em cima do elenco — evita 81% em jogos equilibrados).
  * `penM/penV` não entram aqui — desfalque já está no XI; só afeta variância na simulação.
+ * Usado na força da partida — NÃO alimentar as pills “Quem vencerá?”.
  */
 export function cruzar22Titulares(
   escalacaoM: JogadorEmCampo[],
@@ -47,8 +74,43 @@ export function cruzar22Titulares(
   const mediaOvrV = mediaOvrEscalacao(escalacaoV);
   const momentoM = momentoTime(contexto, true);
   const momentoV = momentoTime(contexto, false);
-  const casaOvr =
-    bonusMando > 1.01 ? BONUS_CASA_OVR * Math.min(1.15, (bonusMando - 1) / 0.05) : 0;
+  const casaOvr = bonusCasaOvr(bonusMando);
+  const indiceM = mediaOvrM * momentoM + casaOvr;
+  const indiceV = mediaOvrV * momentoV;
+  return {
+    mediaOvrM,
+    mediaOvrV,
+    momentoM,
+    momentoV,
+    indiceM,
+    indiceV,
+    diff: indiceM - indiceV,
+  };
+}
+
+/**
+ * “Quem vencerá?” — cálculo estático (não muda com tática):
+ * OVR dos 22 melhores de cada elenco × forma recente (últimos 5) × forma no campeonato + mando.
+ */
+export function cruzarQuemVencera(
+  elencoM: { overall: number }[],
+  elencoV: { overall: number }[],
+  bonusMando: number,
+  contexto: ContextoDinamicoPartida | undefined,
+): CruzamentoPartida {
+  const mediaOvrM = mediaOvrMelhoresElenco(elencoM);
+  const mediaOvrV = mediaOvrMelhoresElenco(elencoV);
+  const recenteM = fatorFormaRecente(contexto?.ultimosResultadosMandante ?? []);
+  const recenteV = fatorFormaRecente(contexto?.ultimosResultadosVisitante ?? []);
+  const campM =
+    contexto?.formaCampeonatoMandante ??
+    fatorFormaCampeonato(null);
+  const campV =
+    contexto?.formaCampeonatoVisitante ??
+    fatorFormaCampeonato(null);
+  const momentoM = recenteM * campM;
+  const momentoV = recenteV * campV;
+  const casaOvr = bonusCasaOvr(bonusMando);
   const indiceM = mediaOvrM * momentoM + casaOvr;
   const indiceV = mediaOvrV * momentoV;
   return {

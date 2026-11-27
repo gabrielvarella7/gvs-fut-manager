@@ -68,9 +68,13 @@ export function mesclarPartidaAposMinuto(
     golsMandante,
     golsVisitante,
     lancamentos,
-    preJogo: nova.preJogo,
+    /** Enquete “Quem vencerá?” congela no kickoff — tática ao vivo não altera as pills. */
+    preJogo: {
+      ...nova.preJogo,
+      probabilidades: anterior.preJogo.probabilidades,
+    },
     forcaInicial: nova.forcaInicial,
-    probabilidades: nova.probabilidades,
+    probabilidades: anterior.probabilidades ?? anterior.preJogo.probabilidades,
     estatisticas: nova.estatisticas,
     simSeed: nova.simSeed ?? anterior.simSeed,
   };

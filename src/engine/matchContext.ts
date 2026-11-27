@@ -37,6 +37,9 @@ export interface ContextoDinamicoPartida {
   necessidadeMandante: ContextoNecessidade;
   necessidadeVisitante: ContextoNecessidade;
   isClassico: boolean;
+  /** Multiplicador da forma na tabela (PPG + SG) — independente da escalação. */
+  formaCampeonatoMandante: number;
+  formaCampeonatoVisitante: number;
 }
 
 export function slugDoTime(timeId: string, times: Time[]): string {
@@ -80,6 +83,38 @@ export function calcularFatorMoral(historico: ResultadoRecente[] = []): {
   const multiplicador = 1 + (indiceMoral / 36) * 0.035;
 
   return { indiceMoral, multiplicador };
+}
+
+/**
+ * Forma recente (últimos 5) → multiplicador estável para “Quem vencerá?”.
+ * Não depende de tática/escalação.
+ */
+export function fatorFormaRecente(historico: ResultadoRecente[] = []): number {
+  if (historico.length === 0) return 1;
+  const ultimos = historico.slice(-5);
+  let pontos = 0;
+  let pesoTotal = 0;
+  for (let i = 0; i < ultimos.length; i++) {
+    const peso = 1 + i * 0.15;
+    const r = ultimos[i]!;
+    pontos += (r === 'V' ? 1 : r === 'E' ? 0.35 : 0) * peso;
+    pesoTotal += peso;
+  }
+  const taxa = pontos / Math.max(pesoTotal, 1);
+  return Math.max(0.93, Math.min(1.07, 0.93 + taxa * 0.14));
+}
+
+/**
+ * Forma no campeonato (PPG + saldo/jogo) → multiplicador para “Quem vencerá?”.
+ * Neutro (1) se ainda não há jogos.
+ */
+export function fatorFormaCampeonato(
+  linha?: Pick<LinhaTabela, 'pontos' | 'jogos' | 'saldo_gols'> | null,
+): number {
+  if (!linha || linha.jogos <= 0) return 1;
+  const ppg = linha.pontos / linha.jogos;
+  const sgPorJogo = linha.saldo_gols / linha.jogos;
+  return Math.max(0.92, Math.min(1.08, 1 + (ppg - 1.5) * 0.035 + sgPorJogo * 0.006));
 }
 
 function resultadoParaTime(
@@ -221,12 +256,16 @@ export function montarContextoPartidaSync(opts: {
   isClassico?: boolean;
 }): ContextoDinamicoPartida {
   const { estado, mandanteId, visitanteId, times } = opts;
+  const linhaM = estado.tabela.find((l) => l.time_id === mandanteId);
+  const linhaV = estado.tabela.find((l) => l.time_id === visitanteId);
   return {
     ultimosResultadosMandante: ultimosResultadosDaTemporada(estado, mandanteId),
     ultimosResultadosVisitante: ultimosResultadosDaTemporada(estado, visitanteId),
     necessidadeMandante: calcularNecessidade(mandanteId, estado.rodadaAtual, estado.tabela),
     necessidadeVisitante: calcularNecessidade(visitanteId, estado.rodadaAtual, estado.tabela),
     isClassico: opts.isClassico ?? detectarClassico(mandanteId, visitanteId, times),
+    formaCampeonatoMandante: fatorFormaCampeonato(linhaM),
+    formaCampeonatoVisitante: fatorFormaCampeonato(linhaV),
   };
 }
 
@@ -243,6 +282,8 @@ export async function montarContextoPartidaDb(opts: {
     ultimosResultadosIndexedDb(opts.mandanteId),
     ultimosResultadosIndexedDb(opts.visitanteId),
   ]);
+  const linhaM = tabela.find((l) => l.time_id === opts.mandanteId);
+  const linhaV = tabela.find((l) => l.time_id === opts.visitanteId);
   return {
     ultimosResultadosMandante: ultM,
     ultimosResultadosVisitante: ultV,
@@ -251,5 +292,7 @@ export async function montarContextoPartidaDb(opts: {
     isClassico:
       opts.isClassico ??
       detectarClassico(opts.mandanteId, opts.visitanteId, opts.times),
+    formaCampeonatoMandante: fatorFormaCampeonato(linhaM),
+    formaCampeonatoVisitante: fatorFormaCampeonato(linhaV),
   };
 }
