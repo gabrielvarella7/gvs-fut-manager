@@ -1,6 +1,6 @@
 import { criarRng } from '../engine/matchEngine';
 import type { EstadoAspirantesS23, AtletaSub23 } from '../types/aspirantesS23';
-import { TAMANHO_ELENCO_SUB23 } from '../types/aspirantesS23';
+import { NOME_COMPETICAO_SUB23, TAMANHO_ELENCO_SUB23 } from '../types/aspirantesS23';
 import type { LinhaTabela, Time } from '../types/schema';
 import type { EstadoMundoClube } from '../types/mundoClube';
 import {
@@ -8,6 +8,7 @@ import {
   type PartidaCampeonato,
   type EstadoTemporada,
 } from './brasileirao';
+import type { ResultadoFormaUsuario } from './calendarioUsuario';
 import {
   forcaElencoSub23,
   gerarElencoSub23Clube,
@@ -16,7 +17,6 @@ import {
 import { nivelDiretorBase } from './staffEfeitos';
 import type { Jogador } from '../types/schema';
 import type { NoticiaCarreira } from './types';
-
 function linhaVazia(timeId: string): LinhaTabela {
   return {
     time_id: timeId,
@@ -253,7 +253,7 @@ export function sincronizarAspirantesComBrasileirao(
         noticias.push({
           id: `aspirantes_jogo_${r}_${clubeUsuarioId}`,
           data: new Date().toISOString(),
-          titulo: `Aspirantes S23 · rodada ${r}`,
+          titulo: `${NOME_COMPETICAO_SUB23} · rodada ${r}`,
           texto: `Sub-23 ${casa ? 'mandante' : 'visitante'} vs ${advNome}: ${gf}×${gc} (disputa controlada pela IA).`,
         });
       }
@@ -269,7 +269,7 @@ export function sincronizarAspirantesComBrasileirao(
       noticias.push({
         id: `aspirantes_lider_${alvo}`,
         data: new Date().toISOString(),
-        titulo: 'Campeonato de Aspirantes S23',
+        titulo: NOME_COMPETICAO_SUB23,
         texto: `Após a rodada ${alvo}, ${nomeLider} lidera com ${lider.pontos} pts.`,
       });
     }
@@ -315,4 +315,48 @@ export function proximaPartidaAspirantes(
         !p.finalizado && (p.mandanteId === clubeId || p.visitanteId === clubeId),
     ) ?? null
   );
+}
+
+/** Jogos do clube no calendário Sub-23 (espelho do Brasileirão). */
+export function partidasClubeAspirantes(
+  aspirantes: EstadoAspirantesS23,
+  clubeId: string,
+): PartidaCampeonato[] {
+  return aspirantes.partidas
+    .filter((p) => p.mandanteId === clubeId || p.visitanteId === clubeId)
+    .sort((a, b) => a.rodada - b.rodada);
+}
+
+/** Forma recente do Sub-23 (últimos jogos finalizados do clube). */
+export function montarFormaSub23(
+  aspirantes: EstadoAspirantesS23,
+  clubeId: string,
+  nomeAdversario: (id: string) => string,
+  limite = 5,
+): ResultadoFormaUsuario[] {
+  return aspirantes.partidas
+    .filter(
+      (p) =>
+        p.finalizado && (p.mandanteId === clubeId || p.visitanteId === clubeId),
+    )
+    .sort((a, b) => b.dataISO.localeCompare(a.dataISO) || b.rodada - a.rodada)
+    .slice(0, limite)
+    .map((p) => {
+      const emCasa = p.mandanteId === clubeId;
+      const gm = p.golsMandante ?? 0;
+      const gv = p.golsVisitante ?? 0;
+      const gp = emCasa ? gm : gv;
+      const gc = emCasa ? gv : gm;
+      const adv = emCasa ? p.visitanteId : p.mandanteId;
+      let sigla: 'V' | 'E' | 'D' = 'E';
+      if (gp > gc) sigla = 'V';
+      else if (gp < gc) sigla = 'D';
+      return {
+        sigla,
+        placar: `${gp}×${gc}`,
+        adversarioNome: nomeAdversario(adv),
+        emCasa,
+        dataISO: p.dataISO,
+      };
+    });
 }

@@ -1,11 +1,16 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { getTimeFicticio } from '../../career/fictionalLeague';
 import { mediaAtributosGrupo } from '../../career/atributosJogador';
 import { corClasseEnergia, overallEfetivoPorEnergia } from '../../career/energia';
 import { ordenarElenco } from '../../career/ordenarElenco';
 import { formatarDinheiro, salarioMensal, valorMercado } from '../../career/playerUtils';
-import { plantelProfissionalCount } from '../../career/youthAcademy';
-import { MSG_PLANTEL_CHEIO_SUBIR, TETO_PLANTEL_PRO_SUB23 } from '../../types/aspirantesS23';
+import { plantelProfissionalCount, rotuloTierBase } from '../../career/youthAcademy';
+import { elencoSub23DoClube } from '../../career/aspirantesS23';
+import {
+  MSG_PLANTEL_CHEIO_SUBIR,
+  TAMANHO_ELENCO_SUB23,
+  TETO_PLANTEL_PRO_SUB23,
+} from '../../types/aspirantesS23';
 import type { OfertaDispensa } from '../../types/aspirantesS23';
 import { useGameStore } from '../../store/useGameStore';
 import { CmCareerShell } from '../cm/CmCareerShell';
@@ -18,11 +23,15 @@ export function SquadScreen() {
   const times = useGameStore((s) => s.timesFicticios);
   const timesReais = useGameStore((s) => s.timesReais);
   const jogadoresReais = useGameStore((s) => s.jogadoresReais);
+  const aspirantes = useGameStore((s) => s.aspirantesS23);
+  const modoSub23 = useGameStore((s) => s.modoSub23);
   const abrirPerfil = useGameStore((s) => s.abrirPerfilJogador);
   const simularOferta = useGameStore((s) => s.simularOfertaDispensa);
   const tentarDispensa = useGameStore((s) => s.tentarDispensa);
   const confirmarIntegral = useGameStore((s) => s.confirmarDispensaIntegral);
-  const irPara = useGameStore((s) => s.irPara);
+  const promover = useGameStore((s) => s.promoverSub23);
+  const entrarModoSub23 = useGameStore((s) => s.entrarModoSub23);
+  const sairModoSub23 = useGameStore((s) => s.sairModoSub23);
 
   const [oferta, setOferta] = useState<OfertaDispensa | null>(null);
   const [aviso, setAviso] = useState<string | null>(null);
@@ -35,10 +44,83 @@ export function SquadScreen() {
     ? ordenarElenco(jogadoresReais.filter((j) => j.time_id === clubeRealId))
     : [];
 
-  const titulo = timeReal?.nome_completo ?? timeFic?.nome ?? 'Elenco';
-  const elenco = clubeRealId ? elencoReal : ordenarElenco(elencoFic);
   const plantel = clubeRealId ? plantelProfissionalCount(jogadoresReais, clubeRealId) : 0;
   const plantelCheio = plantel >= TETO_PLANTEL_PRO_SUB23;
+
+  const elencoS23 = useMemo(
+    () =>
+      clubeRealId
+        ? [...elencoSub23DoClube(aspirantes, clubeRealId)].sort((a, b) => b.overall - a.overall)
+        : [],
+    [aspirantes, clubeRealId],
+  );
+
+  if (modoSub23 && clubeRealId) {
+    return (
+      <CmCareerShell
+        titulo={`Elenco Sub23 — ${timeReal?.nome_completo ?? 'Clube'}`}
+        subtitulo={`${elencoS23.length}/${TAMANHO_ELENCO_SUB23} atletas · plantel pro ${plantel}/${TETO_PLANTEL_PRO_SUB23} · IA gerencia`}
+      >
+        <CmPanel className="mb-4">
+          <p className="text-xs text-zinc-500">Única ação do modo Sub23</p>
+          <p className="mt-1 text-sm text-zinc-300">
+            Ao promover, um novo aspirante entra automaticamente (sempre 22).
+            {plantelCheio ? ` ${MSG_PLANTEL_CHEIO_SUBIR}` : ''}
+          </p>
+          {plantelCheio && (
+            <div className="mt-2">
+              <CmBtn variant="ghost" onClick={sairModoSub23}>
+                Voltar ao profissional (liberar vaga)
+              </CmBtn>
+            </div>
+          )}
+          {aviso && <p className="mt-2 text-sm text-amber-200">{aviso}</p>}
+        </CmPanel>
+
+        <ul className="space-y-2">
+          {elencoS23.map((a) => (
+            <CmPanel key={a.id}>
+              <div className="flex flex-wrap items-start justify-between gap-2">
+                <div>
+                  <p className="font-medium text-zinc-100">
+                    {a.nome}{' '}
+                    <span className="text-xs font-normal text-zinc-500">
+                      {a.idade} · {a.posicao}
+                    </span>
+                  </p>
+                  <p className="mt-1 text-xs text-zinc-400">
+                    OVR {a.overall} · teto ~{a.potencialOvr} · {rotuloTierBase(a.tier)}
+                    {a.precoceEstagnado ? ' · precoce' : ''}
+                    {a.diamanteBruto ? ' · diamante bruto' : ''}
+                  </p>
+                </div>
+                <CmBtn
+                  variant="primary"
+                  disabled={plantelCheio}
+                  onClick={() => {
+                    if (plantelCheio) {
+                      setAviso(MSG_PLANTEL_CHEIO_SUBIR);
+                      return;
+                    }
+                    const err = promover(a.id);
+                    setAviso(err);
+                  }}
+                >
+                  {plantelCheio ? 'Plantel cheio' : 'Subir profissional'}
+                </CmBtn>
+              </div>
+            </CmPanel>
+          ))}
+        </ul>
+        {elencoS23.length === 0 && (
+          <p className="mt-4 text-sm text-amber-200/90">Nenhum atleta no Sub-23 deste clube.</p>
+        )}
+      </CmCareerShell>
+    );
+  }
+
+  const titulo = timeReal?.nome_completo ?? timeFic?.nome ?? 'Elenco';
+  const elenco = clubeRealId ? elencoReal : ordenarElenco(elencoFic);
 
   return (
     <CmCareerShell
@@ -52,30 +134,14 @@ export function SquadScreen() {
       {clubeRealId && (
         <CmPanel className="mb-4">
           <p className="text-xs text-zinc-500">Gestão de plantel</p>
-          {plantelCheio ? (
-            <>
-              <p className="mt-1 text-sm text-zinc-300">{MSG_PLANTEL_CHEIO_SUBIR}</p>
-              <div className="mt-2 flex flex-wrap gap-2">
-                <CmBtn variant="ghost" disabled>
-                  Plantel cheio
-                </CmBtn>
-                <CmBtn variant="ghost" onClick={() => irPara('sub23')}>
-                  Abrir Sub-23
-                </CmBtn>
-              </div>
-            </>
-          ) : (
-            <>
-              <p className="mt-1 text-sm text-zinc-300">
-                Há vaga no plantel ({plantel}/{TETO_PLANTEL_PRO_SUB23}). Suba um atleta do Sub-23.
-              </p>
-              <div className="mt-2">
-                <CmBtn variant="primary" onClick={() => irPara('sub23')}>
-                  Subir Sub-23
-                </CmBtn>
-              </div>
-            </>
-          )}
+          <p className="mt-1 text-sm text-zinc-300">
+            Para liberar vaga e subir alguém do Sub-23, venda ou dispense um atleta.
+          </p>
+          <div className="mt-2">
+            <CmBtn variant="ghost" onClick={entrarModoSub23}>
+              Abrir Sub23
+            </CmBtn>
+          </div>
           {aviso && <p className="mt-2 text-sm text-amber-200">{aviso}</p>}
           {oferta && (
             <div className="mt-3 rounded border border-amber-800/50 bg-amber-950/20 p-3 text-sm">

@@ -37,7 +37,34 @@ import type { EsquemaTatico, Jogador } from '../../types/schema';
 export type SelecaoTatica = EsquemaTatico | 'PERSONALIZADO';
 type AbaTatica = 'esquemas' | 'jogadores' | 'filosofia';
 
+function TacticsSub23ReadOnly() {
+  const esquemaAtual = useGameStore((s) => s.esquemaAtual);
+  return (
+    <CmCareerShell
+      titulo="Táticas Sub23"
+      subtitulo="Somente leitura — a IA define escalação e esquema do Sub-23"
+    >
+      <div className="rounded border border-sky-900/50 bg-sky-950/20 p-4 text-sm text-zinc-300">
+        <p className="font-medium text-sky-100">Você não gerencia táticas do Sub-23.</p>
+        <p className="mt-2 text-zinc-400">
+          Escalação, formação e instruções são escolhidas automaticamente pela IA em cada partida do
+          Brasileirão Sub23. Use Elenco para promover atletas ao profissional.
+        </p>
+        <p className="mt-3 text-xs text-zinc-500">
+          Esquema de referência do clube profissional: {esquemaAtual}
+        </p>
+      </div>
+    </CmCareerShell>
+  );
+}
+
 export function TacticsScreen() {
+  const modoSub23 = useGameStore((s) => s.modoSub23);
+  if (modoSub23) return <TacticsSub23ReadOnly />;
+  return <TacticsScreenPro />;
+}
+
+function TacticsScreenPro() {
   const esquemaAtual = useGameStore((s) => s.esquemaAtual);
   const alinhamentoSalvo = useGameStore((s) => s.alinhamento11);
   const bancoSalvo = useGameStore((s) => s.banco11);

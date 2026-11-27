@@ -1,5 +1,7 @@
 import { useState } from 'react';
 import { formatarDataBr } from '../../career/brasileirao';
+import { partidasClubeAspirantes } from '../../career/aspirantesS23';
+import { rotuloCompeticaoSub23 } from '../../types/aspirantesS23';
 import { useGameStore } from '../../store/useGameStore';
 import { CmCareerShell } from '../cm/CmCareerShell';
 import { CmBtn, CmPanel } from '../cm/CmShell';
@@ -11,14 +13,22 @@ export function CalendarScreen() {
   const clubeRealId = useGameStore((s) => s.clubeRealId);
   const timesReais = useGameStore((s) => s.timesReais);
   const brasileirao = useGameStore((s) => s.brasileirao);
+  const aspirantes = useGameStore((s) => s.aspirantesS23);
+  const modoSub23 = useGameStore((s) => s.modoSub23);
 
   const clube = timesReais.find((t) => t.id === clubeRealId);
   const porNome = new Map(timesReais.map((t) => [t.id, t.nome]));
+  const nomeComp = modoSub23
+    ? rotuloCompeticaoSub23(campeonato?.nome)
+    : (campeonato?.nome ?? 'Brasileirão');
 
-  const meusJogos =
-    brasileirao?.partidas
-      .filter((p) => p.ehDoUsuario)
-      .sort((a, b) => a.rodada - b.rodada) ?? [];
+  const meusJogos = modoSub23
+    ? aspirantes && clubeRealId
+      ? partidasClubeAspirantes(aspirantes, clubeRealId)
+      : []
+    : (brasileirao?.partidas
+        .filter((p) => p.ehDoUsuario)
+        .sort((a, b) => a.rodada - b.rodada) ?? []);
 
   const [visiveis, setVisiveis] = useState(JOGOS_POR_PAGINA);
   const jogosVisiveis = meusJogos.slice(0, visiveis);
@@ -29,14 +39,24 @@ export function CalendarScreen() {
       titulo="Calendário"
       subtitulo={
         clube
-          ? `${clube.nome} — ${campeonato?.nome ?? 'Brasileirão'} · ${formatarDataBr(brasileirao?.dataAtualISO ?? '')}`
+          ? `${clube.nome} — ${nomeComp}${
+              !modoSub23 && brasileirao?.dataAtualISO
+                ? ` · ${formatarDataBr(brasileirao.dataAtualISO)}`
+                : ''
+            }`
           : 'Competições'
       }
     >
       <CmPanel className="mb-4">
         <p className="text-sm text-zinc-300">
-          {meusJogos.length} jogos no campeonato (ida e volta contra os 19 adversários).
+          {meusJogos.length} jogos no campeonato (ida e volta contra os 19 adversários)
+          {modoSub23 ? ' Sub23.' : '.'}
         </p>
+        {modoSub23 && (
+          <p className="mt-1 text-xs text-sky-300">
+            Resultados atualizados pela IA junto com o calendário profissional.
+          </p>
+        )}
       </CmPanel>
 
       <ul className="space-y-2">
@@ -66,7 +86,11 @@ export function CalendarScreen() {
                   </span>
                 </div>
                 <p className="mt-1 text-sm text-zinc-300">
-                  {casa ? 'Casa' : 'Fora'} vs <strong>{porNome.get(adv) ?? adv}</strong>
+                  {casa ? 'Casa' : 'Fora'} vs{' '}
+                  <strong>
+                    {porNome.get(adv) ?? adv}
+                    {modoSub23 ? ' Sub23' : ''}
+                  </strong>
                   {placar && <span className="text-emerald-300">{placar}</span>}
                 </p>
               </CmPanel>

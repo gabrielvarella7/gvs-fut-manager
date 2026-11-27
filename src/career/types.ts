@@ -184,7 +184,7 @@ export interface EstadoCarreira {
   financas: FinancasClube | null;
   comercial: EstadoComercial | null;
   mundoClube: EstadoMundoClube | null;
-  /** Campeonato de Aspirantes Sub-23 (IA). */
+  /** Brasileirão Sub23 — espelho do Brasileirão com elencos S23 (IA). */
   aspirantesS23: EstadoAspirantesS23 | null;
   negociacoesTransferencia: NegociacaoTransferencia[];
   /** Snapshot do elenco após transferências (gravado no save). */

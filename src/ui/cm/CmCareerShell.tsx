@@ -15,6 +15,19 @@ const NAV_PRO: { tela: TelaJogo; label: string }[] = [
   { tela: 'tatica', label: 'Táticas' },
 ];
 
+/** Same club tabs in Sub-23 mode (read-only parallel view). */
+const NAV_SUB23: { tela: TelaJogo; label: string }[] = [
+  { tela: 'escritorio', label: 'Escritório' },
+  { tela: 'elenco', label: 'Elenco' },
+  { tela: 'treinos', label: 'Treinos' },
+  { tela: 'noticias', label: 'Notícias' },
+  { tela: 'transferencias', label: 'Transferências' },
+  { tela: 'financas', label: 'Finanças' },
+  { tela: 'classificacao', label: 'Tabela' },
+  { tela: 'calendario', label: 'Calendário' },
+  { tela: 'tatica', label: 'Táticas' },
+];
+
 const NAV_AMADOR: { tela: TelaJogo; label: string }[] = [
   { tela: 'hub_torneio', label: 'Torneio' },
   { tela: 'elenco', label: 'Elenco' },
@@ -47,7 +60,10 @@ export function CmCareerShell({
 }: Props) {
   const tela = useGameStore((s) => s.tela);
   const clubeRealId = useGameStore((s) => s.clubeRealId);
+  const modoSub23 = useGameStore((s) => s.modoSub23);
   const irPara = useGameStore((s) => s.irPara);
+  const entrarModoSub23 = useGameStore((s) => s.entrarModoSub23);
+  const sairModoSub23 = useGameStore((s) => s.sairModoSub23);
   const salvar = useGameStore((s) => s.salvarCarreira);
   const sair = useGameStore((s) => s.sairParaMenu);
   const avisoSalvo = useGameStore((s) => s.avisoSalvo);
@@ -57,7 +73,10 @@ export function CmCareerShell({
   const vistas = new Set(noticiasVistasIds);
   const noticiasNovas = noticias.filter((n) => !vistas.has(n.id)).length;
 
-  const nav = clubeRealId ? NAV_PRO : NAV_AMADOR;
+  const nav =
+    !clubeRealId ? NAV_AMADOR
+    : modoSub23 ? NAV_SUB23
+    : NAV_PRO;
 
   useEffect(() => {
     if (!avisoSalvo) return;
@@ -65,9 +84,11 @@ export function CmCareerShell({
     return () => window.clearTimeout(t);
   }, [avisoSalvo, limparAviso]);
 
+  const tituloExibido = modoSub23 && clubeRealId ? `${titulo} · Sub23` : titulo;
+
   return (
     <CmShell
-      titulo={titulo}
+      titulo={tituloExibido}
       subtitulo={subtitulo}
       rodape={
         <div className="flex flex-col gap-3">
@@ -80,7 +101,9 @@ export function CmCareerShell({
                   onClick={() => irPara(item.tela)}
                   className={`relative rounded px-2 py-1 text-xs font-medium ${
                     tela === item.tela
-                      ? 'bg-emerald-900 text-emerald-100'
+                      ? modoSub23
+                        ? 'bg-sky-900 text-sky-100'
+                        : 'bg-emerald-900 text-emerald-100'
                       : 'text-zinc-400 hover:bg-zinc-800 hover:text-zinc-200'
                   }`}
                 >
@@ -95,6 +118,15 @@ export function CmCareerShell({
                   )}
                 </button>
               ))}
+              {clubeRealId && !modoSub23 && (
+                <button
+                  type="button"
+                  onClick={entrarModoSub23}
+                  className="rounded px-2 py-1 text-xs font-medium text-sky-300 hover:bg-sky-950 hover:text-sky-100"
+                >
+                  Sub23
+                </button>
+              )}
             </nav>
           )}
           <div
@@ -109,8 +141,13 @@ export function CmCareerShell({
             )}
           </div>
           <div className="flex flex-wrap gap-2">
+            {modoSub23 && clubeRealId && (
+              <CmBtn variant="primary" onClick={sairModoSub23}>
+                Voltar ao profissional
+              </CmBtn>
+            )}
             {acoesExtras}
-            {(exibirSalvarEscolha || escolhaPendente) && onSalvarEscolha && (
+            {(exibirSalvarEscolha || escolhaPendente) && onSalvarEscolha && !modoSub23 && (
               <CmBtn
                 variant={exibirSalvarEscolha || escolhaPendente ? 'primary' : 'ghost'}
                 onClick={onSalvarEscolha}
@@ -128,6 +165,12 @@ export function CmCareerShell({
         </div>
       }
     >
+      {modoSub23 && clubeRealId && (
+        <p className="mb-3 rounded border border-sky-900/60 bg-sky-950/30 px-3 py-2 text-xs text-sky-200">
+          Modo Sub23 — visualização. Partidas, táticas e calendário são controlados pela IA. Única
+          ação: promover atletas em Elenco.
+        </p>
+      )}
       {children}
     </CmShell>
   );

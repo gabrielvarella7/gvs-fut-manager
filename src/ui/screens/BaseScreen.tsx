@@ -80,12 +80,12 @@ export function BaseScreen() {
               {base.identidadeBaseAtiva && ' · identidade da base ativa na torcida'}
             </p>
             <p className="mt-1 text-xs text-zinc-500">
-              Sub-20 alimenta a formação; o Sub-23 disputa o Campeonato de Aspirantes (IA).
+              Sub-20 alimenta a formação; o Sub-23 disputa o Brasileirão Sub23 (IA).
               {plantel >= TETO_PLANTEL_PROFISSIONAL ? ` ${MSG_PLANTEL_CHEIO}` : ''}
             </p>
             <div className="mt-2">
               <CmBtn variant="ghost" onClick={() => irPara('sub23')}>
-                Abrir Sub-23 / Aspirantes
+                Abrir modo Sub23
               </CmBtn>
             </div>
             <p className="mt-1 text-xs text-zinc-500">

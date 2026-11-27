@@ -69,7 +69,6 @@ import {
 import {
   aplicarBalanceamentoNaTemporada,
   avancarDias,
-  diasAteProximoJogo,
   ehDiaDeJogo,
   extrasDeResultado,
   formatarDataBr,
@@ -246,6 +245,15 @@ interface GameStore extends EstadoCarreira {
   /** Confirma rescisão integral após recusa do acordo. */
   confirmarDispensaIntegral: (jogadorId: number) => string | null;
   aspirantesS23: EstadoAspirantesS23 | null;
+  /**
+   * UI mode: club screens show the Sub-23 parallel view (read-only except promote).
+   * Not persisted in career saves — resets when leaving the career session.
+   */
+  modoSub23: boolean;
+  /** Enters Sub-23 club view (Escritório S23) and sets modoSub23. */
+  entrarModoSub23: () => void;
+  /** Leaves Sub-23 view and returns to professional Escritório. */
+  sairModoSub23: () => void;
   /** Aplica a semana de treinos; retorna mensagem de erro ou null se ok. */
   aplicarTreinoSemana: () => string | null;
   /** Restaura regime/sessões do treino padrão (Equilibrado). */
@@ -282,6 +290,7 @@ const estadoInicial = (): EstadoCarreira & {
   dbTaticas: DatabaseTaticas | null;
   dbTreinos: DatabaseTreinos | null;
   partidaModoAuxiliar: boolean;
+  modoSub23: boolean;
 } => ({
   campeonato: null,
   jogadoresReais: [],
@@ -293,6 +302,7 @@ const estadoInicial = (): EstadoCarreira & {
   saveSlotId: null,
   dbTaticas: null,
   dbTreinos: null,
+  modoSub23: false,
   perfil: null,
   timesFicticios: [],
   timeUsuarioId: null,
@@ -336,11 +346,51 @@ export const useGameStore = create<GameStore>((set, get) => ({
       dbTreinos: treinos,
       dbPronto: true,
     }),
+  entrarModoSub23: () => {
+    const s = get();
+    if (!s.clubeRealId || !s.aspirantesS23) {
+      set({ avisoSalvo: 'Sub-23 indisponível. Assuma um clube profissional primeiro.' });
+      return;
+    }
+    set({
+      modoSub23: true,
+      tela: 'escritorio',
+      partidaJogoEmCurso: null,
+      jogadorPerfilId: null,
+      partidaRetornoTatica: false,
+    });
+  },
+  sairModoSub23: () => {
+    set({
+      modoSub23: false,
+      tela: 'escritorio',
+      partidaJogoEmCurso: null,
+      jogadorPerfilId: null,
+      partidaRetornoTatica: false,
+    });
+    get().garantirCalendarioUsuario();
+  },
   irPara: (tela) => {
     const s0 = get();
+    // Aba legada / atalhos → entra no modo Sub-23 completo.
+    if (tela === 'sub23') {
+      get().entrarModoSub23();
+      return;
+    }
+    // No Sub-23 o usuário só observa — sem jogar, tática editável ou pré-jogo.
+    if (
+      s0.modoSub23 &&
+      (tela === 'partida' || tela === 'relatorio_pre_jogo' || tela === 'propostas')
+    ) {
+      set({
+        tela: 'escritorio',
+        avisoSalvo: 'No Sub-23 a disputa é 100% pela IA — só é possível visualizar.',
+      });
+      return;
+    }
     // Sondagens obrigatórias só travam avanço de calendário (avancarUmDia /
     // avancarAteDiaDeJogo) — abas e demais ações do jogo continuam liberadas.
-    if (tela === 'escritorio' && s0.clubeRealId) {
+    if (tela === 'escritorio' && s0.clubeRealId && !s0.modoSub23) {
       get().garantirCalendarioUsuario();
     }
     if (tela === 'noticias') {
@@ -360,7 +410,6 @@ export const useGameStore = create<GameStore>((set, get) => ({
         tela === 'financas' ||
         tela === 'staff' ||
         tela === 'base' ||
-        tela === 'sub23' ||
         tela === 'treinos' ||
         tela === 'calendario' ||
         tela === 'classificacao' ||
@@ -508,7 +557,11 @@ export const useGameStore = create<GameStore>((set, get) => ({
     gradeTatica11,
     personalizado,
     configTatica,
-  }) =>
+  }) => {
+    if (get().modoSub23) {
+      set({ avisoSalvo: 'Táticas do Sub-23 são controladas pela IA — somente visualização.' });
+      return;
+    }
     set((s) => {
       const cfg =
         configTatica ??
@@ -569,7 +622,8 @@ export const useGameStore = create<GameStore>((set, get) => ({
           ? 'Tática salva — 11 titulares e 11 reservas relacionados.'
           : `Tática salva. ${check.motivo ?? 'Complete 11+11 para jogar.'}`,
       };
-    }),
+    });
+  },
   esquemaDoUsuario: () => {
     const s = get();
     const clube =
@@ -648,8 +702,8 @@ export const useGameStore = create<GameStore>((set, get) => ({
     const noticiaS23: typeof noticia = {
       id: `n_s23_${Date.now()}`,
       data: new Date().toISOString(),
-      titulo: 'Campeonato de Aspirantes S23',
-      texto: `O Sub-23 do ${clube.nome} entrou no Campeonato de Aspirantes com 22 atletas. A disputa é 100% controlada pela IA — você pode promover jogadores ao profissional.`,
+      titulo: 'Brasileirão Sub23',
+      texto: `O Sub-23 do ${clube.nome} entrou no Brasileirão Sub23 com 22 atletas. A disputa é 100% controlada pela IA — use o modo Sub23 para acompanhar e promover atletas ao profissional.`,
     };
     let financas = inicializarFinancasClube(clube, elencoClube);
     financas = sincronizarFinancasComercial(financas, comercial, 10);
@@ -716,6 +770,10 @@ export const useGameStore = create<GameStore>((set, get) => ({
   },
   avancarUmDia: () => {
     const s = get();
+    if (s.modoSub23) {
+      set({ avisoSalvo: 'No Sub-23 o calendário avança junto com o profissional (IA).' });
+      return;
+    }
     if (!s.brasileirao || !s.clubeRealId) return;
     const brasileiraoCorrigido = corrigirDataNaoUltrapassarJogo(s.brasileirao, s.clubeRealId);
     if (brasileiraoCorrigido !== s.brasileirao) {
@@ -776,6 +834,10 @@ export const useGameStore = create<GameStore>((set, get) => ({
   },
   jogarComAuxiliar: () => {
     const s = get();
+    if (s.modoSub23) {
+      set({ avisoSalvo: 'No Sub-23 as partidas são disputadas pela IA.' });
+      return;
+    }
     if (!s.brasileirao || !s.clubeRealId) return;
     const relacionados = validarRelacionadosPartida(s.alinhamento11, s.banco11);
     if (!relacionados.ok) {
@@ -897,6 +959,10 @@ export const useGameStore = create<GameStore>((set, get) => ({
   },
   avancarAteDiaDeJogo: () => {
     const s = get();
+    if (s.modoSub23) {
+      set({ avisoSalvo: 'No Sub-23 o calendário avança junto com o profissional (IA).' });
+      return;
+    }
     if (!s.brasileirao || !s.clubeRealId) return;
     if ((s.mundoClube?.rumoresOfertas ?? []).some(rumorPendenteResposta)) {
       set({
@@ -1276,6 +1342,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
   sairParaMenu: () =>
     set({
       tela: 'menu',
+      modoSub23: false,
       partidaJogoEmCurso: null,
       partidaAtual: null,
       partidaJogoId: null,
@@ -1931,6 +1998,10 @@ export const useGameStore = create<GameStore>((set, get) => ({
   },
   definirPoliticaIngressos: (politica) => {
     const s = get();
+    if (s.modoSub23) {
+      set({ avisoSalvo: 'Finanças do Sub-23 são somente leitura.' });
+      return;
+    }
     if (!s.comercial) return;
     const comercial = { ...s.comercial, politicaIngressosPadrao: politica };
     set({ comercial });
@@ -2205,6 +2276,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
   },
   aplicarTreinoSemana: () => {
     const s = get();
+    if (s.modoSub23) return 'Treinos do Sub-23 são geridos pela IA — somente visualização.';
     if (!s.clubeRealId || !s.mundoClube || !s.brasileirao || !s.dbTreinos) {
       return 'Disponível apenas na carreira profissional.';
     }
