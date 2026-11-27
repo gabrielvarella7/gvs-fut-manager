@@ -21,6 +21,7 @@ import { useGameStore } from '../../store/useGameStore';
 import { CmCareerShell } from '../cm/CmCareerShell';
 import { CmBtn, CmMenuList, CmPanel } from '../cm/CmShell';
 import { ClubNameLink } from '../components/ClubNameLink';
+import { NoticiaAcoes } from '../components/NoticiaAcoes';
 import { NoticiaTexto } from '../components/NoticiaTexto';
 import { PlayerNameLink } from '../components/PlayerNameLink';
 
@@ -373,6 +374,7 @@ export function OfficeHubScreen() {
               texto={noticiaDestaque.texto}
               className="mt-2 text-sm text-zinc-400"
             />
+            <NoticiaAcoes noticia={noticiaDestaque} />
           </CmPanel>
         </>
       )}

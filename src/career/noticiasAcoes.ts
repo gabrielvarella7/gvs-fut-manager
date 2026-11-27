@@ -23,12 +23,31 @@ export function acoesProspectoBase(jovemId: number): AcaoNoticia[] {
  * Resolve CTAs de uma notícia: usa `acoes` gravadas ou deriva de id/título
  * (saves antigos sem o campo).
  */
+function idJogadorDeMarcador(n: NoticiaCarreira): number | null {
+  const m = /⟦j:(\d+)\|/.exec(n.titulo) ?? /⟦j:(\d+)\|/.exec(n.texto);
+  if (!m) return null;
+  const id = Number(m[1]);
+  return Number.isFinite(id) ? id : null;
+}
+
 export function resolverAcoesNoticia(n: NoticiaCarreira): AcaoNoticia[] {
   if (n.acoes?.length) return n.acoes;
 
-  const lesao = /^lesao_campo_(\d+)_/.exec(n.id);
-  if (lesao) {
-    const id = Number(lesao[1]);
+  const lesaoCampo = /^lesao_campo_(\d+)_/.exec(n.id);
+  if (lesaoCampo) {
+    const id = Number(lesaoCampo[1]);
+    if (Number.isFinite(id)) return acoesLesaoCampo(id);
+  }
+
+  const lesaoTreino = /^lesao_treino_(\d+)_/.exec(n.id);
+  if (lesaoTreino) {
+    const id = Number(lesaoTreino[1]);
+    if (Number.isFinite(id)) return acoesLesaoCampo(id);
+  }
+
+  const lesaoDia = /^lesao_(\d+)_/.exec(n.id);
+  if (lesaoDia) {
+    const id = Number(lesaoDia[1]);
     if (Number.isFinite(id)) return acoesLesaoCampo(id);
   }
 
@@ -45,19 +64,13 @@ export function resolverAcoesNoticia(n: NoticiaCarreira): AcaoNoticia[] {
   }
 
   const titulo = textoSemMarcadores(n.titulo);
-  if (/^Lesão em campo/i.test(titulo)) {
-    const m = /⟦j:(\d+)\|/.exec(n.titulo) ?? /⟦j:(\d+)\|/.exec(n.texto);
-    if (m) {
-      const id = Number(m[1]);
-      if (Number.isFinite(id)) return acoesLesaoCampo(id);
-    }
+  if (/^Lesão( em campo|:)|Baixa no treino/i.test(titulo)) {
+    const id = idJogadorDeMarcador(n);
+    if (id != null) return acoesLesaoCampo(id);
   }
   if (/Indicação da base|Alerta · plantel curto/i.test(titulo)) {
-    const m = /⟦j:(\d+)\|/.exec(n.texto) ?? /⟦j:(\d+)\|/.exec(n.titulo);
-    if (m) {
-      const id = Number(m[1]);
-      if (Number.isFinite(id)) return acoesProspectoBase(id);
-    }
+    const id = idJogadorDeMarcador(n);
+    if (id != null) return acoesProspectoBase(id);
   }
 
   return [];

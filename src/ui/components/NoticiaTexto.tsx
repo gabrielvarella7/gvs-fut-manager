@@ -21,6 +21,7 @@ type Props = {
 export function NoticiaTexto({ texto, className, as = 'p' }: Props) {
   const times = useGameStore((s) => s.timesReais);
   const jogadores = useGameStore((s) => s.jogadoresReais);
+  const sub20 = useGameStore((s) => s.mundoClube?.base?.elencoSub20);
 
   const entidades = useMemo((): EntidadeNome[] => {
     const out: EntidadeNome[] = [];
@@ -33,8 +34,11 @@ export function NoticiaTexto({ texto, className, as = 'p' }: Props) {
     for (const j of jogadores) {
       if (j.nome) out.push({ tipo: 'jogador', id: j.id, nome: j.nome });
     }
+    for (const j of sub20 ?? []) {
+      if (j.nome) out.push({ tipo: 'jogador', id: j.id, nome: j.nome });
+    }
     return out;
-  }, [times, jogadores]);
+  }, [times, jogadores, sub20]);
 
   const tokens = useMemo(
     () => tokenizarNoticia(texto, entidades),

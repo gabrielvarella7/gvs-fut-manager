@@ -112,6 +112,7 @@ import {
   gerarNoticiasEncerramentoRodada,
   montarContextoEncerramentoRodada,
 } from '../career/noticiasEncerramentoRodada';
+import { marcarJogador } from '../career/noticiasMarkup';
 import {
   aplicarFocoBase,
   aplicarInvestimentoBase,
@@ -1568,11 +1569,15 @@ export const useGameStore = create<GameStore>((set, get) => ({
     if (!alvo) return null;
 
     const resultado = processarRespostaColetiva(coletiva, opcao, alvo);
+    const nomeAlvo = marcarJogador(coletiva.jogadorAlvo.id, coletiva.jogadorAlvo.nome);
+    const manchete = resultado.mancheteGerada.includes(coletiva.jogadorAlvo.nome)
+      ? resultado.mancheteGerada.replaceAll(coletiva.jogadorAlvo.nome, nomeAlvo)
+      : resultado.mancheteGerada;
     const noticia: NoticiaCarreira = {
       id: `coletiva_${coletiva.id}_${opcao.id}_${Date.now()}`,
       data: coletiva.data || new Date().toISOString(),
       titulo: `Coletiva · ${coletiva.clubeSigla}`,
-      texto: `${resultado.mancheteGerada} ${resultado.reacaoJogadorTexto}`,
+      texto: `${manchete} ${resultado.reacaoJogadorTexto}`,
     };
 
     if (s.clubeRealId) {
