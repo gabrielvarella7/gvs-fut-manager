@@ -16,6 +16,17 @@ import {
   obterOlheiro,
 } from './olheiroScout';
 import { recuperarEnergiaUmDia } from './energia';
+import {
+  gerarAlertaFisiologistaElenco,
+  gerarGeneticaAtleta,
+  garantirGeneticaJogador,
+} from './genetica';
+import {
+  probabilidadeLesaoTraumatica,
+  propensaoDeJogador,
+  multRiscoPorEnergia,
+  multRiscoPorIdade,
+} from './departamentoMedico';
 import { nivelDiretorBase } from './staffEfeitos';
 import {
   calcularValorMercado,
@@ -184,18 +195,47 @@ function sortearLesao(
   rnd: () => number,
   motivo: string,
   mundo?: EstadoMundoClube | null,
+  opts?: { isClassico?: boolean; marcacaoSufocante?: boolean },
 ): EstadoLesao | null {
   const resistencia = j.atributos.fisicos.fora_por_lesao;
-  const baseChance = motivo === 'jogo' ? 0.09 : 0.018;
   const nivelFisio = mundo?.staff.find((s) => s.cargo === 'FISIOLOGISTA')?.nivel ?? 10;
-  const chance =
-    baseChance * multChanceLesaoFisiologista(nivelFisio) * (1.1 - resistencia / 24);
+  const prop = propensaoDeJogador(j);
+  let chance: number;
+  if (motivo === 'jogo') {
+    // Traumática (choque) + componente de sobrecarga por energia.
+    const traumatica = probabilidadeLesaoTraumatica({
+      isClassico: opts?.isClassico,
+      marcacaoSufocante: opts?.marcacaoSufocante,
+      nivelFisiologista: nivelFisio,
+      resistenciaLesao: resistencia,
+    });
+    const sobrecarga =
+      0.035 *
+      multRiscoPorEnergia(j.energia) *
+      multRiscoPorIdade(j.idade) *
+      multChanceLesaoFisiologista(nivelFisio) *
+      prop;
+    chance = traumatica + sobrecarga;
+  } else {
+    chance =
+      0.018 *
+      multRiscoPorEnergia(j.energia) *
+      multRiscoPorIdade(j.idade) *
+      multChanceLesaoFisiologista(nivelFisio) *
+      prop *
+      (1.1 - resistencia / 24);
+  }
   if (rnd() > chance) return null;
   const grav: GravidadeLesao =
     rnd() < 0.55 ? 'LEVE' : rnd() < 0.85 ? 'MODERADA' : 'GRAVE';
   const diasBase =
-    grav === 'LEVE' ? 4 + Math.floor(rnd() * 8) : grav === 'MODERADA' ? 12 + Math.floor(rnd() * 14) : 28 + Math.floor(rnd() * 25);
-  const tipos = ['muscular', 'entorse', 'contusão', 'panturrilha'];
+    grav === 'LEVE' ? 4 + Math.floor(rnd() * 8)
+    : grav === 'MODERADA' ? 12 + Math.floor(rnd() * 14)
+    : 28 + Math.floor(rnd() * 25);
+  const tipos =
+    motivo === 'jogo' && rnd() < 0.35
+      ? ['entorse', 'contusão', 'choque no joelho', 'trauma no tornozelo']
+      : ['muscular', 'panturrilha', 'estiramento', 'sobrecarga'];
   const nivelFisioTerapia = mundo?.staff.find((s) => s.cargo === 'FISIOTERAPEUTA')?.nivel ?? 10;
   return criarLesaoComReabilitacao(
     diasBase,
@@ -203,6 +243,7 @@ function sortearLesao(
     `${tipos[Math.floor(rnd() * tipos.length)]} (${grav.toLowerCase()})`,
     j,
     nivelFisioTerapia,
+    { tipo: motivo === 'jogo' && rnd() < 0.4 ? 'TRAUMATICA' : 'SOBRECARGA' },
   );
 }
 
@@ -505,6 +546,10 @@ export function tentarPromoverDaBase(
     const nome2 = nomes[id2 % nomes.length] ?? `Promessa ${id2}`;
     nomeExtra = nome2;
     promocoesExtra = 1;
+    const potExtra =
+      foco === 'PROFISSIONALIZAR'
+        ? Math.min(94, ovr2 + Math.round(6 + diretor * 0.4))
+        : undefined;
     const extra: Jogador = {
       id: id2,
       time_id: time.id,
@@ -519,12 +564,17 @@ export function tentarPromoverDaBase(
       salario_mensal: c2.salario_clt_mensal + c2.direito_imagem_mensal,
       nacionalidade: 'Brasil',
       contrato: c2,
+      genetica: gerarGeneticaAtleta({
+        id: id2,
+        idade,
+        overall: ovr2,
+        tetoHint: potExtra,
+        rnd,
+      }),
       formacaoBase: {
         foco,
         promovidoRodada: rodada,
-        ...(foco === 'PROFISSIONALIZAR' ?
-          { potencialOvr: Math.min(94, ovr2 + Math.round(6 + diretor * 0.4)) }
-        : {}),
+        ...(potExtra != null ? { potencialOvr: potExtra } : {}),
       },
       suscetibilidade: {
         indice: foco === 'VENDER' ? 55 : 30,
@@ -555,6 +605,13 @@ export function tentarPromoverDaBase(
     salario_mensal: contrato.salario_clt_mensal + contrato.direito_imagem_mensal,
     nacionalidade: 'Brasil',
     contrato,
+    genetica: gerarGeneticaAtleta({
+      id,
+      idade,
+      overall,
+      tetoHint: potencialOvr,
+      rnd,
+    }),
     formacaoBase: {
       foco,
       promovidoRodada: rodada,
@@ -773,9 +830,36 @@ export function tickMundoPorDia(params: TickDiaMundoParams): {
 } {
   const rnd = criarRng(rndSeed(params.dataISO, params.clubeId));
   let mundo = params.mundo;
-  let jogadores = recuperarLesoesUmDia(params.jogadores, mundo);
-  jogadores = recuperarEnergiaUmDia(jogadores, rnd);
+  let jogadores = recuperarLesoesUmDia(params.jogadores, mundo).map(garantirGeneticaJogador);
+  const nivelPrep = nivelStaff(mundo, 'PREPARADOR_FISICO');
+  const nivelFisiologista = nivelStaff(mundo, 'FISIOLOGISTA');
+  const regimeId = mundo.programacaoTreino?.regime_id;
+  const sessaoId = mundo.programacaoTreino?.sessao_principal_id;
+  const bonusTreino =
+    sessaoId === 'REGENERACAO_ATIVA' ? 15
+    : regimeId === 'REGENERATIVO' ? 14
+    : sessaoId === 'PREVENCAO_LESOES' ? 8
+    : 0;
+  const treinoComBolaDia1 =
+    regimeId != null &&
+    regimeId !== 'REGENERATIVO' &&
+    sessaoId !== 'REGENERACAO_ATIVA';
+  jogadores = recuperarEnergiaUmDia(jogadores, rnd, {
+    dataISO: params.dataISO,
+    nivelPreparador: nivelPrep,
+    bonusTreino,
+    treinoComBolaDia1,
+  });
   const noticias: NoticiaCarreira[] = [];
+
+  const alertaFisio = gerarAlertaFisiologistaElenco({
+    jogadores,
+    clubeId: params.clubeId,
+    nivelFisiologista,
+    dataISO: params.dataISO,
+    seed: rndSeed(params.dataISO, 'fisio', params.clubeId),
+  });
+  if (alertaFisio) noticias.push(alertaFisio);
 
   const elenco = jogadores.filter((j) => j.time_id === params.clubeId && jogadorDisponivel(j));
   for (const j of elenco) {
@@ -789,7 +873,7 @@ export function tickMundoPorDia(params: TickDiaMundoParams): {
       titulo: `Baixa no treino — ${j.nome}`,
       texto: `${j.nome}: ${lesao.descricao}. Previsão de ${lesao.diasRestantes} dias.`,
     });
-    if (noticias.length >= 2) break;
+    if (noticias.length >= 3) break;
   }
   if (params.comercialHumor != null) {
     const alvo = Math.round(params.comercialHumor);

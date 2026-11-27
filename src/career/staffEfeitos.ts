@@ -26,20 +26,18 @@ export function nivelStaff(mundo: EstadoMundoClube | null | undefined, cargo: Ca
   return mundo.staff.find((s) => s.cargo === cargo)?.nivel ?? 10;
 }
 
-export function multFadigaPreparadorFisico(nivel: number): number {
-  const n = Math.max(1, Math.min(20, nivel));
-  return 1.2 - (n / 20) * 0.48;
-}
+export {
+  multFadigaPreparadorFisico,
+  multChanceLesaoFisiologista,
+  multDuracaoFisioterapeuta,
+  preservacaoAtributosMedico,
+  fatorCustoEnergiaPreparador,
+} from './departamentoMedico';
 
-export function multChanceLesaoFisiologista(nivel: number): number {
-  const n = Math.max(1, Math.min(20, nivel));
-  return 1.14 - (n / 20) * 0.54;
-}
-
-export function multDuracaoFisioterapeuta(nivel: number): number {
-  const n = Math.max(1, Math.min(20, nivel));
-  return 1.28 - (n / 20) * 0.58;
-}
+import {
+  multDuracaoFisioterapeuta as multDuracaoFisio,
+  preservacaoAtributosMedico,
+} from './departamentoMedico';
 
 function cloneAtributos(a: AtributosJogador): AtributosJogador {
   return {
@@ -55,14 +53,16 @@ export function criarLesaoComReabilitacao(
   descricao: string,
   jogador: Jogador,
   nivelFisioterapeuta: number,
+  extras?: Partial<Pick<EstadoLesao, 'tipo' | 'rodadasForaBase'>>,
 ): EstadoLesao {
-  const dias = Math.max(2, Math.round(diasBase * multDuracaoFisioterapeuta(nivelFisioterapeuta)));
+  const dias = Math.max(1, Math.round(diasBase * multDuracaoFisio(nivelFisioterapeuta)));
   return {
     diasRestantes: dias,
     gravidade,
     descricao,
     atributosReferencia: cloneAtributos(jogador.atributos),
     overallReferencia: jogador.overall,
+    ...extras,
   };
 }
 
@@ -73,22 +73,19 @@ export function aplicarAltaMedica(j: Jogador, nivelMedico: number): Jogador {
     return { ...rest, energia: Math.min(100, (j.energia ?? 75) + 10) };
   }
 
-  const qualidade = Math.max(1, Math.min(20, nivelMedico)) / 20;
+  // Médico elite preserva 100%; DM precário → sequela física (esp. velocidade).
+  const preservacao = preservacaoAtributosMedico(nivelMedico);
   const gravidade = lesao.gravidade;
   const maxPerda = gravidade === 'GRAVE' ? 5 : gravidade === 'MODERADA' ? 3 : 2;
-  const perda = Math.round((1 - qualidade) * maxPerda);
+  const perda = Math.round((1 - preservacao) * maxPerda);
 
   let atributos = cloneAtributos(lesao.atributosReferencia);
   const overallRef = lesao.overallReferencia ?? overallDeAtributos(j.posicao, atributos);
 
   if (perda > 0) {
-    const grupos = ['tecnicos', 'mentais', 'fisicos'] as const;
-    for (let i = 0; i < perda; i++) {
-      const g = grupos[i % grupos.length]!;
-      const registro = atributos[g] as unknown as Record<string, number>;
-      const keys = Object.keys(registro);
-      const k = keys[(i * 7 + j.id) % keys.length]!;
-      registro[k] = Math.max(1, registro[k]! - 1);
+    atributos.fisicos.velocidade = Math.max(1, atributos.fisicos.velocidade - perda);
+    if (perda > 2) {
+      atributos.fisicos.forca = Math.max(1, atributos.fisicos.forca - 1);
     }
   }
 
@@ -100,7 +97,7 @@ export function aplicarAltaMedica(j: Jogador, nivelMedico: number): Jogador {
     ...rest,
     atributos,
     overall,
-    valor_mercado: calcularValorMercado(overall, j.idade, j.posicao),
+    valor_mercado: calcularValorMercado(overall, j.idade, j.posicao, j),
     energia: Math.min(100, Math.max(55, (j.energia ?? 60) + 12)),
   };
 }

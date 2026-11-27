@@ -40,10 +40,18 @@ export async function sincronizarCarreiraDexie(opts: {
 export function aplicarFadigaPosPartida(
   jogadores: Jogador[],
   energiaFinal: { id: number; energia: number }[],
+  dataPartidaISO?: string,
 ): Jogador[] {
   const mapa = new Map(energiaFinal.map((e) => [e.id, e.energia]));
+  const iso = dataPartidaISO ?? new Date().toISOString().slice(0, 10);
   return jogadores.map((j) =>
-    mapa.has(j.id) ? { ...j, energia: Math.round(mapa.get(j.id)! * 10) / 10 } : j,
+    mapa.has(j.id)
+      ? {
+          ...j,
+          energia: Math.round(mapa.get(j.id)! * 10) / 10,
+          ultimaPartidaISO: iso,
+        }
+      : j,
   );
 }
 

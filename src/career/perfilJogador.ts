@@ -60,6 +60,9 @@ export function particularidadesJogador(j: Jogador): { rotulo: string; detalhe: 
   if (m.cobertura < 9 && (j.posicao === 'ZAG' || j.posicao === 'GOL')) fracos.push('Posicionamento defensivo');
   if (m.criatividade < 10 && j.posicao === 'MEI') fracos.push('Criação de jogadas');
   if (f.fora_por_lesao < 9) fracos.push('Histórico de lesões');
+  if (j.genetica && j.genetica.propensao_lesao >= 1.55) {
+    fracos.push('Propensão muscular elevada');
+  }
   if (m.agressividade >= 17) fracos.push('Cartões — disciplina');
   itens.push({
     rotulo: 'A desenvolver',
@@ -71,9 +74,11 @@ export function particularidadesJogador(j: Jogador): { rotulo: string; detalhe: 
 
   let forma: string;
   if (j.energia >= 92) forma = 'Forma física excelente.';
+  else if (j.energia >= 85) forma = 'Frescor alto — risco de lesão reduzido.';
   else if (j.energia >= 75) forma = 'Pronto para 90 minutos.';
+  else if (j.energia >= 70) forma = 'Zona de alerta (+35% risco muscular).';
   else if (j.energia >= 55) forma = 'Precisa de rodízio — fadiga acumulada.';
-  else forma = 'Baixa energia; risco físico elevado.';
+  else forma = 'Zona crítica (<68%): risco +140%; rendimento técnico prejudicado.';
   itens.push({ rotulo: 'Condição', detalhe: `${forma} Energia ${Math.round(j.energia)}%.` });
 
   if (j.idade <= 21) {

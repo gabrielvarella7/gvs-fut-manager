@@ -844,7 +844,11 @@ export const useGameStore = create<GameStore>((set, get) => ({
   registrarResultadoBrasileirao: (partidaId, result) => {
     const s = get();
     if (!s.brasileirao || !s.campeonato || !s.clubeRealId) return;
-    let jogadores = aplicarFadigaPosPartida(s.jogadoresReais, result.energiaFinal);
+    let jogadores = aplicarFadigaPosPartida(
+      s.jogadoresReais,
+      result.energiaFinal,
+      s.brasileirao.dataAtualISO,
+    );
     const noticiasLesaoCampo: NoticiaCarreira[] = [];
     if (result.lesoesEmCampo?.length) {
       const aplicadas = aplicarLesoesEmCampo(
