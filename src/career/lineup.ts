@@ -12,6 +12,11 @@ import {
 
 export const TITULARES_PARTIDA = 11;
 export const RESERVAS_PARTIDA = 11;
+/** Extras fora da lista relacionada (estrutura 11+11+8). */
+export const FORA_DA_LISTA_ALVO = 8;
+/** Plantel-alvo: 11 titulares + 11 reservas + 8 fora da lista. */
+export const TAMANHO_ELENCO_ESTRUTURA =
+  TITULARES_PARTIDA + RESERVAS_PARTIDA + FORA_DA_LISTA_ALVO;
 
 /**
  * Alterna id entre banco relacionado e fora da lista.
@@ -45,7 +50,10 @@ export function idsEscalacaoPadrao(elenco: Jogador[], esquema: EsquemaTatico): n
   }
 }
 
-/** Próximos 11 do elenco (fora dos titulares), priorizando aptos e melhor OVR. */
+/**
+ * Próximos 11 do elenco (fora dos titulares), priorizando aptos e melhor OVR.
+ * Com plantel = 30 (11+11+8), sobram FORA_DA_LISTA_ALVO fora da lista.
+ */
 export function idsBancoPadrao(elenco: Jogador[], titularesIds: number[]): number[] {
   const setTit = new Set(titularesIds.filter((id) => id > 0));
   return [...elenco]

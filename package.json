@@ -28,6 +28,7 @@
     "smoke:elenco-campo": "node scripts/smoke-lineup-elenco-campo.mjs",
     "smoke:assistente-grade": "npx --yes tsx scripts/smoke-assistente-keep-grade.mjs",
     "smoke:elenco-sort": "npx --yes tsx scripts/smoke-elenco-sort.mjs",
+    "smoke:fora-lista": "npx --yes tsx scripts/smoke-fora-da-lista-8.mjs",
     "smoke:noticias-encerramento": "npx --yes tsx scripts/smoke-noticias-encerramento.mjs",
     "sync": "powershell -NoProfile -ExecutionPolicy Bypass -File ./scripts/sync-nuvem.ps1"
   },

@@ -40,6 +40,10 @@ import { persistirComercialDexie } from '../db/commercialPersistence';
 import { migrarFinancasLegado } from '../career/financasPersistencia';
 import { enriquecerElenco } from '../career/jogadorContratoInit';
 import {
+  completarElencoEstrutura30,
+  completarTimesFicticiosEstrutura30,
+} from '../career/plantelEstrutura';
+import {
   aplicarStatusEscalacaoElenco,
   validarRelacionadosPartida,
 } from '../career/lineup';
@@ -462,7 +466,8 @@ export const useGameStore = create<GameStore>((set, get) => ({
     set({
       campeonato,
       timesReais: times,
-      jogadoresReais: enriquecerElenco(jogadores),
+      // Garante 11+11+8 (=30) por clube quando o plantel ainda é curto.
+      jogadoresReais: enriquecerElenco(completarElencoEstrutura30(jogadores, times)),
       dbTaticas: taticas,
       dbTreinos: treinos,
       dbPronto: true,
@@ -1755,9 +1760,12 @@ export const useGameStore = create<GameStore>((set, get) => ({
     }
     const clubeSave = timesReais.find((t) => t.id === data.clubeRealId);
     const jogadoresCarregados = enriquecerElenco(
-      data.elencoPersistido && data.elencoPersistido.length > 0
-        ? aplicarSnapshotJogadores(get().jogadoresReais, data.elencoPersistido)
-        : get().jogadoresReais,
+      completarElencoEstrutura30(
+        data.elencoPersistido && data.elencoPersistido.length > 0
+          ? aplicarSnapshotJogadores(get().jogadoresReais, data.elencoPersistido)
+          : get().jogadoresReais,
+        timesReais,
+      ),
     );
     const elencoUser = jogadoresCarregados.filter((j) => j.time_id === data.clubeRealId);
     let financas = data.financas ?? null;
@@ -1821,7 +1829,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
       usoTaticaPersonalizada: data.usoTaticaPersonalizada ?? false,
       gradeTatica11: data.gradeTatica11 ?? null,
       configTatica: data.configTatica ?? configuracaoPadrao(data.esquemaAtual ?? '4-4-2'),
-      timesFicticios: data.timesFicticios ?? [],
+      timesFicticios: completarTimesFicticiosEstrutura30(data.timesFicticios ?? []),
       jogos: migrarIdsTorneioAmador(data.jogos ?? []),
       desempenho: data.desempenho ?? desempenhoZerado(),
       torneioConcluido: data.torneioConcluido ?? false,
