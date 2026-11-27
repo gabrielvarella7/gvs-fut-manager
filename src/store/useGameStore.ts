@@ -98,6 +98,7 @@ import {
   tickMundoPosRodada,
 } from '../career/mundoParalelo';
 import { deveGerarInsatisfacaoImproviso } from '../career/afinidadePosicional';
+import { gerarSafraAnual, promoverJovemPorId } from '../career/youthAcademy';
 import { recuperarEnergiaUmDia } from '../career/energia';
 import { criarRng } from '../engine/matchEngine';
 import type { FocoCategoriaBase, NivelInvestimentoBase } from '../types/mundoClube';
@@ -217,6 +218,8 @@ interface GameStore extends EstadoCarreira {
   recusarPropostaPatrocinioComercial: (propostaId: string) => void;
   definirInvestimentoBase: (nivel: NivelInvestimentoBase) => void;
   definirFocoBase: (foco: FocoCategoriaBase) => void;
+  /** Promove jovem do Sub-20 ao profissional (1º contrato). */
+  promoverJovemDaBase: (jovemId: number) => void;
   /** Aplica a semana de treinos; retorna mensagem de erro ou null se ok. */
   aplicarTreinoSemana: () => string | null;
   /** Restaura regime/sessões do treino padrão (Equilibrado). */
@@ -555,7 +558,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
     const elencoClube = get().jogadoresReais.filter((j) => j.time_id === id);
     const comercial = criarEstadoComercialInicial(clube, elencoClube);
     const formacaoId = formacaoIdDeEsquema(esquema);
-    const mundoClube = {
+    let mundoClube = {
       ...criarEstadoMundoClube(clube),
       programacaoTreino: criarProgramacaoTreino(id, formacaoId),
       estadosTreino: garantirEstadosTreino(
@@ -564,6 +567,15 @@ export const useGameStore = create<GameStore>((set, get) => ({
         undefined,
       ),
     };
+    const safraInicial = gerarSafraAnual({
+      jogadores: get().jogadoresReais,
+      mundo: mundoClube,
+      time: clube,
+      rodada: 0,
+      temporadaAno: brasileirao.temporadaAno ?? 2026,
+      seed: id.length * 9973 + (brasileirao.temporadaAno ?? 2026),
+    });
+    mundoClube = safraInicial.mundo;
     let financas = inicializarFinancasClube(clube, elencoClube);
     financas = sincronizarFinancasComercial(financas, comercial, 10);
     set({
@@ -572,7 +584,11 @@ export const useGameStore = create<GameStore>((set, get) => ({
       esquemaAtual: esquema,
       brasileirao,
       partidaRetornoTatica: false,
-      noticias: deduplicarNoticias([noticiaCalendario, ...(jaExiste ? s.noticias : noticias)]),
+      noticias: deduplicarNoticias([
+        ...safraInicial.noticias,
+        noticiaCalendario,
+        ...(jaExiste ? s.noticias : noticias),
+      ]),
       financas,
       comercial,
       mundoClube,
@@ -845,7 +861,11 @@ export const useGameStore = create<GameStore>((set, get) => ({
   registrarResultadoBrasileirao: (partidaId, result) => {
     const s = get();
     if (!s.brasileirao || !s.campeonato || !s.clubeRealId) return;
-    let jogadores = aplicarFadigaPosPartida(s.jogadoresReais, result.energiaFinal);
+    let jogadores = aplicarFadigaPosPartida(
+      s.jogadoresReais,
+      result.energiaFinal,
+      s.brasileirao.dataAtualISO,
+    );
     // Contagem de improvisação (estrela 5+ jogos → insatisfação).
     {
       const improvisoSet = new Set(result.idsImprovisados ?? []);
@@ -861,6 +881,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
         return { ...j, jogosImprovisoSeguidos: 0 };
       });
     }
+
     const noticiasLesaoCampo: NoticiaCarreira[] = [];
     for (const j of jogadores) {
       if (
@@ -1095,9 +1116,11 @@ export const useGameStore = create<GameStore>((set, get) => ({
         seed: seed ^ 0xdecaf,
         idsParticipantes: result.energiaFinal.map((e) => e.id),
         idsLesionadosEmCampo: result.lesoesEmCampo?.map((l) => l.jogadorId),
+        comercial,
       });
       jogadores = tickRodada.jogadores;
       mundoClube = tickRodada.mundo;
+      if (tickRodada.comercial) comercial = tickRodada.comercial;
       noticiasMundo.push(...tickRodada.noticias);
       if (partida.ehDoUsuario) {
         mundoClube = {
@@ -1876,6 +1899,27 @@ export const useGameStore = create<GameStore>((set, get) => ({
     const s = get();
     if (!s.mundoClube) return;
     set({ mundoClube: aplicarFocoBase(s.mundoClube, foco) });
+  },
+  promoverJovemDaBase: (jovemId) => {
+    const s = get();
+    if (!s.mundoClube || !s.clubeRealId) return;
+    const clube = s.timesReais.find((t) => t.id === s.clubeRealId);
+    if (!clube) return;
+    const rodada = s.brasileirao?.rodadaAtual ?? 1;
+    const r = promoverJovemPorId({
+      jovemId,
+      jogadores: s.jogadoresReais,
+      mundo: s.mundoClube,
+      time: clube,
+      rodada,
+      seed: Date.now() ^ jovemId,
+    });
+    set({
+      jogadoresReais: r.jogadores,
+      mundoClube: r.mundo,
+      noticias: [...r.noticias, ...s.noticias].slice(0, 80),
+    });
+    void persistirJogadoresDexie(r.jogadores).catch(console.error);
   },
   atualizarProgramacaoTreino: (patch) => {
     const s = get();

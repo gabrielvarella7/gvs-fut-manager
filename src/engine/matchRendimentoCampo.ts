@@ -4,6 +4,11 @@ import {
   calcularPerformancePartida,
   overallBaseDe,
 } from '../career/performancePartida';
+import {
+  efeitoSobrecargaExtremo17,
+  multiplicadorInconstanciaJovem,
+  multiplicadorPressaoMental,
+} from '../career/youthAcademy';
 import type { CelulaGrade } from '../data/gradeCampinho';
 import { multiplicadorPosicaoPartidaClamp } from './posicaoCompatibilidade';
 import type { AtributosJogador, Jogador, Posicao } from '../types/schema';
@@ -111,6 +116,10 @@ export interface ParametrosRendimentoJogador {
   fatorMotivacao?: number;
   /** Clima depressivo pós-goleada / sequência ruim. */
   fatorMoralTime?: number;
+  criseOuDecisivo?: boolean;
+  jogandoFora?: boolean;
+  minuto?: number;
+  rnd?: () => number;
 }
 
 /**
@@ -139,7 +148,18 @@ export function rendimentoJogadorEmCampo(p: ParametrosRendimentoJogador): number
     idade: p.jogador.idade,
   });
 
-  return base * perf.performanceMult;
+  const pressao = multiplicadorPressaoMental(p.jogador, {
+    criseOuDecisivo: p.criseOuDecisivo ?? false,
+    jogandoFora: p.jogandoFora ?? false,
+  });
+  const inconst = p.rnd ? multiplicadorInconstanciaJovem(p.jogador, p.rnd) : 1;
+  const extremo17 = efeitoSobrecargaExtremo17(
+    p.jogador,
+    p.posicaoEscalada,
+    p.minuto ?? 45,
+  );
+
+  return base * perf.performanceMult * pressao * inconst * extremo17.rendimentoFinal;
 }
 
 /** Expõe afinidade para o motor (desgaste / cartões). */
@@ -150,3 +170,4 @@ export function afinidadeEmCampo(
 ) {
   return multiplicadorPosicaoPartidaClamp(jogador, posicaoEscalada, opts).afinidade;
 }
+

@@ -1,10 +1,6 @@
-import { embaralharNomesVarzea } from '../data/jogadoresVarzea';
 import type { EstadoTemporada } from './brasileirao';
 import { posicaoDoTime } from './brasileirao';
-import {
-  gerarAtributosNovos,
-  overallDeAtributos,
-} from './atributosJogador';
+import { overallDeAtributos } from './atributosJogador';
 import { criarRng } from '../engine/matchEngine';
 import { gerarNoticiaAssistenteMercado } from './assistenteTecnico';
 import { enriquecerRumorEntrada } from './sondagemMercado';
@@ -22,12 +18,28 @@ import {
   temCicatrizFisica,
 } from './curvaCarreira';
 import { recuperarEnergiaUmDia } from './energia';
-import { nivelDiretorBase } from './staffEfeitos';
 import {
-  calcularValorMercado,
-  inicializarContratoPadrao,
-} from './mercadoTransferencias';
-import type { Jogador, Posicao, Time } from '../types/schema';
+  gerarAlertaFisiologistaElenco,
+  gerarGeneticaAtleta,
+  garantirGeneticaJogador,
+} from './genetica';
+import {
+  probabilidadeLesaoTraumatica,
+  propensaoDeJogador,
+  multRiscoPorEnergia,
+  multRiscoPorIdade,
+} from './departamentoMedico';
+import { nivelDiretorBase } from './staffEfeitos';
+import { calcularValorMercado } from './mercadoTransferencias';
+import {
+  chanceEvoluirCriaBase,
+  chancePromocaoBaseLegacyCompat,
+  normalizarCategoriaBase,
+  normalizarFocoBase,
+  rotuloFocoBase as rotuloFocoBaseYouth,
+  tickYouthAcademyPosRodada,
+} from './youthAcademy';
+import type { Jogador, Time } from '../types/schema';
 import type { EstadoLesao, GravidadeLesao } from '../types/schema';
 import {
   aplicarAltaMedica,
@@ -37,7 +49,6 @@ import {
   staffEstaAtualizado,
 } from './staffEfeitos';
 import type {
-  CategoriaBase,
   CargoStaff,
   ClimaTorcedor,
   EstadoMundoClube,
@@ -47,8 +58,7 @@ import type {
   RumorOfertaMercado,
 } from '../types/mundoClube';
 import type { NoticiaCarreira } from './types';
-
-const POS_BASE: Posicao[] = ['GOL', 'ZAG', 'LAT', 'VOL', 'MEI', 'ATA'];
+import type { EstadoComercial } from '../types/commercial';
 
 const ROTULO_STAFF: Record<CargoStaff, string> = {
   MEDICO: 'Médico',
@@ -116,10 +126,16 @@ export function criarEstadoMundoClube(time: Time): EstadoMundoClube {
     staff: criarStaffInicial(prestigio),
     base: {
       investimentoNivel: 1,
-      foco: 'PROFISSIONALIZAR',
+      foco: 'EQUILIBRADO',
       qualidade: Math.max(8, Math.min(16, Math.round(prestigio / 8))),
       ultimaPromocaoRodada: 0,
       promocoesTemporada: 0,
+      elencoSub20: [],
+      safraTemporadaAno: 0,
+      ultimaGotejamentoRodada: 0,
+      sugestoesPromocao: [],
+      identidadeBaseAtiva: false,
+      criasRelacionadosRecente: 0,
     },
     pedidosRenovacao: [],
     rumoresOfertas: [],
@@ -158,11 +174,11 @@ export function normalizarEstadoMundoClube(
     ...criarEstadoMundoClube(time),
     ...estado,
     staff,
-    base: {
+    base: normalizarCategoriaBase({
       ...criarEstadoMundoClube(time).base,
       ...estado.base,
-      foco: estado.base?.foco ?? 'PROFISSIONALIZAR',
-    },
+      foco: normalizarFocoBase(estado.base?.foco),
+    }),
     pedidosRenovacao: estado.pedidosRenovacao ?? [],
     rumoresOfertas: estado.rumoresOfertas ?? [],
     climaTorcedor: estado.climaTorcedor ?? { indice: 55, sequenciaRuim: 0, sequenciaBoa: 0 },
@@ -190,18 +206,47 @@ function sortearLesao(
   rnd: () => number,
   motivo: string,
   mundo?: EstadoMundoClube | null,
+  opts?: { isClassico?: boolean; marcacaoSufocante?: boolean },
 ): EstadoLesao | null {
   const resistencia = j.atributos.fisicos.fora_por_lesao;
-  const baseChance = motivo === 'jogo' ? 0.09 : 0.018;
   const nivelFisio = mundo?.staff.find((s) => s.cargo === 'FISIOLOGISTA')?.nivel ?? 10;
-  const chance =
-    baseChance * multChanceLesaoFisiologista(nivelFisio) * (1.1 - resistencia / 24);
+  const prop = propensaoDeJogador(j);
+  let chance: number;
+  if (motivo === 'jogo') {
+    // Traumática (choque) + componente de sobrecarga por energia.
+    const traumatica = probabilidadeLesaoTraumatica({
+      isClassico: opts?.isClassico,
+      marcacaoSufocante: opts?.marcacaoSufocante,
+      nivelFisiologista: nivelFisio,
+      resistenciaLesao: resistencia,
+    });
+    const sobrecarga =
+      0.035 *
+      multRiscoPorEnergia(j.energia) *
+      multRiscoPorIdade(j.idade) *
+      multChanceLesaoFisiologista(nivelFisio) *
+      prop;
+    chance = traumatica + sobrecarga;
+  } else {
+    chance =
+      0.018 *
+      multRiscoPorEnergia(j.energia) *
+      multRiscoPorIdade(j.idade) *
+      multChanceLesaoFisiologista(nivelFisio) *
+      prop *
+      (1.1 - resistencia / 24);
+  }
   if (rnd() > chance) return null;
   const grav: GravidadeLesao =
     rnd() < 0.55 ? 'LEVE' : rnd() < 0.85 ? 'MODERADA' : 'GRAVE';
   const diasBase =
-    grav === 'LEVE' ? 4 + Math.floor(rnd() * 8) : grav === 'MODERADA' ? 12 + Math.floor(rnd() * 14) : 28 + Math.floor(rnd() * 25);
-  const tipos = ['muscular', 'entorse', 'contusão', 'panturrilha'];
+    grav === 'LEVE' ? 4 + Math.floor(rnd() * 8)
+    : grav === 'MODERADA' ? 12 + Math.floor(rnd() * 14)
+    : 28 + Math.floor(rnd() * 25);
+  const tipos =
+    motivo === 'jogo' && rnd() < 0.35
+      ? ['entorse', 'contusão', 'choque no joelho', 'trauma no tornozelo']
+      : ['muscular', 'panturrilha', 'estiramento', 'sobrecarga'];
   const nivelFisioTerapia = mundo?.staff.find((s) => s.cargo === 'FISIOTERAPEUTA')?.nivel ?? 10;
   return criarLesaoComReabilitacao(
     diasBase,
@@ -209,6 +254,7 @@ function sortearLesao(
     `${tipos[Math.floor(rnd() * tipos.length)]} (${grav.toLowerCase()})`,
     j,
     nivelFisioTerapia,
+    { tipo: motivo === 'jogo' && rnd() < 0.4 ? 'TRAUMATICA' : 'SOBRECARGA' },
   );
 }
 
@@ -319,16 +365,9 @@ function declinioVeterano(j: Jogador): Jogador {
   return { ...j, atributos, overall, valor_mercado: calcularValorMercado(overall, j.idade, j.posicao) };
 }
 
-function evoluiDaBase(j: Jogador, fatorStaff: number, foco: FocoCategoriaBase): boolean {
-  if (j.formacaoBase?.foco !== foco) return false;
-  if (foco === 'VENDER') {
-    if (j.idade > 21) return false;
-    return Math.random() < 0.22 + fatorStaff * 0.42;
-  }
-  if (j.idade > 24) return false;
-  const pot = j.formacaoBase.potencialOvr ?? j.overall + 8;
-  if (j.overall >= pot) return Math.random() < 0.08;
-  return Math.random() < 0.12 + fatorStaff * 0.18;
+function evoluiDaBase(j: Jogador, fatorStaff: number): boolean {
+  if (!j.formacaoBase) return false;
+  return chanceEvoluirCriaBase(j, fatorStaff, Math.random);
 }
 
 /** Progressão de overall só na virada de temporada (não por rodada). */
@@ -382,12 +421,16 @@ export function desenvolverElencoFimTemporada(
   return jogadores.map((j) => {
     if (j.time_id !== clubeId) return j;
 
-    // Base de categorias continua evoluindo um pouco na virada (ainda dentro do teto).
-    if (j.formacaoBase?.foco === 'VENDER' && evoluiDaBase(j, fatorStaff, 'VENDER')) {
-      return aplicarDeltaOverall(j, Math.min(tetoDeltaOverallPorIdade(j.idade), 2 + Math.round(fatorStaff)));
-    }
-    if (j.formacaoBase?.foco === 'PROFISSIONALIZAR' && evoluiDaBase(j, fatorStaff, 'PROFISSIONALIZAR')) {
-      return aplicarDeltaOverall(j, Math.min(tetoDeltaOverallPorIdade(j.idade), 3 + Math.round(fatorStaff)));
+    // Crias da base: curva jovem + genética/teto na virada de temporada.
+    if (j.formacaoBase && evoluiDaBase(j, fatorStaff)) {
+      const boost =
+        j.idade <= 18 ? 3
+        : j.idade <= 21 ? 2
+        : 1;
+      return aplicarDeltaOverall(
+        j,
+        Math.min(tetoDeltaOverallPorIdade(j.idade), boost + Math.round(fatorStaff)),
+      );
     }
 
     const teto = tetoDeltaOverallPorIdade(j.idade);
@@ -426,184 +469,17 @@ export function desenvolverElencoPosRodada(
   return jogadores;
 }
 
+/** Chance aproximada (UI) — safras/gotejo reais estão em youthAcademy. */
 export function chancePromocaoBase(mundo: EstadoMundoClube): number {
-  const inv = mundo.base.investimentoNivel;
-  const diretor = nivelDiretorBase(mundo);
-  const olheiro = mediaNivelOlheiro(obterOlheiro(mundo)?.atributosOlheiro ?? {
-    tecnicos: 10,
-    fisicos: 10,
-    mentais: 10,
-    potencial: 10,
-  });
-  const base =
-    inv === 0 ? 0.04
-    : inv === 1 ? 0.09
-    : inv === 2 ? 0.16
-    : 0.24;
-  return Math.min(
-    0.52,
-    base + diretor / 115 + olheiro / 320 + mundo.base.qualidade / 250,
+  const olheiro = mediaNivelOlheiro(
+    obterOlheiro(mundo)?.atributosOlheiro ?? {
+      tecnicos: 10,
+      fisicos: 10,
+      mentais: 10,
+      potencial: 10,
+    },
   );
-}
-
-/** Bônus de força inicial / teto conforme nível do diretor (1–20). */
-function parametrosQualidadeBase(diretor: number): { piso: number; bonusTeto: number } {
-  const n = Math.max(1, Math.min(20, diretor));
-  return {
-    piso: 44 + n * 0.55,
-    bonusTeto: n * 0.55,
-  };
-}
-
-function proximoIdJogador(jogadores: Jogador[]): number {
-  return jogadores.reduce((m, j) => Math.max(m, j.id), 0) + 1;
-}
-
-export function tentarPromoverDaBase(
-  jogadores: Jogador[],
-  mundo: EstadoMundoClube,
-  time: Time,
-  rodada: number,
-  seed: number,
-): { jogadores: Jogador[]; mundo: EstadoMundoClube; noticia: NoticiaCarreira | null } {
-  const rnd = criarRng(seed);
-  if (rnd() > chancePromocaoBase(mundo)) {
-    return { jogadores, mundo, noticia: null };
-  }
-  const nomes = embaralharNomesVarzea(seed);
-  const pos = POS_BASE[Math.floor(rnd() * POS_BASE.length)]!;
-  const id = proximoIdJogador(jogadores);
-  const foco = mundo.base.foco ?? 'PROFISSIONALIZAR';
-  const q = mundo.base.qualidade;
-  const inv = mundo.base.investimentoNivel;
-  const diretor = nivelDiretorBase(mundo);
-  const { piso, bonusTeto } = parametrosQualidadeBase(diretor);
-
-  let idade: number;
-  let forcaBase: number;
-  let potencialOvr: number | undefined;
-  if (foco === 'VENDER') {
-    idade = 16 + Math.floor(rnd() * 2);
-    const teto = 56 + q * 0.42 + inv * 2.2 + bonusTeto;
-    const chao = Math.max(48, piso);
-    forcaBase = chao + rnd() * Math.max(4, teto - chao);
-    potencialOvr = undefined;
-  } else {
-    idade = 18 + Math.floor(rnd() * 3);
-    const teto = 50 + q * 0.38 + inv * 1.8 + bonusTeto * 1.15;
-    const chao = Math.max(40, piso - 4);
-    forcaBase = chao + rnd() * Math.max(4, teto - chao);
-    potencialOvr = undefined;
-  }
-
-  const atributos = gerarAtributosNovos(pos, forcaBase, id, idade, rnd);
-  const overall = overallDeAtributos(pos, atributos);
-  const olh = obterOlheiro(mundo);
-  const attrsOlh = olh?.atributosOlheiro;
-  if (foco === 'PROFISSIONALIZAR') {
-    const bonusPot = attrsOlh?.potencial ?? 10;
-    potencialOvr = Math.min(
-      94,
-      overall + Math.round(8 + q * 0.55 + inv * 1.8 + diretor * 0.35 + bonusPot * 0.35),
-    );
-  }
-
-  let promocoesExtra = 0;
-  let nomeExtra: string | null = null;
-  if (diretor >= 16 && rnd() < (diretor - 14) * 0.04 && overall >= (foco === 'VENDER' ? 68 : 62)) {
-    const pos2 = POS_BASE[Math.floor(rnd() * POS_BASE.length)]!;
-    const id2 = id + 1;
-    const teto2 = forcaBase + 2 + diretor * 0.2;
-    const attrs2 = gerarAtributosNovos(pos2, teto2, id2, idade, rnd);
-    const ovr2 = overallDeAtributos(pos2, attrs2);
-    const { valor_mercado: v2, contrato: c2 } = inicializarContratoPadrao(ovr2, idade, pos2, id2);
-    const nome2 = nomes[id2 % nomes.length] ?? `Promessa ${id2}`;
-    nomeExtra = nome2;
-    promocoesExtra = 1;
-    const extra: Jogador = {
-      id: id2,
-      time_id: time.id,
-      nome: nome2,
-      idade,
-      posicao: pos2,
-      atributos: attrs2,
-      overall: ovr2,
-      energia: 100,
-      status_escalacao: foco === 'VENDER' && ovr2 >= 70 ? 'RESERVA' : 'NAO_RELACIONADO',
-      valor_mercado: foco === 'VENDER' ? Math.round(v2 * 1.22) : Math.round(v2 * 0.92),
-      salario_mensal: c2.salario_clt_mensal + c2.direito_imagem_mensal,
-      nacionalidade: 'Brasil',
-      contrato: c2,
-      formacaoBase: {
-        foco,
-        promovidoRodada: rodada,
-        ...(foco === 'PROFISSIONALIZAR' ?
-          { potencialOvr: Math.min(94, ovr2 + Math.round(6 + diretor * 0.4)) }
-        : {}),
-      },
-      suscetibilidade: {
-        indice: foco === 'VENDER' ? 55 : 30,
-        camada: foco === 'VENDER' ? 'ABERTO_A_PROPOSTAS' : 'RELUTANTE',
-        motivo_principal: 'Lote promissor indicado pelo diretor da base.',
-      },
-    };
-    jogadores = [...jogadores, extra];
-  }
-  const { valor_mercado: valorBase, contrato } = inicializarContratoPadrao(overall, idade, pos, id);
-  const valor_mercado =
-    foco === 'VENDER' ?
-      Math.round(valorBase * (1.28 + (21 - idade) / 30))
-    : Math.round(valorBase * 0.92);
-  const status_escalacao =
-    foco === 'VENDER' && overall >= 70 ? ('RESERVA' as const) : ('NAO_RELACIONADO' as const);
-  const novo: Jogador = {
-    id,
-    time_id: time.id,
-    nome: nomes[id % nomes.length] ?? `Promessa ${id}`,
-    idade,
-    posicao: pos,
-    atributos,
-    overall,
-    energia: 100,
-    status_escalacao,
-    valor_mercado,
-    salario_mensal: contrato.salario_clt_mensal + contrato.direito_imagem_mensal,
-    nacionalidade: 'Brasil',
-    contrato,
-    formacaoBase: {
-      foco,
-      promovidoRodada: rodada,
-      ...(potencialOvr != null ? { potencialOvr } : {}),
-    },
-    suscetibilidade: {
-      indice: foco === 'VENDER' ? 58 : 32,
-      camada: foco === 'VENDER' ? 'ABERTO_A_PROPOSTAS' : 'RELUTANTE',
-      motivo_principal:
-        foco === 'VENDER' ?
-          'Formado para render cedo e atrair propostas.'
-        : 'Projeto de longo prazo no clube.',
-    },
-  };
-  const noticia: NoticiaCarreira = {
-    id: `base_${id}_${rodada}`,
-    data: new Date().toISOString(),
-    titulo: foco === 'VENDER' ? 'Base · ativo para o mercado' : 'Base · profissionalizado',
-    texto:
-      (foco === 'VENDER' ?
-        `${novo.nome} (${idade} anos, ${pos}) sobe pronto para negociação. Overall ${overall}.`
-      : `${novo.nome} (${idade} anos, ${pos}) entra no grupo. OVR ${overall}, potencial ~${potencialOvr}.`) +
-      (nomeExtra ? ` Diretor da base também promoveu ${nomeExtra}.` : ''),
-  };
-  const base: CategoriaBase = {
-    ...mundo.base,
-    ultimaPromocaoRodada: rodada,
-    promocoesTemporada: mundo.base.promocoesTemporada + 1 + promocoesExtra,
-  };
-  return {
-    jogadores: [...jogadores, novo],
-    mundo: { ...mundo, base },
-    noticia,
-  };
+  return Math.min(0.55, chancePromocaoBaseLegacyCompat(mundo) + olheiro / 400);
 }
 
 function atualizarClimaTorcedor(
@@ -788,9 +664,36 @@ export function tickMundoPorDia(params: TickDiaMundoParams): {
 } {
   const rnd = criarRng(rndSeed(params.dataISO, params.clubeId));
   let mundo = params.mundo;
-  let jogadores = recuperarLesoesUmDia(params.jogadores, mundo);
-  jogadores = recuperarEnergiaUmDia(jogadores, rnd);
+  let jogadores = recuperarLesoesUmDia(params.jogadores, mundo).map(garantirGeneticaJogador);
+  const nivelPrep = nivelStaff(mundo, 'PREPARADOR_FISICO');
+  const nivelFisiologista = nivelStaff(mundo, 'FISIOLOGISTA');
+  const regimeId = mundo.programacaoTreino?.regime_id;
+  const sessaoId = mundo.programacaoTreino?.sessao_principal_id;
+  const bonusTreino =
+    sessaoId === 'REGENERACAO_ATIVA' ? 15
+    : regimeId === 'REGENERATIVO' ? 14
+    : sessaoId === 'PREVENCAO_LESOES' ? 8
+    : 0;
+  const treinoComBolaDia1 =
+    regimeId != null &&
+    regimeId !== 'REGENERATIVO' &&
+    sessaoId !== 'REGENERACAO_ATIVA';
+  jogadores = recuperarEnergiaUmDia(jogadores, rnd, {
+    dataISO: params.dataISO,
+    nivelPreparador: nivelPrep,
+    bonusTreino,
+    treinoComBolaDia1,
+  });
   const noticias: NoticiaCarreira[] = [];
+
+  const alertaFisio = gerarAlertaFisiologistaElenco({
+    jogadores,
+    clubeId: params.clubeId,
+    nivelFisiologista,
+    dataISO: params.dataISO,
+    seed: rndSeed(params.dataISO, 'fisio', params.clubeId),
+  });
+  if (alertaFisio) noticias.push(alertaFisio);
 
   const elenco = jogadores.filter((j) => j.time_id === params.clubeId && jogadorDisponivel(j));
   for (const j of elenco) {
@@ -804,7 +707,7 @@ export function tickMundoPorDia(params: TickDiaMundoParams): {
       titulo: `Baixa no treino — ${j.nome}`,
       texto: `${j.nome}: ${lesao.descricao}. Previsão de ${lesao.diasRestantes} dias.`,
     });
-    if (noticias.length >= 2) break;
+    if (noticias.length >= 3) break;
   }
   if (params.comercialHumor != null) {
     const alvo = Math.round(params.comercialHumor);
@@ -834,17 +737,20 @@ export interface TickRodadaMundoParams {
   idsParticipantes?: number[];
   /** Lesionados durante a partida (fadiga) — evita sorteio duplicado. */
   idsLesionadosEmCampo?: number[];
+  comercial?: EstadoComercial | null;
 }
 
 export function tickMundoPosRodada(params: TickRodadaMundoParams): {
   jogadores: Jogador[];
   mundo: EstadoMundoClube;
   noticias: NoticiaCarreira[];
+  comercial?: EstadoComercial | null;
 } {
   const pos = posicaoDoTime(params.brasileirao.tabela, params.clubeId);
   let mundo = params.mundo;
   let jogadores = decrementarContratosRodada(params.jogadores);
   const noticias: NoticiaCarreira[] = [];
+  let comercial = params.comercial ?? null;
 
   const clima = atualizarClimaTorcedor(
     mundo.climaTorcedor,
@@ -866,10 +772,24 @@ export function tickMundoPosRodada(params: TickRodadaMundoParams): {
     mundo = { ...mundo, participacoesTemporada: participacoes };
   }
 
-  const promo = tentarPromoverDaBase(jogadores, mundo, params.time, params.rodada, params.seed ^ 0xabc);
-  jogadores = promo.jogadores;
-  mundo = promo.mundo;
-  if (promo.noticia) noticias.push(promo.noticia);
+  const viradaTemporada = params.rodada > 0 && params.rodada % 38 === 0;
+  const anoBase = params.brasileirao.temporadaAno ?? 2026;
+  const youth = tickYouthAcademyPosRodada({
+    jogadores,
+    mundo,
+    time: params.time,
+    rodada: params.rodada,
+    // Na virada, a safra conta para a temporada seguinte.
+    temporadaAno: viradaTemporada ? anoBase + 1 : anoBase,
+    seed: params.seed ^ 0xabc,
+    idsParticipantes: params.idsParticipantes,
+    comercial,
+    viradaTemporada: viradaTemporada || params.rodada === 1,
+  });
+  jogadores = youth.jogadores;
+  mundo = youth.mundo;
+  comercial = youth.comercial;
+  noticias.push(...youth.noticias);
 
   const mercado = simularMercadoCpuRodada(
     jogadores,
@@ -935,7 +855,7 @@ export function tickMundoPosRodada(params: TickRodadaMundoParams): {
     noticias.push(...lesoes.noticias);
   }
 
-  if (params.rodada > 0 && params.rodada % 38 === 0) {
+  if (viradaTemporada) {
     jogadores = desenvolverElencoFimTemporada(jogadores, mundo, params.clubeId, {
       posicaoTabela: pos,
       vitoriaUser: params.vitoriaUser,
@@ -943,17 +863,27 @@ export function tickMundoPosRodada(params: TickRodadaMundoParams): {
       participacoes: mundo.participacoesTemporada,
     });
     jogadores = jogadores.map((j) => ({ ...j, idade: j.idade + 1 }));
-    mundo = { ...mundo, participacoesTemporada: {} };
+    // Sub-20 também envelhece
+    const sub20 = (mundo.base.elencoSub20 ?? []).map((j) => ({ ...j, idade: j.idade + 1 }));
+    mundo = {
+      ...mundo,
+      participacoesTemporada: {},
+      base: {
+        ...mundo.base,
+        elencoSub20: sub20,
+        promocoesTemporada: 0,
+      },
+    };
     noticias.push({
       id: `idade_${params.rodada}`,
       data: new Date().toISOString(),
       titulo: 'Virada de temporada',
       texto:
-        'Overall do elenco reavaliado (progressão lenta por temporada: até ±4 entre 23–33 anos, até ±8 nos extremos). Idades atualizadas.',
+        'Overall do elenco reavaliado (progressão lenta por temporada: até ±4 entre 23–33 anos, até ±8 nos extremos). Idades atualizadas. Nova safra da base disponível.',
     });
   }
 
-  return { jogadores, mundo, noticias };
+  return { jogadores, mundo, noticias, comercial };
 }
 
 export function investimentoBaseMensal(nivel: NivelInvestimentoBase): number {
@@ -961,11 +891,13 @@ export function investimentoBaseMensal(nivel: NivelInvestimentoBase): number {
 }
 
 export function aplicarFocoBase(mundo: EstadoMundoClube, foco: FocoCategoriaBase): EstadoMundoClube {
-  return { ...mundo, base: { ...mundo.base, foco } };
+  return { ...mundo, base: { ...mundo.base, foco: normalizarFocoBase(foco) } };
 }
 
-export function rotuloFocoBase(foco: FocoCategoriaBase): string {
-  return foco === 'VENDER' ? 'Foco: vender' : 'Foco: profissionalizar';
+export function rotuloFocoBase(
+  foco: FocoCategoriaBase | string,
+): string {
+  return rotuloFocoBaseYouth(foco);
 }
 
 export function aplicarInvestimentoBase(

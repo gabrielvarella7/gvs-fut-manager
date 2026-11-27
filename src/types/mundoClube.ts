@@ -2,6 +2,11 @@ import type {
   EstadoTreinoJogador,
   ProgramacaoTreinoClube,
 } from './training';
+import type {
+  AtributosJogador,
+  GeneticaJogador,
+  Posicao,
+} from './schema';
 
 /** Mundo vivo do clube — staff, base, torcida e burocracia paralela à temporada. */
 
@@ -34,16 +39,62 @@ export interface ProfissionalStaff {
 
 export type NivelInvestimentoBase = 0 | 1 | 2 | 3;
 
-/** VENDER: revela mais cedo para o mercado · PROFISSIONALIZAR: mais potencial, evolução mais lenta. */
-export type FocoCategoriaBase = 'VENDER' | 'PROFISSIONALIZAR';
+/**
+ * Foco do diretor da base:
+ * - VENDER_PROFISSIONALIZAR: liquidez (atacantes / pontas / meias criativos)
+ * - TITULARES_CLUBE: posições carentes ou envelhecidas no plantel
+ * - EQUILIBRADO: setores equilibrados
+ */
+export type FocoCategoriaBase =
+  | 'VENDER_PROFISSIONALIZAR'
+  | 'TITULARES_CLUBE'
+  | 'EQUILIBRADO';
+
+/** Saves antigos usavam VENDER | PROFISSIONALIZAR. */
+export type FocoCategoriaBaseLegado = 'VENDER' | 'PROFISSIONALIZAR';
+
+export type TierCategoriaBase = 'FRACO' | 'MEDIO' | 'BOM' | 'CRAQUE';
+
+export interface JovemSub20 {
+  id: number;
+  nome: string;
+  idade: number;
+  posicao: Posicao;
+  atributos: AtributosJogador;
+  overall: number;
+  potencialOvr: number;
+  tier: TierCategoriaBase;
+  precoceEstagnado: boolean;
+  diamanteBruto: boolean;
+  genetica?: GeneticaJogador;
+  entradaRodada: number;
+  focoGeracao: FocoCategoriaBase;
+}
+
+export interface SugestaoPromocaoBase {
+  jovemId: number;
+  posicao: Posicao;
+  motivo: 'MERITO' | 'CRISE' | 'DIRETOR';
+  mensagem: string;
+  rodada: number;
+}
 
 export interface CategoriaBase {
   investimentoNivel: NivelInvestimentoBase;
   foco: FocoCategoriaBase;
-  /** Capacidade técnica da estrutura (1–20). */
+  /** Capacidade técnica da estrutura / CT Base (1–20). Nv5 ≈ qualidade ≥ 16. */
   qualidade: number;
   ultimaPromocaoRodada: number;
   promocoesTemporada: number;
+  /** Elenco Sub-20 (ainda na base). */
+  elencoSub20?: JovemSub20[];
+  /** Temporada em que a safra anual já foi gerada. */
+  safraTemporadaAno?: number;
+  ultimaGotejamentoRodada?: number;
+  sugestoesPromocao?: SugestaoPromocaoBase[];
+  /** 2–3 crias relacionados + minutos → humor torcida / sócio. */
+  identidadeBaseAtiva?: boolean;
+  criasRelacionadosRecente?: number;
 }
 
 export interface PedidoRenovacaoContrato {

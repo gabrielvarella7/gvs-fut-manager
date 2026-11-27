@@ -2,7 +2,7 @@ import type { Jogador } from '../types/schema';
 import { calcularValorMercado } from './mercadoTransferencias';
 
 export function valorMercado(j: Jogador): number {
-  return j.valor_mercado ?? calcularValorMercado(j.overall, j.idade, j.posicao);
+  return j.valor_mercado ?? calcularValorMercado(j.overall, j.idade, j.posicao, j);
 }
 
 export function salarioMensal(j: Jogador): number {

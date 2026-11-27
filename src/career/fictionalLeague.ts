@@ -2,6 +2,7 @@ import { sortearNomesAmadores } from '../data/clubesAmadores';
 import { embaralharNomesVarzea } from '../data/jogadoresVarzea';
 import { LISTA_ESQUEMAS } from '../data/esquemasTaticos';
 import { gerarAtributosNovos, overallDeAtributos } from './atributosJogador';
+import { gerarGeneticaAtleta } from './genetica';
 import type { Jogador, Posicao } from '../types/schema';
 import type { TimeFicticio, JogoTorneio, DesempenhoTorneio } from './types';
 import { criarRng } from '../engine/matchEngine';
@@ -88,6 +89,7 @@ export function gerarTimesFicticios(seed: number, qtd = 8): TimeFicticio[] {
         valor_mercado: overall * overall * 800,
         salario_mensal: Math.round(overall * 450 + rnd() * 2000),
         nacionalidade: 'Brasil',
+        genetica: gerarGeneticaAtleta({ id: pid, idade, overall, rnd }),
       });
     });
 

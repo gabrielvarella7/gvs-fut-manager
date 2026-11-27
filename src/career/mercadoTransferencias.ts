@@ -8,6 +8,7 @@ import type {
   Time,
 } from '../types/schema';
 import type { FinancasClube } from '../types/schema';
+import { multiplicadorValorPorGenetica } from './genetica';
 
 export interface TimeMercado extends Time {
   nome_curto: string;
@@ -142,7 +143,12 @@ const PESO_VALOR_POSICAO: Record<Posicao, number> = {
   ATA: 1.25,
 };
 
-export function calcularValorMercado(overall: number, idade: number, posicao: Posicao): number {
+export function calcularValorMercado(
+  overall: number,
+  idade: number,
+  posicao: Posicao,
+  jogador?: Jogador,
+): number {
   const baseExponencial = Math.pow(Math.max(50, overall) / 65, 6.2) * 3_200_000;
   let fatorIdade = 1.0;
   if (idade <= 20) fatorIdade = 1.32;
@@ -151,7 +157,10 @@ export function calcularValorMercado(overall: number, idade: number, posicao: Po
   else if (idade <= 31) fatorIdade = 0.78;
   else if (idade <= 34) fatorIdade = 0.48;
   else fatorIdade = 0.25;
-  const valorBruto = baseExponencial * fatorIdade * PESO_VALOR_POSICAO[posicao];
+  let valorBruto = baseExponencial * fatorIdade * PESO_VALOR_POSICAO[posicao];
+  if (jogador) {
+    valorBruto *= multiplicadorValorPorGenetica({ ...jogador, overall, idade, posicao });
+  }
   return Math.round(valorBruto / 50_000) * 50_000;
 }
 

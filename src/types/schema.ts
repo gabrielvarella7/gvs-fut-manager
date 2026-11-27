@@ -4,6 +4,9 @@ export type StatusEscalacao = 'TITULAR' | 'RESERVA' | 'NAO_RELACIONADO';
 
 export type GravidadeLesao = 'LEVE' | 'MODERADA' | 'GRAVE';
 
+/** Origem da lesão — traumática (choque) vs sobrecarga muscular. */
+export type TipoLesao = 'TRAUMATICA' | 'SOBRECARGA';
+
 export interface EstadoLesao {
   diasRestantes: number;
   gravidade: GravidadeLesao;
@@ -11,7 +14,13 @@ export interface EstadoLesao {
   /** Snapshot pré-lesão — médico tenta devolver atributos iguais. */
   atributosReferencia?: AtributosJogador;
   overallReferencia?: number;
+  tipo?: TipoLesao;
+  /** Rodadas-base do catálogo (1 / 3 / 6 / 16) antes do fisioterapeuta. */
+  rodadasForaBase?: number;
 }
+
+/** Faixa genética de fragilidade muscular (multiplicador 0,50–2,20). */
+export type TierPropensaoLesao = 'INQUEBRAVEL' | 'NORMAL' | 'DE_VIDRO';
 
 export type EsquemaTatico =
   | '2-3-5'
@@ -186,26 +195,62 @@ export interface Jogador {
   suscetibilidade?: SuscetibilidadeTransferencia;
   /** Indisponível enquanto diasRestantes > 0. */
   lesao?: EstadoLesao | null;
+  /** Pré-disposição genética (PA, absorção, propensão a lesão). */
+  genetica?: GeneticaAtleta;
+  /** ISO da última partida disputada (curva de recuperação D+1…D+6). */
+  ultimaPartidaISO?: string;
   /** Sequência de jogos fora da posição natural (insatisfação de estrela). */
   jogosImprovisoSeguidos?: number;
   /** Cicatriz de lesão grave sem médico (acelera regressão). */
   cicatrizFisica?: boolean;
-  /**
-   * Genética opcional (PA / absorção / propensão) — compatível com DM/fisiologia.
-   */
-  genetica?: {
-    potencial_maximo: number;
-    fator_absorcao: number;
-    propensao_lesao: number;
-    perfil_scout?: string;
-  };
-  /** Jogador promovido da base; guia evolução conforme o foco do clube. */
-  formacaoBase?: {
-    foco: 'VENDER' | 'PROFISSIONALIZAR';
-    promovidoRodada: number;
-    /** Teto informacional de OVR (modo profissionalizar). */
-    potencialOvr?: number;
-  };
+  /** Jogador promovido da base; guia evolução, pressão e identidade. */
+  formacaoBase?: FormacaoBaseJogador;
+}
+
+export type TierCategoriaBase = 'FRACO' | 'MEDIO' | 'BOM' | 'CRAQUE';
+
+export type FocoFormacaoLegado = 'VENDER' | 'PROFISSIONALIZAR';
+
+export interface FormacaoBaseJogador {
+  /** Foco vigente na promoção (novos) ou legado (saves antigos). */
+  foco:
+    | 'VENDER_PROFISSIONALIZAR'
+    | 'TITULARES_CLUBE'
+    | 'EQUILIBRADO'
+    | FocoFormacaoLegado;
+  promovidoRodada: number;
+  /** Teto informacional de OVR. */
+  potencialOvr?: number;
+  tier?: TierCategoriaBase;
+  /** Falso precoce: OVR alto, teto baixo. */
+  precoceEstagnado?: boolean;
+  /** Diamante bruto: OVR baixo, teto alto. */
+  diamanteBruto?: boolean;
+  /** Minutos totais no profissional (identidade / pressão). */
+  minutosProfissional?: number;
+  /** Rodadas seguidas como NAO_RELACIONADO (estagnação). */
+  rodadasBancoSeguidas?: number;
+  /** Sequência de bons jogos (assédio de empresário). */
+  bonsJogosSeguidos?: number;
+  /** Já sofreu pressão de empresário neste ciclo. */
+  pressaoEmpresario?: boolean;
+  /** Cria da casa (conta para identidade_base da torcida). */
+  criaDaCasa?: boolean;
+}
+
+/** Alias usado pela base / mundoClube. */
+export type GeneticaJogador = GeneticaAtleta;
+
+/** Potential Ability + absorção + fragilidade — ocultos no scouting. */
+export interface GeneticaAtleta {
+  /** Teto máximo de overall que o atleta pode atingir (40 a 99). */
+  potencial_maximo: number;
+  /** Eficiência na conversão de treinos em XP (0.65x a 1.45x). */
+  fator_absorcao: number;
+  /** Fragilidade muscular/ligamentar inata (0.50x Inquebrável a 2.20x De Vidro). */
+  propensao_lesao: number;
+  /** Descrição textual revelada gradualmente pelo Olheiro / Fisiologista. */
+  perfil_scout?: string;
 }
 
 export interface LinhaTabela {

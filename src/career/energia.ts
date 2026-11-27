@@ -1,16 +1,23 @@
-import type { GravidadeLesao, Jogador } from '../types/schema';
+import type { ConfiguracaoTaticaClube, EstiloJogoId, RitmoJogo } from '../types/tactics';
+import type { GravidadeLesao, Jogador, Posicao } from '../types/schema';
+import { getGeneticaSegura } from './genetica';
 import {
   multiplicadorFadigaPartida,
   overallEfetivoPorEnergiaBase,
 } from './performancePartida';
 
-/** Jovem < 23 · médio 23–33 · veterano ≥ 34 */
-export type FaixaEtariaEnergia = 'jovem' | 'medio' | 'veterano';
-
+/** Limiar legado / auto-sub (~70%). */
 export const ENERGIA_LIMITE_LESAO = 70;
+/** Zona crítica de sobrecarga (+140% risco). */
+export const ENERGIA_ZONA_CRITICA = 68;
+/** Zona de alerta (+35% risco). */
+export const ENERGIA_ZONA_ALERTA = 80;
 /** Mínimo: 6 de linha + goleiro. */
 export const MIN_JOGADORES_EM_CAMPO = 7;
 export const MAX_SUBSTITUICOES_PARTIDA = 5;
+
+/** Jovem < 23 · médio 23–33 · veterano ≥ 34 (UI / labels). */
+export type FaixaEtariaEnergia = 'jovem' | 'medio' | 'veterano';
 
 export function faixaEtariaEnergia(idade: number): FaixaEtariaEnergia {
   if (idade < 23) return 'jovem';
@@ -22,28 +29,115 @@ function randEntre(rnd: () => number, min: number, max: number): number {
   return min + rnd() * (max - min);
 }
 
-/**
- * Recuperação diária (%), com margem por faixa etária:
- * jovem ~10 (8–12) · médio ~7 (5–9) · veterano ~4 (2–6).
- */
-export function recuperacaoDiariaEnergia(idade: number, rnd: () => number): number {
-  const faixa = faixaEtariaEnergia(idade);
-  if (faixa === 'jovem') return Math.round(randEntre(rnd, 8, 12) * 10) / 10;
-  if (faixa === 'medio') return Math.round(randEntre(rnd, 5, 9) * 10) / 10;
-  return Math.round(randEntre(rnd, 2, 6) * 10) / 10;
+function clamp(n: number, min: number, max: number): number {
+  return Math.max(min, Math.min(max, n));
 }
 
-export function recuperarEnergiaUmDia(jogadores: Jogador[], rnd: () => number): Jogador[] {
+function diasEntreISO(de: string, ate: string): number {
+  const a = Date.parse(`${de.slice(0, 10)}T12:00:00Z`);
+  const b = Date.parse(`${ate.slice(0, 10)}T12:00:00Z`);
+  if (!Number.isFinite(a) || !Number.isFinite(b)) return 3;
+  return Math.max(0, Math.round((b - a) / 86_400_000));
+}
+
+/**
+ * Recuperação etária (curva Gabriel):
+ * 18–23: 1,15× · 24–29: 1,0× · 30–33: 0,85× · 34+: 0,68×
+ */
+export function fatorIdadeRecuperacao(idade: number): number {
+  if (idade <= 23) return 1.15;
+  if (idade <= 29) return 1.0;
+  if (idade <= 33) return 0.85;
+  return 0.68;
+}
+
+/**
+ * Genética na recuperação do dia seguinte:
+ * propensão ≤0,75 → +20%; ≥1,50 → −15%.
+ */
+export function fatorGeneticaRecuperacao(propensaoLesao: number): number {
+  if (propensaoLesao <= 0.75) return 1.2;
+  if (propensaoLesao >= 1.5) return 0.85;
+  return 1.0;
+}
+
+/** Preparador 18+ até +25% na recuperação; escala linear a partir do nível 10. */
+export function fatorStaffRecuperacao(nivelPreparador: number): number {
+  const n = clamp(nivelPreparador, 1, 20);
+  if (n <= 10) return 0.92 + (n / 10) * 0.08;
+  // 10→1.0 · 18→1.25 · 20→1.28
+  return 1 + ((n - 10) / 10) * 0.28;
+}
+
+/**
+ * Base do dia pós-jogo (ressaca → janela midweek → pleno):
+ * D+1: 6–9 · D+2–3: 11–15 · D+4–6: 10–14 · D+7+: 6–9
+ */
+export function baseRecuperacaoPorDiaPosJogo(
+  diasDesdePartida: number,
+  rnd: () => number,
+): number {
+  const d = Math.max(0, Math.floor(diasDesdePartida));
+  if (d <= 1) return randEntre(rnd, 6, 9);
+  if (d <= 3) return randEntre(rnd, 11, 15);
+  if (d <= 6) return randEntre(rnd, 10, 14);
+  return randEntre(rnd, 6, 9);
+}
+
+export interface OpcoesRecuperacaoDiaria {
+  dataISO?: string;
+  nivelPreparador?: number;
+  /** Bônus de treino regenerativo/crioterapia (+12–18). */
+  bonusTreino?: number;
+  /**
+   * Treino com bola no D+1 quase anula a recuperação,
+   * salvo Regeneração Ativa (bonusTreino alto).
+   */
+  treinoComBolaDia1?: boolean;
+}
+
+/**
+ * Rec = Base_dia × Fator_Idade × Fator_Genética × Fator_Staff + Bônus_Treino
+ */
+export function recuperacaoDiariaCompleta(
+  j: Jogador,
+  rnd: () => number,
+  opts: OpcoesRecuperacaoDiaria = {},
+): number {
+  const genetica = getGeneticaSegura(j);
+  const dias =
+    opts.dataISO && j.ultimaPartidaISO
+      ? diasEntreISO(j.ultimaPartidaISO, opts.dataISO)
+      : 3;
+  let base = baseRecuperacaoPorDiaPosJogo(dias, rnd);
+  const idadeF = fatorIdadeRecuperacao(j.idade);
+  const genF = fatorGeneticaRecuperacao(genetica.propensao_lesao);
+  const staffF = fatorStaffRecuperacao(opts.nivelPreparador ?? 10);
+  let bonus = opts.bonusTreino ?? 0;
+
+  // D+1 + treino com bola (não regenerativo) quase cancela.
+  if (dias <= 1 && opts.treinoComBolaDia1 && bonus < 10) {
+    base *= 0.15;
+    bonus *= 0.25;
+  }
+
+  const ganho = base * idadeF * genF * staffF + bonus;
+  return Math.round(Math.max(0, ganho) * 10) / 10;
+}
+
+/** @deprecated Preferir recuperacaoDiariaCompleta — mantido para UI simples. */
+export function recuperacaoDiariaEnergia(idade: number, rnd: () => number): number {
+  return Math.round(baseRecuperacaoPorDiaPosJogo(3, rnd) * fatorIdadeRecuperacao(idade) * 10) / 10;
+}
+
+export function recuperarEnergiaUmDia(
+  jogadores: Jogador[],
+  rnd: () => number,
+  opts: OpcoesRecuperacaoDiaria = {},
+): Jogador[] {
   return jogadores.map((j) => {
-    if (j.lesao && j.lesao.diasRestantes > 0) {
-      // Lesionado recupera menos (fisioterapia leve).
-      const ganho = recuperacaoDiariaEnergia(j.idade, rnd) * 0.45;
-      return {
-        ...j,
-        energia: Math.min(100, Math.round((j.energia + ganho) * 10) / 10),
-      };
-    }
-    const ganho = recuperacaoDiariaEnergia(j.idade, rnd);
+    const ganhoBruto = recuperacaoDiariaCompleta(j, rnd, opts);
+    const ganho = j.lesao && j.lesao.diasRestantes > 0 ? ganhoBruto * 0.45 : ganhoBruto;
     return {
       ...j,
       energia: Math.min(100, Math.round((j.energia + ganho) * 10) / 10),
@@ -51,28 +145,136 @@ export function recuperarEnergiaUmDia(jogadores: Jogador[], rnd: () => number): 
   });
 }
 
+/** Multiplicador de gasto posicional em 90' (ATA ≈ 20–24% base). */
+export function multiplicadorDrainPosicao(posicao: Posicao): number {
+  if (posicao === 'GOL') return 0.25;
+  if (posicao === 'ZAG') return 0.85;
+  if (posicao === 'ATA') return 1.0;
+  return 1.18; // LAT / VOL / MEI
+}
+
+export function multiplicadorDrainTatico(params: {
+  estiloId?: EstiloJogoId | string;
+  alturaLinha?: string;
+  ritmo?: RitmoJogo | string;
+  intensidade?: string;
+}): number {
+  const estilo = params.estiloId ?? '';
+  const linha = params.alturaLinha ?? 'MEDIA';
+  const ritmo = params.ritmo ?? 'NORMAL';
+  const marcacao = params.intensidade ?? 'EQUILIBRADA';
+
+  const gegen =
+    estilo === 'GEGENPRESSING' ||
+    (marcacao === 'SUFOCANTE' && (linha === 'ALTA' || linha === 'MUITO_ALTA'));
+  const parkBus =
+    estilo === 'RETRANCADO_CATIMBA' ||
+    (linha === 'BAIXA' && ritmo === 'LENTO_CADENCIADO');
+
+  if (gegen && (ritmo === 'ACELERADO' || linha === 'MUITO_ALTA' || linha === 'ALTA')) {
+    // +30–46%
+    return 1.38;
+  }
+  if (gegen) return 1.3;
+  if (parkBus) return 0.88;
+  if (ritmo === 'ACELERADO') return 1.12;
+  if (ritmo === 'LENTO_CADENCIADO') return 0.94;
+  return 1.0;
+}
+
+export function multiplicadorDrainEmocional(params: {
+  isClassico?: boolean;
+  tudoOuNada?: boolean;
+}): number {
+  if (params.isClassico || params.tudoOuNada) return 1.28;
+  return 1.0;
+}
+
 /**
- * Fadiga por minuto calibrada para ~90':
- * jovem → ~80% restante · médio → ~70% · veterano → ~60%, com ruído.
+ * Genética no gasto em jogo:
+ * ≤0,75 → menos drop no fim; ≥1,50 → queda acentuada após 65'.
+ */
+export function multiplicadorDrainGeneticaNoMinuto(
+  propensaoLesao: number,
+  minuto: number,
+): number {
+  if (propensaoLesao <= 0.75) {
+    return minuto >= 70 ? 0.82 : 0.92;
+  }
+  if (propensaoLesao >= 1.5) {
+    return minuto >= 65 ? 1.55 : 1.12;
+  }
+  return 1.0;
+}
+
+/** Idade 30–33: +10% gasto se ritmo acelerado. */
+export function multiplicadorDrainIdadeGasto(idade: number, ritmoAcelerado: boolean): number {
+  if (idade >= 30 && idade <= 33 && ritmoAcelerado) return 1.1;
+  if (idade >= 34) return 1.08;
+  if (idade <= 23) return 0.95;
+  return 1.0;
+}
+
+/**
+ * Fadiga por minuto — vetores de posição, idade, tática, emocional e staff.
+ * ATA pleno ≈ 20–24% em 90' (base ~0,244/min × mults).
+ */
+export function fadigaPorMinutoCompleta(params: {
+  idade: number;
+  posicao: Posicao;
+  propensaoLesao: number;
+  rnd: () => number;
+  multEquipe?: number;
+  desgasteTatico?: number;
+  estiloId?: string;
+  alturaLinha?: string;
+  ritmo?: string;
+  intensidade?: string;
+  isClassico?: boolean;
+  tudoOuNada?: boolean;
+  nivelPreparador?: number;
+}): number {
+  // Base ATA: ~22% em 90' → 0,244/min
+  const baseAta = randEntre(params.rnd, 0.222, 0.267);
+  let mult = multiplicadorDrainPosicao(params.posicao);
+  mult *= multiplicadorDrainTatico({
+    estiloId: params.estiloId,
+    alturaLinha: params.alturaLinha,
+    ritmo: params.ritmo,
+    intensidade: params.intensidade,
+  });
+  mult *= multiplicadorDrainEmocional({
+    isClassico: params.isClassico,
+    tudoOuNada: params.tudoOuNada,
+  });
+  mult *= multiplicadorDrainIdadeGasto(
+    params.idade,
+    params.ritmo === 'ACELERADO',
+  );
+  // Preparador alto: menos drain nos 90'
+  const prep = clamp(params.nivelPreparador ?? 10, 1, 20);
+  const multPrep = prep >= 18 ? 0.78 : prep >= 14 ? 0.88 : prep >= 10 ? 0.96 : 1.05;
+  mult *= multPrep;
+  mult *= params.multEquipe ?? 1;
+  mult *= params.desgasteTatico ?? 1;
+  // Genética média no cálculo inicial (ajuste fino por minuto no loop)
+  if (params.propensaoLesao <= 0.75) mult *= 0.9;
+  else if (params.propensaoLesao >= 1.5) mult *= 1.12;
+
+  return baseAta * mult;
+}
+
+/**
+ * Compat: fadiga só por idade (≈ perfil MEI médio).
+ * Preferir fadigaPorMinutoCompleta no motor.
  */
 export function fadigaPorMinutoPorIdade(idade: number, rnd: () => number): number {
-  const faixa = faixaEtariaEnergia(idade);
-  // Alvo de energia restante após 90' a partir de 100.
-  let alvoMin: number;
-  let alvoMax: number;
-  if (faixa === 'jovem') {
-    alvoMin = 76;
-    alvoMax = 84;
-  } else if (faixa === 'medio') {
-    alvoMin = 66;
-    alvoMax = 76;
-  } else {
-    alvoMin = 54;
-    alvoMax = 66;
-  }
-  const restante = randEntre(rnd, alvoMin, alvoMax);
-  const drainTotal = Math.max(8, 100 - restante);
-  return drainTotal / 90;
+  return fadigaPorMinutoCompleta({
+    idade,
+    posicao: 'MEI',
+    propensaoLesao: 1.0,
+    rnd,
+  });
 }
 
 /** Pequeno jitter no apito inicial (~±2 pp), sem sair de 1–100. */
@@ -83,8 +285,8 @@ export function energiaInicialPartida(energiaAtual: number, rnd: () => number): 
 }
 
 /**
- * Rendimento ↔ energia (curto prazo, clampado).
- * 80–100: sem pena · 65–79: −2%…−5% · &lt;65: máx −9% (piso competitivo).
+ * Rendimento ↔ energia (curto prazo, clampado — performance-career-curve-spec).
+ * 80–100: sem pena · 65–79: −2%…−5% · <65: máx −9% (piso competitivo).
  * Não altera overall_base / atributos permanentes.
  */
 export function multiplicadorRendimentoPorEnergia(energia: number): number {
@@ -106,20 +308,41 @@ export function rotuloEnergiaCurto(energia: number): string {
 }
 
 /**
- * Chance por minuto de lesão muscular quando energia < ~70.
- * Queda de energia e baixa resistência elevam o risco.
+ * Zonas de risco por energia (GDD + Gabriel):
+ * 85–100: 0,75–0,85× · 70–84: 1,35× · &lt;68: 2,40×
+ */
+export function multRiscoLesaoPorEnergia(energia: number): number {
+  if (energia >= 85) return 0.8;
+  if (energia >= ENERGIA_LIMITE_LESAO) return 1.35;
+  if (energia >= ENERGIA_ZONA_CRITICA) return 1.85;
+  return 2.4;
+}
+
+/**
+ * Chance por minuto de lesão muscular por fadiga.
+ * Pode empilhar com genética/treino até ~7× na zona crítica.
  */
 export function chanceLesaoPorFadiga(
   energia: number,
   resistenciaLesao: number,
   rnd: () => number,
+  opts?: { propensaoLesao?: number; multTreino?: number },
 ): boolean {
-  if (energia >= ENERGIA_LIMITE_LESAO) return false;
-  const deficit = (ENERGIA_LIMITE_LESAO - energia) / ENERGIA_LIMITE_LESAO;
+  const zona = multRiscoLesaoPorEnergia(energia);
+  // Acima de 85% risco residual baixo (traumático fica noutro fluxo).
+  if (energia >= 85 && zona <= 0.85) {
+    // ainda permite micro-chance
+  }
   const res = Math.max(1, Math.min(20, resistenciaLesao));
   const fatorRes = 1.25 - res / 20;
-  // ~0,15%/min perto de 70 · ~1,2%/min em 40 · ~2%/min em 25
-  const p = (0.0012 + deficit * deficit * 0.028) * fatorRes;
+  const prop = opts?.propensaoLesao ?? 1;
+  const treino = opts?.multTreino ?? 1;
+  const deficit =
+    energia >= ENERGIA_LIMITE_LESAO
+      ? Math.max(0, (85 - energia) / 85)
+      : (ENERGIA_LIMITE_LESAO - energia) / ENERGIA_LIMITE_LESAO;
+  let p = (0.0009 + deficit * deficit * 0.022) * fatorRes * zona * prop * treino;
+  p = Math.min(0.08, p); // teto por minuto (~ empilha a ~7× na semana via treino)
   return rnd() < p;
 }
 
@@ -182,7 +405,6 @@ export function escolherReservaParaSub(
       j.overall * 0.7 + j.energia * 0.25 + (j.posicao === posicaoAlvo ? 8 : 0);
     return score(b) - score(a);
   });
-  // Pequena aleatoriedade entre os 3 melhores.
   const top = ordenado.slice(0, Math.min(3, ordenado.length));
   return top[Math.floor(rnd() * top.length)] ?? top[0] ?? null;
 }
@@ -219,15 +441,39 @@ export function energiaJitterNovaCarreira(rnd: () => number): number {
   return Math.round(randEntre(rnd, 96, 100) * 10) / 10;
 }
 
-/** Interpolação suave usada em testes / UI de previsão. */
 export function preverEnergiaFimJogo(idade: number, energiaInicio: number, rnd: () => number): number {
   const drain = fadigaPorMinutoPorIdade(idade, rnd) * 90;
   return Math.max(0, Math.round((energiaInicio - drain) * 10) / 10);
 }
 
 export function faixaRecuperacaoLabel(idade: number): string {
-  const f = faixaEtariaEnergia(idade);
-  if (f === 'jovem') return 'Recuperação rápida (~10%/dia)';
-  if (f === 'medio') return 'Recuperação média (~7%/dia)';
-  return 'Recuperação lenta (~4%/dia)';
+  const f = fatorIdadeRecuperacao(idade);
+  if (f >= 1.1) return 'Recuperação rápida (18–23 · ~1,15×)';
+  if (f >= 0.95) return 'Recuperação padrão (24–29)';
+  if (f >= 0.8) return 'Recuperação reduzida (30–33 · ~0,85×)';
+  return 'Recuperação lenta (34+ · ~0,68× · 4–5 dias)';
+}
+
+/** Extrai vetores táticos do config do clube para o drain. */
+export function vetoresTaticosDeConfig(tatica?: ConfiguracaoTaticaClube | null): {
+  estiloId?: string;
+  alturaLinha?: string;
+  ritmo?: string;
+  intensidade?: string;
+} {
+  if (!tatica) return {};
+  return {
+    estiloId: tatica.estilo_jogo_id,
+    alturaLinha: tatica.instrucoes?.altura_linha,
+    ritmo: tatica.instrucoes?.ritmo_jogo,
+    intensidade: tatica.instrucoes?.intensidade_marcacao,
+  };
+}
+
+/** Bônus regenerativo/crioterapia (+12–18). */
+export function bonusRecuperacaoSessao(sessaoId: string | undefined, regimeId: string | undefined): number {
+  if (sessaoId === 'REGENERACAO_ATIVA') return 15;
+  if (regimeId === 'REGENERATIVO') return 14;
+  if (sessaoId === 'PREVENCAO_LESOES') return 8;
+  return 0;
 }
