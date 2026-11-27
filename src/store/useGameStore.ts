@@ -104,6 +104,10 @@ import {
 import { tryGetDatabaseTaticas } from '../db/tacticsDatabase';
 import { deduplicarNoticias } from '../career/noticias';
 import {
+  gerarNoticiasEncerramentoRodada,
+  montarContextoEncerramentoRodada,
+} from '../career/noticiasEncerramentoRodada';
+import {
   aplicarFocoBase,
   aplicarInvestimentoBase,
   criarEstadoMundoClube,
@@ -1413,12 +1417,26 @@ export const useGameStore = create<GameStore>((set, get) => ({
       aspirantesS23 = syncS23.aspirantes;
       noticiasMundo.push(...syncS23.noticias);
     }
-    const noticiaRodada = {
-      id: `rod_${partida?.rodada ?? 0}_${Date.now()}`,
-      data: new Date().toISOString(),
-      titulo: `Rodada ${partida?.rodada ?? '—'} encerrada`,
-      texto: `${clube?.nome ?? 'Seu time'} soma após a rodada. Posição na tabela: ${pos}º lugar.`,
-    };
+    const noticiasRodada: NoticiaCarreira[] = [];
+    if (partida && rodadaEncerradaNoEstado(estado, partida.rodada) && clube) {
+      const ctxEnc = montarContextoEncerramentoRodada({
+        estado,
+        rodada: partida.rodada,
+        clubeId: s.clubeRealId,
+        times: s.timesReais,
+        jogadores,
+      });
+      noticiasRodada.push(
+        ...gerarNoticiasEncerramentoRodada(ctxEnc, seed ^ partida.rodada ^ 0xeac1),
+      );
+    } else {
+      noticiasRodada.push({
+        id: `rod_${partida?.rodada ?? 0}_${Date.now()}`,
+        data: new Date().toISOString(),
+        titulo: `Rodada ${partida?.rodada ?? '—'} encerrada`,
+        texto: `${clube?.nome ?? 'Seu time'} soma após a rodada. Posição na tabela: ${pos}º lugar.`,
+      });
+    }
     set({
       brasileirao: estado,
       jogadoresReais: jogadores,
@@ -1430,7 +1448,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
       partidaJogoId: partidaId,
       tela: 'partida',
       noticias: deduplicarNoticias([
-        noticiaRodada,
+        ...noticiasRodada,
         ...noticiasLesaoCampo,
         ...noticiasMundo,
         ...s.noticias,
