@@ -19,6 +19,11 @@ import { MatchPreGame } from './MatchPreGame';
 import { MatchStatsPanel } from './MatchStatsPanel';
 import { MatchClassificacaoPanel } from './MatchClassificacaoPanel';
 import {
+  MatchFormacoesPanel,
+  type ArbitroFormacoes,
+  type TimeFormacoesInfo,
+} from './MatchFormacoesPanel';
+import {
   MatchPlayback,
   type PlaybackProgress,
   type VelocidadePlayback,
@@ -32,7 +37,8 @@ type Aba =
   | 'prejogo'
   | 'detalhes'
   | 'h2h'
-  | 'notas';
+  | 'notas'
+  | 'formacoes';
 
 type Props = {
   result: MatchSimResult;
@@ -59,6 +65,10 @@ type Props = {
   onIntervalo?: () => void;
   skipToEndNonce?: number;
   onIrProFimDoJogo?: () => void;
+  /** Dados para a aba Formações (read-only). */
+  formacoesMandante?: TimeFormacoesInfo;
+  formacoesVisitante?: TimeFormacoesInfo;
+  arbitro?: ArbitroFormacoes | null;
   /** Final score only: leave transmission and return to escritório / hub. */
   onFinalizarJogo?: () => void;
   /** Classificação ao vivo do campeonato (modo liga). */
@@ -100,6 +110,9 @@ export function MatchCenter({
   onIntervalo,
   skipToEndNonce = 0,
   onIrProFimDoJogo,
+  formacoesMandante,
+  formacoesVisitante,
+  arbitro = null,
   onFinalizarJogo,
   classificacao = null,
   equipesPreJogo = null,
@@ -124,10 +137,11 @@ export function MatchCenter({
     result.estatisticas &&
     estatisticasParciais(result, minuto, result.mandanteId, periodoStats);
 
+  const temFormacoes = !!formacoesMandante && !!formacoesVisitante;
   const lancamentosVisiveis = result.lancamentos.slice(0, progresso.idx);
-
   const abas: { id: Aba; label: string }[] = [
     { id: 'detalhes', label: 'Detalhes' },
+    ...(temFormacoes ? [{ id: 'formacoes' as const, label: 'Formações' }] : []),
     { id: 'estatisticas', label: 'Estatísticas' },
     ...(classificacao ? [{ id: 'classificacao' as const, label: 'Classificação' }] : []),
     { id: 'comentario', label: 'Comentário' },
@@ -251,6 +265,16 @@ export function MatchCenter({
           visitanteNome={visitanteNome}
           periodo={periodoStats}
           onPeriodo={setPeriodoStats}
+        />
+      )}
+
+      {aba === 'formacoes' && temFormacoes && (
+        <MatchFormacoesPanel
+          result={result}
+          minuto={minuto}
+          mandante={formacoesMandante}
+          visitante={formacoesVisitante}
+          arbitro={arbitro}
         />
       )}
 

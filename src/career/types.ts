@@ -3,6 +3,7 @@ import type { CheckpointTransmissao } from '../engine/matchResume';
 import type { EsquemaTatico, FinancasClube, Jogador, Time } from '../types/schema';
 import type { EstadoComercial } from '../types/commercial';
 import type { EstadoMundoClube } from '../types/mundoClube';
+import type { EstadoAspirantesS23 } from '../types/aspirantesS23';
 import type { EstadoTemporada } from './brasileirao';
 import type { ConfiguracaoTaticaClube } from '../types/tactics';
 
@@ -81,6 +82,7 @@ export type TelaJogo =
   | 'staff'
   | 'treinos'
   | 'base'
+  | 'sub23'
   | 'calendario'
   | 'classificacao'
   | 'tatica'
@@ -182,6 +184,8 @@ export interface EstadoCarreira {
   financas: FinancasClube | null;
   comercial: EstadoComercial | null;
   mundoClube: EstadoMundoClube | null;
+  /** Campeonato de Aspirantes Sub-23 (IA). */
+  aspirantesS23: EstadoAspirantesS23 | null;
   negociacoesTransferencia: NegociacaoTransferencia[];
   /** Snapshot do elenco após transferências (gravado no save). */
   elencoPersistido?: Jogador[];

@@ -223,7 +223,8 @@ export function OfficeHubScreen() {
           { label: 'Calendário', hint: '38 jogos', onClick: () => irPara('calendario') },
           { label: 'Transferências', hint: 'Mercado', onClick: () => irPara('transferencias') },
           { label: 'Staff', hint: 'Equipe · renovações', onClick: () => irPara('staff') },
-          { label: 'Base', hint: 'Formação', onClick: () => irPara('base') },
+          { label: 'Base', hint: 'Sub-20 / CT', onClick: () => irPara('base') },
+          { label: 'Sub-23', hint: 'Aspirantes S23', onClick: () => irPara('sub23') },
           { label: 'Finanças', hint: 'Receitas', onClick: () => irPara('financas') },
           { label: 'Táticas', hint: esquema, onClick: () => irPara('tatica') },
           ...(prox
