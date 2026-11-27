@@ -55,6 +55,7 @@ function corpoSalvavel(estado: EstadoCarreira): EstadoCarreira {
     timeUsuarioId: estado.timeUsuarioId,
     esquemaAtual: estado.esquemaAtual,
     alinhamento11: estado.alinhamento11 ?? null,
+    banco11: estado.banco11 ?? null,
     usoTaticaPersonalizada: estado.usoTaticaPersonalizada ?? false,
     gradeTatica11: estado.gradeTatica11 ?? null,
     configTatica: estado.configTatica,

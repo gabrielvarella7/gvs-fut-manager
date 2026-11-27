@@ -1,4 +1,5 @@
 import { metricasMotorDeAtributos } from './atributosJogador';
+import { PositionRecalculator } from './positionRecalculator';
 import type { Jogador, Posicao } from '../types/schema';
 import { formatarDinheiro, salarioMensal, valorMercado } from './playerUtils';
 
@@ -10,6 +11,8 @@ const POS_LABEL: Record<Posicao, string> = {
   MEI: 'Meia',
   ATA: 'Atacante',
 };
+
+const TODAS_POSICOES: Posicao[] = ['GOL', 'ZAG', 'LAT', 'VOL', 'MEI', 'ATA'];
 
 const STATUS_LABEL = {
   TITULAR: 'Titular',
@@ -23,6 +26,49 @@ export function rotuloPosicao(pos: Posicao): string {
 
 export function rotuloStatus(s: Jogador['status_escalacao']): string {
   return STATUS_LABEL[s];
+}
+
+export type FaixaPosicaoAfinidade = 'nativa' | 'adaptada';
+
+export interface PosicaoAfinidadeUi {
+  posicao: Posicao;
+  rotulo: string;
+  overall: number;
+  faixa: FaixaPosicaoAfinidade;
+}
+
+/**
+ * Posições exibíveis no perfil: nativas (OVR cheio) e adaptadas (perda leve).
+ * Improviso severo fica oculto.
+ */
+export function listagemPosicoesAfinidade(j: Jogador): PosicaoAfinidadeUi[] {
+  const enriquecido = PositionRecalculator.recalcularPosicoesJogador(j);
+  const itens: PosicaoAfinidadeUi[] = [];
+  for (const pos of TODAS_POSICOES) {
+    const r = PositionRecalculator.multiplicadorNaPosicaoSchema(enriquecido, pos);
+    if (r.nativa) {
+      itens.push({
+        posicao: pos,
+        rotulo: rotuloPosicao(pos),
+        overall: enriquecido.overall,
+        faixa: 'nativa',
+      });
+      continue;
+    }
+    if (r.adaptada) {
+      itens.push({
+        posicao: pos,
+        rotulo: rotuloPosicao(pos),
+        overall: r.overallCampo,
+        faixa: 'adaptada',
+      });
+    }
+  }
+  itens.sort((a, b) => {
+    if (a.faixa !== b.faixa) return a.faixa === 'nativa' ? -1 : 1;
+    return b.overall - a.overall;
+  });
+  return itens;
 }
 
 function destaqueAtributo(nome: string, valor: number, limiar: number): string | null {
