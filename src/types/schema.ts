@@ -4,6 +4,9 @@ export type StatusEscalacao = 'TITULAR' | 'RESERVA' | 'NAO_RELACIONADO';
 
 export type GravidadeLesao = 'LEVE' | 'MODERADA' | 'GRAVE';
 
+/** Origem da lesão — traumática (choque) vs sobrecarga muscular. */
+export type TipoLesao = 'TRAUMATICA' | 'SOBRECARGA';
+
 export interface EstadoLesao {
   diasRestantes: number;
   gravidade: GravidadeLesao;
@@ -11,7 +14,13 @@ export interface EstadoLesao {
   /** Snapshot pré-lesão — médico tenta devolver atributos iguais. */
   atributosReferencia?: AtributosJogador;
   overallReferencia?: number;
+  tipo?: TipoLesao;
+  /** Rodadas-base do catálogo (1 / 3 / 6 / 16) antes do fisioterapeuta. */
+  rodadasForaBase?: number;
 }
+
+/** Faixa genética de fragilidade muscular (multiplicador 0,50–2,20). */
+export type TierPropensaoLesao = 'INQUEBRAVEL' | 'NORMAL' | 'DE_VIDRO';
 
 export type EsquemaTatico =
   | '2-3-5'
@@ -184,23 +193,12 @@ export interface Jogador {
   suscetibilidade?: SuscetibilidadeTransferencia;
   /** Indisponível enquanto diasRestantes > 0. */
   lesao?: EstadoLesao | null;
-  /**
-   * Genética (opcional). Presente em joias da base; demais elenco pode receber
-   * quando o sistema de genética estiver ativo no save.
-   */
-  genetica?: GeneticaJogador;
+  /** Pré-disposição genética (PA, absorção, propensão a lesão). */
+  genetica?: GeneticaAtleta;
+  /** ISO da última partida disputada (curva de recuperação D+1…D+6). */
+  ultimaPartidaISO?: string;
   /** Jogador promovido da base; guia evolução, pressão e identidade. */
   formacaoBase?: FormacaoBaseJogador;
-}
-
-/** Perfil genético — teto, absorção de treino e propensão a lesão. */
-export interface GeneticaJogador {
-  potencial_maximo: number;
-  /** Multiplicador de ganho de XP / evolução (≈0,7–1,4). */
-  fator_absorcao: number;
-  /** 0,5 (duro) … 2,0+ (frágil). */
-  propensao_lesao: number;
-  perfil_scout: string;
 }
 
 export type TierCategoriaBase = 'FRACO' | 'MEDIO' | 'BOM' | 'CRAQUE';
@@ -232,6 +230,21 @@ export interface FormacaoBaseJogador {
   pressaoEmpresario?: boolean;
   /** Cria da casa (conta para identidade_base da torcida). */
   criaDaCasa?: boolean;
+}
+
+/** Potential Ability + absorção + fragilidade — ocultos no scouting. */
+/** Alias usado pela base / mundoClube. */
+export type GeneticaJogador = GeneticaAtleta;
+
+export interface GeneticaAtleta {
+  /** Teto máximo de overall que o atleta pode atingir (40 a 99). */
+  potencial_maximo: number;
+  /** Eficiência na conversão de treinos em XP (0.65x a 1.45x). */
+  fator_absorcao: number;
+  /** Fragilidade muscular/ligamentar inata (0.50x Inquebrável a 2.20x De Vidro). */
+  propensao_lesao: number;
+  /** Descrição textual revelada gradualmente pelo Olheiro / Fisiologista. */
+  perfil_scout?: string;
 }
 
 export interface LinhaTabela {

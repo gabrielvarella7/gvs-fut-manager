@@ -162,6 +162,34 @@ export function PlayerProfileScreen() {
               <span className="mt-0.5 block">{jogador.genetica.perfil_scout}</span>
             </p>
           )}
+          {jogador.genetica && profissional && (
+            <div className="mt-3 space-y-1 border-t border-zinc-800 pt-3 text-xs text-zinc-400">
+              <p className="font-medium text-zinc-300">Departamento médico / genética</p>
+              <p>
+                Absorção de treino:{' '}
+                <strong className="text-zinc-200">
+                  {jogador.genetica.fator_absorcao.toFixed(2)}×
+                </strong>
+              </p>
+              <p>
+                Propensão a lesão:{' '}
+                <strong className="text-zinc-200">
+                  {jogador.genetica.propensao_lesao.toFixed(2)}×
+                </strong>
+                {jogador.genetica.propensao_lesao >= 1.55
+                  ? ' · de vidro'
+                  : jogador.genetica.propensao_lesao <= 0.78
+                    ? ' · inquebrável'
+                    : ''}
+              </p>
+              {jogador.genetica.perfil_scout && (
+                <p className="text-zinc-500">{jogador.genetica.perfil_scout}</p>
+              )}
+              <p className="text-[10px] text-zinc-600">
+                Teto de potencial (PA) é oculto — o olheiro estima conforme o atributo Pot.
+              </p>
+            </div>
+          )}
         </CmPanel>
       </div>
 

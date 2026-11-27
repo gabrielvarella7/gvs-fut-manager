@@ -29,8 +29,9 @@ export function StaffScreen() {
 
       <h2 className="mb-2 text-sm font-semibold text-emerald-400">Corpo técnico (1–20)</h2>
       <p className="mb-3 text-xs text-zinc-500">
-        Médico preserva atributos na alta · Fisioterapeuta encurta afastamento · Preparador reduz fadiga em
-        jogo · Fisiologista reduz incidência de lesões.
+        Médico elite preserva 100% na alta · Fisioterapeuta até −40% tempo fora · Preparador 18+ até +25%
+        recuperação e menos drain nos 90&apos; · Fisiologista até ×0,30 no risco de lesão · Olheiro Pot estima
+        teto oculto.
       </p>
       <div className="mb-6 grid gap-3 sm:grid-cols-2">
         {(mundo?.staff ?? []).map((p) => {

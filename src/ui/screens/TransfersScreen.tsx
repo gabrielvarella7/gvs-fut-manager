@@ -5,9 +5,9 @@ import {
   formatarDinheiro,
   formatarDinheiroExtenso,
   parseValorMonetario,
-  salarioMensal,
   valorMercado,
 } from '../../career/playerUtils';
+import { descricaoRiscoMercado, getGeneticaSegura, tierPropensao } from '../../career/genetica';
 import { obterNivelRivalidade } from '../../career/mercadoTransferencias';
 import { pretensaoClubeVendedor, pretensaoSalarioJogador } from '../../career/transfers';
 import { rotuloTendenciaSaida, rumorPendenteResposta } from '../../career/sondagemMercado';
@@ -304,13 +304,19 @@ function ListaMercado({
     <ul className="divide-y divide-zinc-800 rounded border border-zinc-700">
       {jogadores.map((j) => {
         const time = timesReais.find((t) => t.id === j.time_id);
+        const risco = descricaoRiscoMercado(j);
+        const g = getGeneticaSegura(j);
+        const tier = tierPropensao(g.propensao_lesao);
         return (
           <li key={j.id} className="flex flex-wrap items-center justify-between gap-2 px-3 py-2 text-sm">
             <div>
               <p className="font-medium text-zinc-100">{j.nome}</p>
               <p className="text-xs text-zinc-500">
                 {time?.nome} · {j.posicao} · OVR {j.overall} · {formatarDinheiro(valorMercado(j))}
+                {tier === 'DE_VIDRO' ? ' · risco físico' : ''}
+                {j.idade <= 22 && g.potencial_maximo - j.overall >= 8 ? ' · teto alto' : ''}
               </p>
+              {risco && <p className="text-[10px] text-amber-500/90">{risco}</p>}
             </div>
             <CmBtn variant="primary" onClick={() => onComprar(j.id)}>
               Negociar

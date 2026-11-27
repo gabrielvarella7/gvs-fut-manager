@@ -1,13 +1,14 @@
-import { mediaAtributosGrupo } from './atributosJogador';
-function jogadorDisponivel(j: Jogador): boolean {
-  return !j.lesao || j.lesao.diasRestantes <= 0;
-}
+import { mediaAtributosGrupo, clampAttr20 } from './atributosJogador';
+import { estimarPotencialOlheiro, getGeneticaSegura } from './genetica';
 import { valorMercado } from './playerUtils';
 import type { NoticiaCarreira } from './types';
 import type { AtributosOlheiro, ProfissionalStaff } from '../types/mundoClube';
 import type { Jogador, Time } from '../types/schema';
 import { criarRng } from '../engine/matchEngine';
-import { clampAttr20 } from './atributosJogador';
+
+function jogadorDisponivel(j: Jogador): boolean {
+  return !j.lesao || j.lesao.diasRestantes <= 0;
+}
 
 export type EixoOlheiro = 'tecnicos' | 'fisicos' | 'mentais' | 'potencial';
 
@@ -72,11 +73,15 @@ export function atributosOlheiroDe(staff: ProfissionalStaff | null, prestigio = 
 
 function scorePotencialJogador(j: Jogador, olheiroPot: number): number {
   const idadeFator = Math.max(0, 24 - j.idade) / 8;
+  const genetica = getGeneticaSegura(j);
   const fb = j.formacaoBase;
-  const teto = fb?.potencialOvr ?? j.overall + Math.round(4 + idadeFator * 6);
+  const teto =
+    genetica.potencial_maximo ??
+    fb?.potencialOvr ??
+    j.overall + Math.round(4 + idadeFator * 6);
   const gap = Math.max(0, teto - j.overall);
   const confianca = olheiroPot / 20;
-  return gap * confianca + (j.idade <= 21 ? 2 : 0);
+  return gap * confianca + (j.idade <= 21 ? 2 : 0) + genetica.fator_absorcao;
 }
 
 function escolherEixo(
@@ -152,12 +157,18 @@ export function gerarNoticiaOlheiroMercado(params: {
   const agora = new Date().toISOString();
 
   if (eixo === 'potencial') {
-    const teto = pick.formacaoBase?.potencialOvr ?? pick.overall + Math.round(5 + attrs.potencial / 4);
+    const real = getGeneticaSegura(pick).potencial_maximo;
+    const tetoEstimado = estimarPotencialOlheiro(real, attrs.potencial, rnd);
+    const erro = Math.abs(tetoEstimado - real);
+    const confianca =
+      attrs.potencial >= 18 ? 'leitura precisa (±2)'
+      : attrs.potencial <= 8 ? 'margem de erro larga'
+      : 'estimativa moderada';
     return {
       id: `olh_pot_${params.rodada}_${pick.id}`,
       data: agora,
       titulo: `Olheiro · aposta com potencial`,
-      texto: `${params.olheiro?.nome ?? 'Olheiro'} (potencial ${attrs.potencial}/20) indica ${pick.nome} (${pick.idade}a, ${pick.overall} OVR, ${timeNome}). Projeção até ~${teto} se evoluir. Valor ${Math.round(valorMercado(pick) / 1_000_000)}M.`,
+      texto: `${params.olheiro?.nome ?? 'Olheiro'} (Pot ${attrs.potencial}/20 · ${confianca}) indica ${pick.nome} (${pick.idade}a, ${pick.overall} OVR, ${timeNome}). Teto estimado ~${tetoEstimado}${erro >= 6 ? ' (incerto)' : ''}. Valor ${Math.round(valorMercado(pick) / 1_000_000)}M.`,
     };
   }
 
