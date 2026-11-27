@@ -277,6 +277,19 @@ export function MatchScreen() {
     [simInput],
   );
 
+  /** Catálogo para o painel Jogador da partida (nomes sem fotos). */
+  const jogadoresInfo = useMemo(() => {
+    const mapa = new Map<number, { id: number; nome: string; timeId: string }>();
+    const add = (j: { id: number; nome: string; time_id: string }) => {
+      mapa.set(j.id, { id: j.id, nome: j.nome, timeId: j.time_id });
+    };
+    for (const j of jogadoresReais) add(j);
+    for (const t of times) {
+      for (const j of t.jogadores) add(j);
+    }
+    return mapa;
+  }, [jogadoresReais, times]);
+
   const gradePartida =
     taticaPersonalizada && gradeTatica11?.length === 11 ? gradeTatica11 : null;
 
@@ -604,6 +617,7 @@ export function MatchScreen() {
             mandanteNome={mandanteNome ?? ''}
             visitanteNome={visitanteNome ?? ''}
             estadio={estadio}
+            jogadoresInfo={jogadoresInfo}
             velocidade={velocidade}
             onVelocidade={setVelocidade}
             pausado={pausado}

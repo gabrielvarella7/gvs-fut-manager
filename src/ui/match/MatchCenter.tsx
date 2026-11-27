@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { estatisticasParciais } from '../../engine/matchStats';
 import type { MatchSimResult } from '../../engine/matchEngine';
+import type { InfoJogadorPartida } from '../../engine/jogadorDaPartida';
 import { MatchMomentum } from './MatchMomentum';
 import { MatchPreGame } from './MatchPreGame';
 import { MatchStatsPanel } from './MatchStatsPanel';
@@ -18,6 +19,7 @@ type Props = {
   mandanteNome: string;
   visitanteNome: string;
   estadio?: string;
+  jogadoresInfo?: ReadonlyMap<number, InfoJogadorPartida> | Readonly<Record<number, InfoJogadorPartida>>;
   velocidade: VelocidadePlayback;
   onVelocidade: (v: VelocidadePlayback) => void;
   pausado: boolean;
@@ -41,6 +43,7 @@ export function MatchCenter({
   mandanteNome,
   visitanteNome,
   estadio,
+  jogadoresInfo,
   velocidade,
   onVelocidade,
   pausado,
@@ -98,6 +101,7 @@ export function MatchCenter({
           result={result}
           mandanteNome={mandanteNome}
           visitanteNome={visitanteNome}
+          jogadoresInfo={jogadoresInfo}
           velocidade={velocidade}
           pausado={pausado}
           onPausado={onPausado}
