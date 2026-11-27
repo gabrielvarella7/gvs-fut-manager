@@ -40,6 +40,10 @@ import { persistirComercialDexie } from '../db/commercialPersistence';
 import { migrarFinancasLegado } from '../career/financasPersistencia';
 import { enriquecerElenco } from '../career/jogadorContratoInit';
 import {
+  aplicarStatusEscalacaoElenco,
+  validarRelacionadosPartida,
+} from '../career/lineup';
+import {
   aplicarSnapshotJogadores,
   avaliarOfertaCompra,
   avaliarRespostaVenda,
@@ -168,6 +172,7 @@ interface GameStore extends EstadoCarreira {
   commitEscolhaTatica: (p: {
     esquema: EsquemaTatico;
     alinhamento11: number[];
+    banco11: number[];
     gradeTatica11: { col: number; row: number; gol?: boolean }[] | null;
     personalizado: boolean;
     configTatica?: ConfiguracaoTaticaClube;
@@ -272,6 +277,7 @@ const estadoInicial = (): EstadoCarreira & {
   timeUsuarioId: null,
   esquemaAtual: '4-4-2',
   alinhamento11: null,
+  banco11: null,
   usoTaticaPersonalizada: false,
   gradeTatica11: null,
   configTatica: configuracaoPadrao('4-4-2'),
@@ -375,6 +381,15 @@ export const useGameStore = create<GameStore>((set, get) => ({
     }
     if (tela === 'partida') {
       const s = get();
+      const relacionados = validarRelacionadosPartida(s.alinhamento11, s.banco11);
+      if (!relacionados.ok) {
+        set({
+          tela: 'tatica',
+          partidaJogoEmCurso: null,
+          avisoSalvo: relacionados.motivo,
+        });
+        return;
+      }
       if (!s.clubeRealId) {
         const proxT = proximoJogoTorneioAmador(s.jogos);
         if (!proxT) {
@@ -478,7 +493,14 @@ export const useGameStore = create<GameStore>((set, get) => ({
       tela: 'hub_torneio',
     });
   },
-  commitEscolhaTatica: ({ esquema, alinhamento11, gradeTatica11, personalizado, configTatica }) =>
+  commitEscolhaTatica: ({
+    esquema,
+    alinhamento11,
+    banco11,
+    gradeTatica11,
+    personalizado,
+    configTatica,
+  }) =>
     set((s) => {
       const cfg =
         configTatica ??
@@ -499,14 +521,45 @@ export const useGameStore = create<GameStore>((set, get) => ({
           ),
         };
       }
+      const titSet = new Set(alinhamento11.filter((id) => id > 0));
+      const bancoLimpo = banco11.filter((id) => id > 0 && !titSet.has(id)).slice(0, 11);
+      let jogadoresReais = s.jogadoresReais;
+      let timesFicticios = s.timesFicticios;
+      if (s.clubeRealId) {
+        jogadoresReais = aplicarStatusEscalacaoElenco(
+          jogadoresReais,
+          alinhamento11,
+          bancoLimpo,
+        );
+        void persistirJogadoresDexie(jogadoresReais).catch(console.error);
+      } else if (s.timeUsuarioId) {
+        timesFicticios = timesFicticios.map((t) =>
+          t.id !== s.timeUsuarioId
+            ? t
+            : {
+                ...t,
+                jogadores: aplicarStatusEscalacaoElenco(
+                  t.jogadores,
+                  alinhamento11,
+                  bancoLimpo,
+                ),
+              },
+        );
+      }
+      const check = validarRelacionadosPartida(alinhamento11, bancoLimpo);
       return {
         esquemaAtual: esquema,
         alinhamento11,
+        banco11: bancoLimpo,
         gradeTatica11: personalizado ? gradeTatica11 : null,
         usoTaticaPersonalizada: personalizado,
         configTatica: cfg,
         mundoClube,
-        avisoSalvo: 'Tática salva para os próximos jogos',
+        jogadoresReais,
+        timesFicticios,
+        avisoSalvo: check.ok
+          ? 'Tática salva — 11 titulares e 11 reservas relacionados.'
+          : `Tática salva. ${check.motivo ?? 'Complete 11+11 para jogar.'}`,
       };
     }),
   esquemaDoUsuario: () => {
@@ -700,6 +753,14 @@ export const useGameStore = create<GameStore>((set, get) => ({
   jogarComAuxiliar: () => {
     const s = get();
     if (!s.brasileirao || !s.clubeRealId) return;
+    const relacionados = validarRelacionadosPartida(s.alinhamento11, s.banco11);
+    if (!relacionados.ok) {
+      set({
+        tela: 'tatica',
+        avisoSalvo: relacionados.motivo,
+      });
+      return;
+    }
     const prox = proximaPartidaUsuario(s.brasileirao, s.clubeRealId);
     if (!prox) return;
     if (!ehDiaDeJogo(s.brasileirao, s.clubeRealId)) {
@@ -786,6 +847,9 @@ export const useGameStore = create<GameStore>((set, get) => ({
     const alinhamento = s.alinhamento11
       ? s.alinhamento11.map((jid) => (jid === neg.jogadorId ? 0 : jid))
       : s.alinhamento11;
+    const banco = s.banco11
+      ? s.banco11.filter((jid) => jid !== neg.jogadorId)
+      : s.banco11;
     set({
       jogadoresReais: fechamento.jogadores,
       financas: fechamento.financas,
@@ -793,6 +857,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
         n.id === negId ? { ...n, status: 'concluida' as const } : n,
       ),
       alinhamento11: alinhamento,
+      banco11: banco,
       avisoSalvo: 'Jogador aceitou — venda concluída.',
       noticias: deduplicarNoticias([
         {
@@ -1279,6 +1344,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
       timeUsuarioId: s.timeUsuarioId,
       esquemaAtual: s.esquemaAtual,
       alinhamento11: s.alinhamento11,
+      banco11: s.banco11,
       usoTaticaPersonalizada: s.usoTaticaPersonalizada,
       gradeTatica11: s.gradeTatica11,
       configTatica: s.configTatica,
@@ -1414,6 +1480,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
       timeUsuarioId: data.timeUsuarioId ?? null,
       esquemaAtual: data.esquemaAtual ?? data.perfil?.esquemaPreferido ?? '4-4-2',
       alinhamento11: data.alinhamento11 ?? null,
+      banco11: data.banco11 ?? null,
       usoTaticaPersonalizada: data.usoTaticaPersonalizada ?? false,
       gradeTatica11: data.gradeTatica11 ?? null,
       configTatica: data.configTatica ?? configuracaoPadrao(data.esquemaAtual ?? '4-4-2'),
@@ -1542,6 +1609,10 @@ export const useGameStore = create<GameStore>((set, get) => ({
         proxNeg.tipo === 'venda' && s.alinhamento11
           ? s.alinhamento11.map((jid) => (jid === proxNeg.jogadorId ? 0 : jid))
           : s.alinhamento11;
+      const banco =
+        proxNeg.tipo === 'venda' && s.banco11
+          ? s.banco11.filter((jid) => jid !== proxNeg.jogadorId)
+          : s.banco11;
       const noticia: NoticiaCarreira = {
         id: `n_tr_${Date.now()}`,
         data: new Date().toISOString(),
@@ -1555,6 +1626,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
           n.id === negId ? { ...proxNeg, status: 'concluida' as const } : n,
         ),
         alinhamento11: alinhamento,
+        banco11: banco,
         noticias: deduplicarNoticias([noticia, ...s.noticias]),
         avisoSalvo: 'Transferência concluída',
       });
@@ -1742,6 +1814,9 @@ export const useGameStore = create<GameStore>((set, get) => ({
       const alinhamento = s.alinhamento11
         ? s.alinhamento11.map((jid) => (jid === neg.jogadorId ? 0 : jid))
         : s.alinhamento11;
+      const banco = s.banco11
+        ? s.banco11.filter((jid) => jid !== neg.jogadorId)
+        : s.banco11;
       set({
         jogadoresReais: fechamento.jogadores,
         financas: fechamento.financas,
@@ -1749,6 +1824,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
           n.id === negId ? { ...n, status: 'concluida' as const } : n,
         ),
         alinhamento11: alinhamento,
+        banco11: banco,
         noticias: deduplicarNoticias([
           {
             id: `n_tr_${Date.now()}`,

@@ -4,6 +4,7 @@ import {
   rotuloBloqueioLesaoEnergia,
 } from '../../career/aptidaoEscalacao';
 import { corClasseEnergia, rotuloEnergiaCurto } from '../../career/energia';
+import { RESERVAS_PARTIDA } from '../../career/lineup';
 import { rotuloPosicao } from '../../career/perfilJogador';
 import { rotuloPosicaoCampinho } from '../../data/gradeCampinho';
 import type { CelulaGrade } from '../../data/gradeCampinho';
@@ -13,6 +14,8 @@ import type { EsquemaTatico, Jogador } from '../../types/schema';
 type Props = {
   elenco: Jogador[];
   slotIds: number[];
+  /** Até 11 reservas relacionadas para a partida. */
+  bancoIds: number[];
   grade11: CelulaGrade[];
   esquema: EsquemaTatico;
   compact?: boolean;
@@ -20,6 +23,8 @@ type Props = {
   reservaAtiva: number | null;
   onSlotClick: (slot: number) => void;
   onReservaClick: (jogadorId: number) => void;
+  /** Alterna jogador entre banco relacionado e fora da lista. */
+  onToggleBanco: (jogadorId: number) => void;
   onArrastarJogador?: (jogadorId: number) => void;
   arrastandoJogadorId?: number | null;
   /** Slot do campo aguardando reserva (arraste saiu do gramado) */
@@ -128,6 +133,7 @@ function MiniJogador({
 export function TacticSquadPanel({
   elenco,
   slotIds,
+  bancoIds,
   grade11,
   esquema,
   compact = false,
@@ -135,6 +141,7 @@ export function TacticSquadPanel({
   reservaAtiva,
   onSlotClick,
   onReservaClick,
+  onToggleBanco,
   onArrastarJogador,
   arrastandoJogadorId = null,
   slotAguardandoReserva = null,
@@ -142,19 +149,26 @@ export function TacticSquadPanel({
 }: Props) {
   const porId = new Map(elenco.map((j) => [j.id, j]));
   const slots = SLOTS_POR_ESQUEMA[esquemaOuPadrao(esquema)];
-  const titularesIds = new Set(slotIds);
-  const reservas = elenco.filter((j) => !titularesIds.has(j.id));
+  const titularesIds = new Set(slotIds.filter((id) => id > 0));
+  const bancoSet = new Set(bancoIds.filter((id) => id > 0 && !titularesIds.has(id)));
+  const reservas = bancoIds
+    .map((id) => porId.get(id))
+    .filter((j): j is Jogador => j != null && !titularesIds.has(j.id));
+  const foraDaLista = elenco.filter((j) => !titularesIds.has(j.id) && !bancoSet.has(j.id));
+  const bancoCompleto = reservas.length >= RESERVAS_PARTIDA;
 
   return (
     <div
       className={`flex flex-col gap-3 ${compact ? 'max-h-[min(64vh,480px)]' : ''} overflow-hidden`}
     >
       <p className="text-[10px] uppercase tracking-wide text-zinc-500">
-        Para o campo: arraste a reserva · do campo: solte fora e toque na reserva
+        Relacione 11 titulares + 11 reservas. Toque em “fora da lista” para incluir no banco.
       </p>
 
       <section className="min-h-0 flex-1 overflow-y-auto">
-        <h3 className="mb-1.5 text-xs font-semibold text-emerald-400">Titulares ({slotIds.length})</h3>
+        <h3 className="mb-1.5 text-xs font-semibold text-emerald-400">
+          Titulares ({slotIds.filter((id) => id > 0).length}/11)
+        </h3>
         <ul className={`space-y-1 ${compact ? '' : 'grid gap-1 sm:grid-cols-2'}`}>
           {slotIds.map((id, i) => {
             const j = porId.get(id);
@@ -194,12 +208,18 @@ export function TacticSquadPanel({
       </section>
 
       <section className="min-h-0 flex-1 overflow-y-auto border-t border-zinc-800 pt-2">
-        <h3 className="mb-1.5 text-xs font-semibold text-zinc-400">
-          Reservas ({reservas.length})
+        <h3
+          className={`mb-1.5 text-xs font-semibold ${
+            bancoCompleto ? 'text-sky-400' : 'text-amber-400'
+          }`}
+        >
+          Reservas relacionadas ({reservas.length}/{RESERVAS_PARTIDA})
         </h3>
         <ul className="space-y-1">
           {reservas.length === 0 ? (
-            <li className="text-xs text-zinc-500">Todos no time</li>
+            <li className="text-xs text-zinc-500">
+              Nenhuma reserva. Toque em um jogador em “fora da lista”.
+            </li>
           ) : (
             reservas.map((j) => {
               const bloqueado = bloqueadoPorLesaoComEnergiaBaixa(j);
@@ -211,7 +231,7 @@ export function TacticSquadPanel({
                     detalhe={
                       bloqueado
                         ? `⚠ ${aviso ?? 'Não pode jogar'}`
-                        : rotuloPosicao(j.posicao)
+                        : `${rotuloPosicao(j.posicao)} · toque p/ tirar do banco`
                     }
                     ovr={j.overall}
                     energia={j.energia}
@@ -229,7 +249,61 @@ export function TacticSquadPanel({
                       if (!bloqueado) onSoltarReservaComCampo?.(j.id);
                     }}
                     onClick={() => {
-                      if (!bloqueado) onReservaClick(j.id);
+                      if (bloqueado) return;
+                      if (slotAguardandoReserva != null) {
+                        onReservaClick(j.id);
+                        return;
+                      }
+                      onToggleBanco(j.id);
+                    }}
+                  />
+                </li>
+              );
+            })
+          )}
+        </ul>
+      </section>
+
+      <section className="min-h-0 flex-1 overflow-y-auto border-t border-zinc-800 pt-2">
+        <h3 className="mb-1.5 text-xs font-semibold text-zinc-400">
+          Fora da lista ({foraDaLista.length})
+        </h3>
+        <ul className="space-y-1">
+          {foraDaLista.length === 0 ? (
+            <li className="text-xs text-zinc-500">Todos relacionados.</li>
+          ) : (
+            foraDaLista.map((j) => {
+              const bloqueado = bloqueadoPorLesaoComEnergiaBaixa(j);
+              const aviso = rotuloBloqueioLesaoEnergia(j);
+              return (
+                <li key={j.id}>
+                  <MiniJogador
+                    nome={nomeCurto(j.nome)}
+                    detalhe={
+                      bloqueado
+                        ? `⚠ ${aviso ?? 'Não pode jogar'}`
+                        : bancoCompleto
+                          ? `${rotuloPosicao(j.posicao)} · banco cheio`
+                          : `${rotuloPosicao(j.posicao)} · toque p/ relacionar`
+                    }
+                    ovr={j.overall}
+                    energia={j.energia}
+                    ativo={reservaAtiva === j.id}
+                    bloqueado={bloqueado}
+                    titleBloqueio={aviso}
+                    arrastando={arrastandoJogadorId === j.id}
+                    onArrastar={(e) => {
+                      if (bloqueado) return;
+                      e.preventDefault();
+                      onArrastarJogador?.(j.id);
+                    }}
+                    onClick={() => {
+                      if (bloqueado) return;
+                      if (slotAguardandoReserva != null || reservaAtiva != null) {
+                        onReservaClick(j.id);
+                        return;
+                      }
+                      onToggleBanco(j.id);
                     }}
                   />
                 </li>
