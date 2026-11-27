@@ -5,6 +5,8 @@ export {
   calcularFatorMoral,
   calcularNecessidade,
   detectarClassico,
+  fatorFormaCampeonato,
+  fatorFormaRecente,
   montarContextoPartidaDb,
   montarContextoPartidaSync,
 } from './matchContext';
