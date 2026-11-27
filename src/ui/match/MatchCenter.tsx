@@ -1,5 +1,8 @@
 import { useState } from 'react';
-import { estatisticasParciais } from '../../engine/matchStats';
+import {
+  estatisticasParciais,
+  type PeriodoEstatisticas,
+} from '../../engine/matchStats';
 import type { MatchSimResult } from '../../engine/matchEngine';
 import { MatchMomentum } from './MatchMomentum';
 import { MatchPreGame } from './MatchPreGame';
@@ -59,10 +62,11 @@ export function MatchCenter({
 }: Props) {
   const [aba, setAba] = useState<Aba>('comentario');
   const [minuto, setMinuto] = useState(0);
+  const [periodoStats, setPeriodoStats] = useState<PeriodoEstatisticas>('todos');
 
   const stats =
     result.estatisticas &&
-    estatisticasParciais(result, minuto, result.mandanteId);
+    estatisticasParciais(result, minuto, result.mandanteId, periodoStats);
 
   const abas: { id: Aba; label: string }[] = [
     { id: 'detalhes', label: 'Detalhes' },
@@ -120,6 +124,8 @@ export function MatchCenter({
             visitante={stats.visitante}
             mandanteNome={mandanteNome}
             visitanteNome={visitanteNome}
+            periodo={periodoStats}
+            onPeriodo={setPeriodoStats}
           />
           <MatchMomentum
             momento={result.estatisticas.momento}
@@ -145,6 +151,8 @@ export function MatchCenter({
           visitante={stats.visitante}
           mandanteNome={mandanteNome}
           visitanteNome={visitanteNome}
+          periodo={periodoStats}
+          onPeriodo={setPeriodoStats}
         />
       )}
 
