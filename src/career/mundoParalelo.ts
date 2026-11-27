@@ -15,6 +15,7 @@ import {
   normalizarAtributosOlheiro,
   obterOlheiro,
 } from './olheiroScout';
+import { recuperarEnergiaUmDia } from './energia';
 import { nivelDiretorBase } from './staffEfeitos';
 import {
   calcularValorMercado,
@@ -26,6 +27,7 @@ import {
   aplicarAltaMedica,
   criarLesaoComReabilitacao,
   multChanceLesaoFisiologista,
+  nivelStaff,
   staffEstaAtualizado,
 } from './staffEfeitos';
 import type {
@@ -227,12 +229,15 @@ export function aplicarLesoesPosPartida(
   idsParticipantes: number[],
   seed: number,
   mundo?: EstadoMundoClube | null,
+  /** Já lesionados em campo — não sortear de novo. */
+  idsJaLesionados?: ReadonlySet<number>,
 ): { jogadores: Jogador[]; noticias: NoticiaCarreira[] } {
   const rnd = criarRng(seed);
   const set = new Set(idsParticipantes);
   const noticias: NoticiaCarreira[] = [];
   const next = jogadores.map((j) => {
     if (!set.has(j.id) || !jogadorDisponivel(j)) return j;
+    if (idsJaLesionados?.has(j.id)) return j;
     const lesao = sortearLesao(j, rnd, 'jogo', mundo);
     if (!lesao) return j;
     noticias.push({
@@ -242,6 +247,42 @@ export function aplicarLesoesPosPartida(
       texto: `${j.nome} teve ${lesao.descricao} e ficará cerca de ${lesao.diasRestantes} dias afastado.`,
     });
     return { ...j, lesao, energia: Math.min(j.energia, 42) };
+  });
+  return { jogadores: next, noticias };
+}
+
+/** Aplica lesões ocorridas durante a simulação (fadiga). */
+export function aplicarLesoesEmCampo(
+  jogadores: Jogador[],
+  lesoes: {
+    jogadorId: number;
+    descricao: string;
+    gravidade: GravidadeLesao;
+    diasBase: number;
+  }[],
+  mundo?: EstadoMundoClube | null,
+): { jogadores: Jogador[]; noticias: NoticiaCarreira[] } {
+  if (!lesoes.length) return { jogadores, noticias: [] };
+  const porId = new Map(lesoes.map((l) => [l.jogadorId, l]));
+  const noticias: NoticiaCarreira[] = [];
+  const nivelFisio = nivelStaff(mundo, 'FISIOTERAPEUTA');
+  const next = jogadores.map((j) => {
+    const info = porId.get(j.id);
+    if (!info) return j;
+    const lesao = criarLesaoComReabilitacao(
+      info.diasBase,
+      info.gravidade,
+      info.descricao,
+      j,
+      nivelFisio,
+    );
+    noticias.push({
+      id: `lesao_campo_${j.id}_${Date.now()}`,
+      data: new Date().toISOString(),
+      titulo: `Lesão em campo: ${j.nome}`,
+      texto: `${j.nome} saiu com ${info.descricao} (${info.gravidade.toLowerCase()}). Previsão de ${lesao.diasRestantes} dias fora.`,
+    });
+    return { ...j, lesao, energia: Math.min(j.energia, 38) };
   });
   return { jogadores: next, noticias };
 }
@@ -733,6 +774,7 @@ export function tickMundoPorDia(params: TickDiaMundoParams): {
   const rnd = criarRng(rndSeed(params.dataISO, params.clubeId));
   let mundo = params.mundo;
   let jogadores = recuperarLesoesUmDia(params.jogadores, mundo);
+  jogadores = recuperarEnergiaUmDia(jogadores, rnd);
   const noticias: NoticiaCarreira[] = [];
 
   const elenco = jogadores.filter((j) => j.time_id === params.clubeId && jogadorDisponivel(j));
@@ -775,6 +817,8 @@ export interface TickRodadaMundoParams {
   time: Time;
   seed: number;
   idsParticipantes?: number[];
+  /** Lesionados durante a partida (fadiga) — evita sorteio duplicado. */
+  idsLesionadosEmCampo?: number[];
 }
 
 export function tickMundoPosRodada(params: TickRodadaMundoParams): {
@@ -864,11 +908,13 @@ export function tickMundoPosRodada(params: TickRodadaMundoParams): {
   if (notOlh) noticias.push(notOlh);
 
   if (params.idsParticipantes?.length) {
+    const jaLesionados = new Set(params.idsLesionadosEmCampo ?? []);
     const lesoes = aplicarLesoesPosPartida(
       jogadores,
       params.idsParticipantes,
       params.seed ^ 0x55,
       mundo,
+      jaLesionados,
     );
     jogadores = lesoes.jogadores;
     noticias.push(...lesoes.noticias);

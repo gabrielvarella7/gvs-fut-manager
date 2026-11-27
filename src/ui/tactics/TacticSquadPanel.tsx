@@ -1,4 +1,5 @@
 import type { PointerEvent as ReactPointerEvent } from 'react';
+import { corClasseEnergia, rotuloEnergiaCurto } from '../../career/energia';
 import { rotuloPosicao } from '../../career/perfilJogador';
 import { rotuloPosicaoCampinho } from '../../data/gradeCampinho';
 import type { CelulaGrade } from '../../data/gradeCampinho';
@@ -31,6 +32,7 @@ function MiniJogador({
   nome,
   detalhe,
   ovr,
+  energia,
   ativo,
   titular,
   onClick,
@@ -42,6 +44,7 @@ function MiniJogador({
   nome: string;
   detalhe: string;
   ovr: number;
+  energia?: number;
   ativo: boolean;
   titular?: boolean;
   onClick: () => void;
@@ -50,6 +53,7 @@ function MiniJogador({
   arrastando?: boolean;
   alvoSubstituicao?: boolean;
 }) {
+  const energiaBaixa = energia != null && energia < 70;
   return (
     <button
       type="button"
@@ -71,9 +75,11 @@ function MiniJogador({
             ? 'border-amber-500 bg-amber-950/60 opacity-90'
             : ativo
               ? 'border-emerald-500 bg-emerald-950/80'
-              : titular
-                ? 'border-zinc-600 bg-zinc-800/90 hover:border-zinc-500'
-                : 'border-zinc-700 bg-zinc-900/60 hover:border-zinc-600'
+              : energiaBaixa
+                ? 'border-amber-800/80 bg-zinc-900/70 hover:border-amber-600'
+                : titular
+                  ? 'border-zinc-600 bg-zinc-800/90 hover:border-zinc-500'
+                  : 'border-zinc-700 bg-zinc-900/60 hover:border-zinc-600'
       }`}
     >
       <span
@@ -87,6 +93,14 @@ function MiniJogador({
         <span className="block truncate text-xs font-medium text-zinc-100">{nome}</span>
         <span className="block truncate text-[10px] text-zinc-500">{detalhe}</span>
       </span>
+      {energia != null && (
+        <span
+          className={`shrink-0 text-[10px] font-semibold tabular-nums ${corClasseEnergia(energia)}`}
+          title="Energia"
+        >
+          {rotuloEnergiaCurto(energia)}
+        </span>
+      )}
     </button>
   );
 }
@@ -134,6 +148,7 @@ export function TacticSquadPanel({
                   nome={j ? nomeCurto(j.nome) : '—'}
                   detalhe={`${sigla} · ${pos}`}
                   ovr={j?.overall ?? 0}
+                  energia={j?.energia}
                   ativo={slotAtivo === i}
                   titular
                   arrastando={j != null && arrastandoJogadorId === j.id}
@@ -164,6 +179,7 @@ export function TacticSquadPanel({
                   nome={nomeCurto(j.nome)}
                   detalhe={rotuloPosicao(j.posicao)}
                   ovr={j.overall}
+                  energia={j.energia}
                   ativo={reservaAtiva === j.id}
                   arrastando={arrastandoJogadorId === j.id}
                   alvoSubstituicao={slotAguardandoReserva != null}

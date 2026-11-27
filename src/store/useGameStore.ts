@@ -93,9 +93,12 @@ import {
   investimentoBaseMensal,
   normalizarEstadoMundoClube,
   noticiasClimaTorcedor,
+  aplicarLesoesEmCampo,
   tickMundoPorDia,
   tickMundoPosRodada,
 } from '../career/mundoParalelo';
+import { recuperarEnergiaUmDia } from '../career/energia';
+import { criarRng } from '../engine/matchEngine';
 import type { FocoCategoriaBase, NivelInvestimentoBase } from '../types/mundoClube';
 import { corpoTecnicoDeMundo } from '../career/treinoStaff';
 import {
@@ -653,6 +656,11 @@ export const useGameStore = create<GameStore>((set, get) => ({
       jogadores = tick.jogadores;
       mundo = tick.mundo;
       extras = tick.noticias;
+    } else {
+      jogadores = recuperarEnergiaUmDia(
+        jogadores,
+        criarRng((Date.parse(estado.dataAtualISO) ^ 0xeca1) >>> 0),
+      );
     }
     let negociacoes = s.negociacoesTransferencia;
     for (let i = 0; i < negociacoes.length; i++) {
@@ -837,6 +845,16 @@ export const useGameStore = create<GameStore>((set, get) => ({
     const s = get();
     if (!s.brasileirao || !s.campeonato || !s.clubeRealId) return;
     let jogadores = aplicarFadigaPosPartida(s.jogadoresReais, result.energiaFinal);
+    const noticiasLesaoCampo: NoticiaCarreira[] = [];
+    if (result.lesoesEmCampo?.length) {
+      const aplicadas = aplicarLesoesEmCampo(
+        jogadores,
+        result.lesoesEmCampo,
+        s.mundoClube,
+      );
+      jogadores = aplicadas.jogadores;
+      noticiasLesaoCampo.push(...aplicadas.noticias);
+    }
     let estado = registrarPlacarPartida(
       s.brasileirao,
       partidaId,
@@ -1043,6 +1061,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
         time: clube,
         seed: seed ^ 0xdecaf,
         idsParticipantes: result.energiaFinal.map((e) => e.id),
+        idsLesionadosEmCampo: result.lesoesEmCampo?.map((l) => l.jogadorId),
       });
       jogadores = tickRodada.jogadores;
       mundoClube = tickRodada.mundo;
@@ -1071,7 +1090,12 @@ export const useGameStore = create<GameStore>((set, get) => ({
       partidaAtual: result,
       partidaJogoId: partidaId,
       tela: 'partida',
-      noticias: deduplicarNoticias([noticiaRodada, ...noticiasMundo, ...s.noticias]),
+      noticias: deduplicarNoticias([
+        noticiaRodada,
+        ...noticiasLesaoCampo,
+        ...noticiasMundo,
+        ...s.noticias,
+      ]),
     });
     void (async () => {
       await sincronizarCarreiraDexie({ brasileirao: estado, clubeRealId: s.clubeRealId! });

@@ -1,5 +1,6 @@
 import { getTimeFicticio } from '../../career/fictionalLeague';
 import { mediaAtributosGrupo } from '../../career/atributosJogador';
+import { corClasseEnergia, overallEfetivoPorEnergia } from '../../career/energia';
 import { ordenarElenco } from '../../career/ordenarElenco';
 import { formatarDinheiro, salarioMensal, valorMercado } from '../../career/playerUtils';
 import { useGameStore } from '../../store/useGameStore';
@@ -27,7 +28,7 @@ export function SquadScreen() {
   return (
     <CmCareerShell
       titulo={`Elenco — ${titulo}`}
-      subtitulo="Médias técnicos / mentais / físicos (1–20), valor e salário"
+      subtitulo="Energia, médias técnicos / mentais / físicos (1–20), valor e salário"
     >
       <SquadTable
         elenco={elenco}
@@ -59,6 +60,7 @@ function SquadTable({
             <th>Pos</th>
             <th>Id</th>
             <th>OVR</th>
+            <th>Energia</th>
             <th>Téc</th>
             <th>Men</th>
             <th>Fís</th>
@@ -85,7 +87,15 @@ function SquadTable({
               </td>
               <td>{j.posicao}</td>
               <td>{j.idade}</td>
-              <td className="text-emerald-400">{j.overall}</td>
+              <td className="text-emerald-400">
+                {j.overall}
+                {j.energia < 92 && (
+                  <span className="ml-1 text-[10px] text-zinc-500" title="OVR efetivo pela energia">
+                    →{overallEfetivoPorEnergia(j.overall, j.energia)}
+                  </span>
+                )}
+              </td>
+              <td className={corClasseEnergia(j.energia)}>{Math.round(j.energia)}%</td>
               <td>{mediaAtributosGrupo(j.atributos, 'tecnicos')}</td>
               <td>{mediaAtributosGrupo(j.atributos, 'mentais')}</td>
               <td>{mediaAtributosGrupo(j.atributos, 'fisicos')}</td>
