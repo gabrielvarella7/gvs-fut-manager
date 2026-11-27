@@ -27,10 +27,10 @@ export function WelcomeSplashScreen({ onComecar }: Props) {
       <div className="welcome-splash__photo mb-8 inline-block max-w-full overflow-hidden rounded-lg border border-emerald-700/40 shadow-lg shadow-black/40">
         <img
           src={publicPath('assets/mourinho-welcome.jpg')}
-          alt="José Mourinho sorrindo"
+          alt="José Mourinho sorrindo — era Chelsea"
           className="welcome-splash__img block h-auto max-w-full"
-          width={674}
-          height={828}
+          width={816}
+          height={1233}
         />
       </div>
 
@@ -43,16 +43,16 @@ export function WelcomeSplashScreen({ onComecar }: Props) {
       </button>
 
       <p className="mt-6 max-w-sm text-[10px] leading-relaxed text-zinc-500">
-        Foto: Hilmi Hacaloğlu / VOA —{' '}
+        Foto: Mark Freeman —{' '}
         <a
           className="underline decoration-zinc-600 underline-offset-2 hover:text-zinc-400"
-          href="https://commons.wikimedia.org/wiki/File:Fenerbahce_manager_Jose_Mourinho_and_Ali_Ko%C3%A7,_June_2024_(cropped).jpg"
+          href="https://commons.wikimedia.org/wiki/File:JoseMourinho.jpg"
           target="_blank"
           rel="noreferrer"
         >
           Wikimedia Commons
         </a>
-        , domínio público
+        , CC BY 2.0
       </p>
     </div>
   );

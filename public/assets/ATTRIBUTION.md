@@ -2,9 +2,12 @@
 
 ## mourinho-welcome.jpg
 
-Foto de José Mourinho sorrindo (rosto de frente) usada na tela de boas-vindas.
+Foto de José Mourinho (rosto sorridente / “grin”, primeira passagem no Chelsea) usada na tela de boas-vindas.
 
-- **Arquivo original:** [Fenerbahce manager Jose Mourinho and Ali Koç, June 2024 (cropped).jpg](https://commons.wikimedia.org/wiki/File:Fenerbahce_manager_Jose_Mourinho_and_Ali_Ko%C3%A7,_June_2024_(cropped).jpg) (Wikimedia Commons)
-- **Autor:** Hilmi Hacaloğlu / [Voice of America (VOA Türkçe)](https://www.voaturkce.com/a/7639748.html)
-- **Licença:** domínio público (material VOA nos EUA)
-- **Alterações:** leve recorte inferior (microfone); redimensionamento para uso na web
+- **Arquivo:** [JoseMourinho.jpg](https://commons.wikimedia.org/wiki/File:JoseMourinho.jpg) (Wikimedia Commons)
+- **Fonte Flickr:** [Jose Mourinho - Chelsea on Tour - 20/FEB/2007](https://www.flickr.com/photos/46357488@N00/398904339/)
+- **Autor:** Mark Freeman (Free-ers) — Hornchurch, UK
+- **Licença:** [Creative Commons Attribution 2.0 Generic (CC BY 2.0)](https://creativecommons.org/licenses/by/2.0/)
+- **Alterações:** uso do recorte já publicado no Commons; ampliação/leve contraste para a web
+
+**Nota:** a foto icônica da apresentação “Special One” (conferência de imprensa do Chelsea, junho de 2004 — tipicamente Andrew Parsons / PA / Getty) **não está disponível** sob licença livre no Commons. Esta é a alternativa Commons mais próxima daquela era (rosto claro, sorriso/grin, Chelsea 1ª passagem).
