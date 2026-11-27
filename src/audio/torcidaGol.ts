@@ -7,7 +7,7 @@ const SRC_GOL = publicPath('audio/gol-torcida.mp3');
 const DURACAO_S = 1;
 
 let clip: HTMLAudioElement | null = null;
-let pararTimer: ReturnType<typeof setTimeout> | null = null;
+let pararTimer: number | null = null;
 
 function obterClip(): HTMLAudioElement | null {
   if (typeof window === 'undefined') return null;
@@ -18,16 +18,20 @@ function obterClip(): HTMLAudioElement | null {
   return clip;
 }
 
+function limparPararTimer(): void {
+  if (pararTimer != null) {
+    window.clearTimeout(pararTimer);
+    pararTimer = null;
+  }
+}
+
 /** ~1s — comemoração de torcida (MP3) ao marcar gol. */
 export function tocarComemoracaoTorcidaGol(): void {
   if (!somGolAtivo()) return;
   const audio = obterClip();
   if (!audio) return;
 
-  if (pararTimer != null) {
-    window.clearTimeout(pararTimer);
-    pararTimer = null;
-  }
+  limparPararTimer();
 
   audio.pause();
   audio.currentTime = 0;
@@ -39,4 +43,22 @@ export function tocarComemoracaoTorcidaGol(): void {
     audio.pause();
     pararTimer = null;
   }, DURACAO_S * 1000);
+}
+
+/**
+ * Áudio de gol completo na tela de boas-vindas.
+ * Tenta tocar ao montar a splash; se o autoplay for bloqueado, chame de novo no Clique em Começar.
+ */
+export function tocarAudioGolBoasVindas(): void {
+  if (!somGolAtivo()) return;
+  const audio = obterClip();
+  if (!audio) return;
+
+  limparPararTimer();
+
+  audio.pause();
+  audio.currentTime = 0;
+  void audio.play().catch(() => {
+    /* autoplay bloqueado até interação do usuário */
+  });
 }
