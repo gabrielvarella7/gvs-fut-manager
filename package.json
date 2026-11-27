@@ -20,6 +20,7 @@
     "smoke:affinity": "node scripts/smoke-affinity-ovr-parity.mjs",
     "smoke:matrix": "node scripts/smoke-position-recalculator.mjs",
     "smoke:slots": "npx --yes tsx scripts/smoke-pe-pd-st-slots.mjs",
+    "smoke:sub23-ovr": "npx --yes tsx scripts/smoke-sub23-ovr-plantel.mjs",
     "sync": "powershell -NoProfile -ExecutionPolicy Bypass -File ./scripts/sync-nuvem.ps1"
   },
   "dependencies": {
