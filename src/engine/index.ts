@@ -1,11 +1,11 @@
 export * from './matchEngine';
 export {
-  eventosMomentoDeLancamentos,
-  finalizarSerieMomento,
+  gerarGraficoMomentum,
+  mapearEstiloTatica,
   mesclarSerieMomento,
   momentoAteMinuto,
 } from './matchMomentum';
-export type { EventoMomento, PressaoMinuto } from './matchMomentum';
+export type { MomentumGraphInput, TacticStyle } from './matchMomentum';
 export { simularPartidaNoWorker } from './runMatchInWorker';
 export type { ContextoDinamicoPartida, ContextoNecessidade, ResultadoRecente } from './matchContext';
 export {

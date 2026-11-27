@@ -31,11 +31,7 @@ import {
   type EstatisticasPartida,
   type PreJogoInfo,
 } from './matchStats';
-import {
-  eventosMomentoDeLancamentos,
-  finalizarSerieMomento,
-  type PressaoMinuto,
-} from './matchMomentum';
+import { gerarGraficoMomentum } from './matchMomentum';
 import { prepararPartidaComFaixa } from './matchProbabilidades';
 import {
   indicePartidaDeveSerAlucinado,
@@ -703,7 +699,6 @@ export function simularPartida(input: MatchSimInput): MatchSimResult {
 
   let posseM = 0;
   let posseV = 0;
-  const amostrasPressao: PressaoMinuto[] = [];
 
   const fadigaPorJogador = new Map<number, number>();
   const multFaltasPorJogador = new Map<number, number>();
@@ -983,8 +978,6 @@ export function simularPartida(input: MatchSimInput): MatchSimResult {
       Math.max(0.55, Math.min(1.65, ratioPosseV));
     posseM += pressaoM + 0.02;
     posseV += pressaoV + 0.02;
-    // Continuous series for live momentum graph (UI polish waits on Gabriel’s ref).
-    amostrasPressao.push({ minuto, pressaoM, pressaoV });
 
     if (minutosOcupados.has(minuto)) continue;
 
@@ -1217,15 +1210,17 @@ export function simularPartida(input: MatchSimInput): MatchSimResult {
     energia: Math.round(e * 10) / 10,
   }));
 
-  const momento = finalizarSerieMomento(
-    amostrasPressao,
-    eventosMomentoDeLancamentos(
-      lancamentos,
-      input.mandante.timeId,
-      input.visitante.timeId,
-    ),
+  const momento = gerarGraficoMomentum({
     minutoFinal,
-  );
+    lancamentos,
+    mandanteId: input.mandante.timeId,
+    visitanteId: input.visitante.timeId,
+    taticaMandante: taticaM,
+    taticaVisitante: taticaV,
+    skillMandante: globalM,
+    skillVisitante: globalV,
+    seed: input.seed,
+  });
 
   const estatisticas = construirEstatisticasPartida(
     lancamentos,
