@@ -48,11 +48,14 @@ export function tocarComemoracaoTorcidaGol(): void {
 /**
  * Áudio de gol completo na tela de boas-vindas.
  * Tenta tocar ao montar a splash; se o autoplay for bloqueado, chame de novo no Clique em Começar.
+ * Se já estiver tocando, não reinicia (evita duplicar no Começar).
  */
 export function tocarAudioGolBoasVindas(): void {
   if (!somGolAtivo()) return;
   const audio = obterClip();
   if (!audio) return;
+
+  if (!audio.paused && audio.currentTime > 0.05) return;
 
   limparPararTimer();
 

@@ -24,13 +24,13 @@ export function WelcomeSplashScreen({ onComecar }: Props) {
         Bem-vindo ao Mestre Mou
       </h1>
 
-      <div className="welcome-splash__photo mb-8 overflow-hidden rounded-lg border border-emerald-700/40 shadow-lg shadow-black/40">
+      <div className="welcome-splash__photo mb-8 inline-block max-w-full overflow-hidden rounded-lg border border-emerald-700/40 shadow-lg shadow-black/40">
         <img
           src={publicPath('assets/mourinho-welcome.jpg')}
           alt="José Mourinho de terno, sorrindo"
-          className="welcome-splash__img mx-auto block h-auto w-full max-w-xs object-cover object-top sm:max-w-sm"
-          width={432}
-          height={936}
+          className="welcome-splash__img block h-auto max-w-full"
+          width={1008}
+          height={900}
         />
       </div>
 
