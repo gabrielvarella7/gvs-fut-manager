@@ -16,6 +16,7 @@ export function SettingsScreen() {
   const [syncing, setSyncing] = useState(false);
 
   const SITE_NUVEM = 'https://gabrielvarella7.github.io/gvs-manager/';
+  const REPO_GITHUB = 'https://github.com/gabrielvarella7/gvs-manager';
   const emDev = import.meta.env.DEV;
 
   const syncNuvem = async () => {
@@ -84,32 +85,52 @@ export function SettingsScreen() {
       )}
 
       <CmPanel className="mb-4">
-        <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-emerald-400">Nuvem</h2>
-        <p className="mb-3 text-sm text-zinc-400">
-          Versão no celular:{' '}
-          <a
-            href={SITE_NUVEM}
-            target="_blank"
-            rel="noreferrer"
-            className="text-emerald-400 underline"
-          >
-            {SITE_NUVEM}
-          </a>
+        <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-emerald-400">
+          Celular e nuvem
+        </h2>
+        <p className="mb-2 text-sm text-zinc-300">
+          <strong className="text-zinc-100">Jogar no celular:</strong> abra o link abaixo no navegador (Chrome/Safari).
+          Opcional: menu do navegador → &quot;Adicionar à tela inicial&quot; para atalho tipo app.
+        </p>
+        <a
+          href={SITE_NUVEM}
+          target="_blank"
+          rel="noreferrer"
+          className="mb-3 block break-all text-sm text-emerald-400 underline"
+        >
+          {SITE_NUVEM}
+        </a>
+        <p className="mb-2 text-sm text-zinc-300">
+          <strong className="text-zinc-100">Editar o jogo pelo celular:</strong> abra o repositório no app GitHub ou
+          no navegador, edite arquivos (ex. <code className="text-zinc-400">public/database/</code>, telas em{' '}
+          <code className="text-zinc-400">src/</code>) e faça commit na branch{' '}
+          <code className="text-zinc-400">main</code>. Em 1–2 min o site atualiza sozinho.
+        </p>
+        <a
+          href={REPO_GITHUB}
+          target="_blank"
+          rel="noreferrer"
+          className="mb-3 block text-sm text-emerald-400 underline"
+        >
+          {REPO_GITHUB}
+        </a>
+        <p className="mb-3 text-xs text-amber-200/90">
+          Saves da carreira ficam no navegador de cada aparelho — não sincronizam entre PC e celular automaticamente.
         </p>
         <div className="flex flex-wrap gap-2">
           <CmBtn variant="primary" onClick={syncNuvem} disabled={syncing}>
-            {syncing ? 'Enviando…' : 'Sync — atualizar site'}
+            {syncing ? 'Enviando…' : 'Sync — atualizar site (PC)'}
           </CmBtn>
           {!emDev && (
             <span className="self-center text-xs text-zinc-500">
-              No site publicado use o .bat no PC.
+              Sync de código: PC (.bat) ou commit pelo GitHub no celular.
             </span>
           )}
         </div>
         <p className="mt-2 text-xs text-zinc-500">
           {emDev
-            ? 'Com o jogo aberto no localhost, Sync commita e envia para o GitHub (deploy automático).'
-            : 'Abra o projeto no PC (Iniciar GVS Manager.bat) → Configurações → Sync, ou use Sync na nuvem.bat.'}
+            ? 'No localhost, Sync commita e envia para o GitHub (deploy automático via GitHub Actions).'
+            : 'No PC: Sync na nuvem.bat. No celular: edite no GitHub e salve na main.'}
         </p>
       </CmPanel>
 
